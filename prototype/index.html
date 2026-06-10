@@ -209,8 +209,8 @@ function buildWave(w){
 }
 function makeEnemy(kind, hpS, at){
   const base = {
-    grunt:  { hp:15,  spd:38, dps:5,  r:15, gold:2,  col:'#7c5cbf', col2:'#5a3f96' },
-    runner: { hp:9,   spd:82, dps:4,  r:12, gold:2,  col:'#d65c8a', col2:'#a83a66' },
+    grunt:  { hp:15,  spd:38, dps:5,  r:18, gold:2,  col:'#7c5cbf', col2:'#5a3f96' },
+    runner: { hp:9,   spd:82, dps:4,  r:13, gold:2,  col:'#d65c8a', col2:'#a83a66' },
     brute:  { hp:62,  spd:23, dps:13, r:21, gold:7,  col:'#4e6b4a', col2:'#34492f' },
     boss:   { hp:260, spd:15, dps:32, r:30, gold:34, col:'#b03434', col2:'#7c1f1f' },
   }[kind];
@@ -904,14 +904,24 @@ function drawEnemy(e){
 
   ctx.save();
   ctx.translate(e.x, y);
-  if (hit){ ctx.save(); }   // flash handled per-shape via tint helper
+  // hit feedback: brief scale-punch (no white-out flash)
+  if (hit){ const k = 1 + e.hitT*0.6; ctx.scale(k, k); }
 
-  const tint = (base) => hit ? '#ffffff' : base;
+  const tint = (base) => base;   // no flash tint — keep full detail
   if (e.kind === 'grunt')  drawGoblin(r, step, tint, e);
   else if (e.kind === 'runner') drawScout(r, step, tint, e);
   else if (e.kind === 'brute')  drawOgre(r, step, tint, e);
   else drawDarkKnight(r, step, tint, e);
 
+  // soft red impact glow on top (additive, shaped to the body)
+  if (hit){
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = e.hitT * 4;
+    const rg = ctx.createRadialGradient(0,-r*0.2,0, 0,-r*0.2,r*1.3);
+    rg.addColorStop(0,'rgba(255,90,70,0.5)'); rg.addColorStop(1,'rgba(255,90,70,0)');
+    ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(0,-r*0.2,r*1.3,0,7); ctx.fill();
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  }
   ctx.restore();
 
   // frost coating
@@ -953,57 +963,110 @@ function glowEyes(x1, x2, ey, sz, col){
 function strap(x1,y1,x2,y2,w,col){ ctx.strokeStyle=col; ctx.lineWidth=w; ctx.lineCap='butt'; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); }
 
 function drawGoblin(r, step, tint, e){
-  const breathe = 1 + Math.sin(time*4 + e.wob)*0.03;
-  // round wooden shield (back-left arm)
-  ctx.fillStyle = tint('#6b4a2b');
-  ctx.beginPath(); ctx.arc(-r*0.62, r*0.15, r*0.5, 0, 7); ctx.fill();
-  ctx.strokeStyle = '#4a3119'; ctx.lineWidth=r*0.08; ctx.beginPath(); ctx.arc(-r*0.62,r*0.15,r*0.5,0,7); ctx.stroke();
-  ctx.fillStyle = '#9a9aa0'; ctx.beginPath(); ctx.arc(-r*0.62, r*0.15, r*0.14, 0, 7); ctx.fill(); // boss stud
-  // sword arm (raised, swings with gait)
-  const sw = Math.abs(step)*r*0.25;
-  ctx.strokeStyle = tint('#7cae4a'); ctx.lineWidth = r*0.22; ctx.lineCap='round';
-  ctx.beginPath(); ctx.moveTo(r*0.4, r*0.05); ctx.lineTo(r*0.82, -r*0.4 - sw); ctx.stroke();
-  // blade (rusty, notched)
-  ctx.strokeStyle = '#9aa0a6'; ctx.lineWidth = r*0.15; ctx.lineCap='round';
-  ctx.beginPath(); ctx.moveTo(r*0.82,-r*0.4-sw); ctx.lineTo(r*1.15,-r*1.2-sw); ctx.stroke();
-  ctx.strokeStyle = '#caced3'; ctx.lineWidth = r*0.05;
-  ctx.beginPath(); ctx.moveTo(r*0.85,-r*0.45-sw); ctx.lineTo(r*1.12,-r*1.15-sw); ctx.stroke();
-  ctx.fillStyle = '#3a2c1d'; rr(r*0.74,-r*0.46-sw, r*0.2, r*0.12, 2); ctx.fill(); // crossguard
-  legs(r, step, tint('#3c5a2a'), '#3a2c14');
-  // body tunic with belt + patch
-  ctx.save(); ctx.scale(breathe, breathe);
-  ctx.fillStyle = tint('#6b3f8f');
-  rr(-r*0.55, -r*0.12, r*1.1, r*0.72, r*0.28); ctx.fill();
-  ctx.fillStyle = tint('#5a3179'); rr(-r*0.55, r*0.28, r*1.1, r*0.32, r*0.2); ctx.fill(); // tunic shade
-  ctx.fillStyle = tint('#7a4aa0'); rr(-r*0.3, -r*0.05, r*0.3, r*0.3, 3); ctx.fill(); // patch
+  const breathe = 1 + Math.sin(time*4 + e.wob)*0.035;
+  const skin = '#83b84e', skinShade = '#5f8d36', skinDark = '#49702a', skinLite = '#9ccf63';
+
+  // ---- spiked plank shield on back-left arm ----
+  ctx.save(); ctx.translate(-r*0.72, r*0.18); ctx.rotate(-0.15);
+  ctx.fillStyle = 'rgba(0,0,0,0.18)'; rr(-r*0.34, -r*0.5, r*0.7, r*1.05, r*0.12); ctx.fill();
+  ctx.fillStyle = '#7a5430'; rr(-r*0.32, -r*0.48, r*0.64, r*1.0, r*0.1); ctx.fill();          // planks
+  ctx.strokeStyle = '#5c3d20'; ctx.lineWidth = r*0.04;
+  for(let p=-1;p<=1;p++){ ctx.beginPath(); ctx.moveTo(p*r*0.2,-r*0.46); ctx.lineTo(p*r*0.2, r*0.5); ctx.stroke(); }
+  ctx.strokeStyle = '#4a3119'; ctx.lineWidth = r*0.1; rr(-r*0.32,-r*0.48,r*0.64,r*1.0,r*0.1); ctx.stroke(); // iron rim
+  ctx.fillStyle = '#3a2c1d'; for(const yy of [-0.38,0.38]) for(const xx of [-0.22,0.22]){ ctx.beginPath(); ctx.arc(xx*r, yy*r, r*0.05,0,7); ctx.fill(); } // bolts
+  ctx.fillStyle = '#9a9aa0'; ctx.beginPath(); ctx.arc(0,0,r*0.16,0,7); ctx.fill();             // center boss
+  ctx.fillStyle = '#c7c7cd'; ctx.beginPath(); ctx.arc(-r*0.04,-r*0.04,r*0.07,0,7); ctx.fill();
   ctx.restore();
-  strap(-r*0.55, r*0.22, r*0.55, r*0.22, r*0.12, '#4a3119'); // belt
-  ctx.fillStyle='#caa66a'; rr(-r*0.1, r*0.16, r*0.2, r*0.14, 2); ctx.fill(); // buckle
-  // head
-  ctx.fillStyle = tint('#7cae4a');
-  ctx.beginPath(); ctx.arc(0, -r*0.45, r*0.72, 0, 7); ctx.fill();
-  ctx.fillStyle = tint('#6a9b3e'); // jaw shade
-  ctx.beginPath(); ctx.arc(0, -r*0.28, r*0.72, 0.2, Math.PI-0.2); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.beginPath(); ctx.arc(-r*0.25,-r*0.65, r*0.22,0,7); ctx.fill(); // forehead light
-  // long ears with inner shade
-  ctx.fillStyle = tint('#7cae4a');
-  ctx.beginPath(); ctx.moveTo(-r*0.58,-r*0.5); ctx.lineTo(-r*1.12,-r*0.78); ctx.lineTo(-r*0.5,-r*0.18); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo( r*0.58,-r*0.5); ctx.lineTo( r*1.12,-r*0.78); ctx.lineTo( r*0.5,-r*0.18); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = tint('#5f8d36');
-  ctx.beginPath(); ctx.moveTo(-r*0.6,-r*0.48); ctx.lineTo(-r*0.95,-r*0.66); ctx.lineTo(-r*0.55,-r*0.3); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo( r*0.6,-r*0.48); ctx.lineTo( r*0.95,-r*0.66); ctx.lineTo( r*0.55,-r*0.3); ctx.closePath(); ctx.fill();
-  // brow ridge
-  ctx.strokeStyle = tint('#557d2e'); ctx.lineWidth=r*0.1; ctx.lineCap='round';
-  ctx.beginPath(); ctx.moveTo(-r*0.42,-r*0.58); ctx.lineTo(-r*0.1,-r*0.5); ctx.moveTo(r*0.42,-r*0.58); ctx.lineTo(r*0.1,-r*0.5); ctx.stroke();
-  glowEyes(-r*0.26, r*0.26, -r*0.42, r*0.16, '#ffd23b');
-  // snout + nostrils + frown
-  ctx.fillStyle = tint('#6a9b3e'); ctx.beginPath(); ctx.arc(0,-r*0.18,r*0.16,0,7); ctx.fill();
-  ctx.fillStyle = '#3a521f'; ctx.beginPath(); ctx.arc(-r*0.06,-r*0.18,r*0.04,0,7); ctx.arc(r*0.06,-r*0.18,r*0.04,0,7); ctx.fill();
-  ctx.strokeStyle='#2e4218'; ctx.lineWidth=r*0.06; ctx.beginPath(); ctx.moveTo(-r*0.18,-r*0.02); ctx.quadraticCurveTo(0,-r*0.08,r*0.18,-r*0.02); ctx.stroke();
-  // tusks jutting up
-  ctx.fillStyle = '#f2ead0';
-  ctx.beginPath(); ctx.moveTo(-r*0.14,-r*0.05); ctx.lineTo(-r*0.05,-r*0.28); ctx.lineTo(-r*0.24,-r*0.18); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo( r*0.14,-r*0.05); ctx.lineTo( r*0.05,-r*0.28); ctx.lineTo( r*0.24,-r*0.18); ctx.closePath(); ctx.fill();
+
+  // ---- bowed legs with knee wraps + boots ----
+  const lk = step*r*0.14, rk = -step*r*0.14;
+  ctx.strokeStyle = skinShade; ctx.lineWidth = r*0.34; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(-r*0.3, r*0.4); ctx.lineTo(-r*0.42, r*0.78+lk); ctx.lineTo(-r*0.34, r*0.96+lk); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo( r*0.3, r*0.4); ctx.lineTo( r*0.42, r*0.78+rk); ctx.lineTo( r*0.34, r*0.96+rk); ctx.stroke();
+  ctx.strokeStyle = '#7a5430'; ctx.lineWidth = r*0.14;  // knee wraps
+  ctx.beginPath(); ctx.moveTo(-r*0.46,r*0.66+lk); ctx.lineTo(-r*0.32,r*0.66+lk); ctx.moveTo(r*0.32,r*0.66+rk); ctx.lineTo(r*0.46,r*0.66+rk); ctx.stroke();
+  ctx.fillStyle = '#2f2418';
+  rr(-r*0.54, r*0.9+lk, r*0.4, r*0.2, r*0.08); ctx.fill();
+  rr( r*0.16, r*0.9+rk, r*0.4, r*0.2, r*0.08); ctx.fill();
+
+  // ---- torso: muscular, with leather harness ----
+  ctx.save(); ctx.scale(breathe, breathe);
+  ctx.fillStyle = skin;
+  ctx.beginPath(); ctx.moveTo(-r*0.5, r*0.5); ctx.quadraticCurveTo(-r*0.62,-r*0.1,-r*0.34,-r*0.26);
+  ctx.lineTo(r*0.34,-r*0.26); ctx.quadraticCurveTo(r*0.62,-r*0.1, r*0.5, r*0.5); ctx.closePath(); ctx.fill();
+  // belly + pec shading
+  ctx.fillStyle = skinShade; ctx.beginPath(); ctx.ellipse(0, r*0.22, r*0.42, r*0.3, 0, 0, 7); ctx.fill();
+  ctx.strokeStyle = skinDark; ctx.lineWidth=r*0.05; ctx.beginPath(); ctx.moveTo(0,-r*0.18); ctx.lineTo(0,r*0.34); ctx.stroke();
+  ctx.fillStyle = skinLite; ctx.beginPath(); ctx.ellipse(-r*0.2,-r*0.05, r*0.16, r*0.12, 0,0,7); ctx.fill();
+  ctx.restore();
+  // fur shoulder mantle
+  ctx.fillStyle = '#6b5436';
+  for(let a=-1.3;a<=1.3;a+=0.28){ ctx.beginPath(); ctx.arc(Math.sin(a)*r*0.5, -r*0.2-Math.cos(a)*r*0.1, r*0.12,0,7); ctx.fill(); }
+  // studded leather harness straps
+  strap(-r*0.42, -r*0.18, r*0.4, r*0.34, r*0.11, '#4a3119');
+  ctx.fillStyle='#caa66a'; for(let t2=0.1;t2<0.95;t2+=0.28){ ctx.beginPath(); ctx.arc(-r*0.42+t2*r*0.82, -r*0.18+t2*r*0.52, r*0.04,0,7); ctx.fill(); }
+  // belt + pouch
+  strap(-r*0.5, r*0.42, r*0.5, r*0.42, r*0.14, '#3a2613');
+  ctx.fillStyle='#caa66a'; rr(-r*0.1, r*0.35, r*0.2, r*0.15, 2); ctx.fill();
+  ctx.fillStyle='#5c3d20'; rr(r*0.28, r*0.4, r*0.22, r*0.26, r*0.06); ctx.fill();
+
+  // ---- weapon arm: hand gripping a serrated cleaver ----
+  const sw = Math.abs(step)*r*0.22;
+  ctx.strokeStyle = skin; ctx.lineWidth = r*0.24; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(r*0.38, r*0.02); ctx.lineTo(r*0.7, -r*0.34-sw); ctx.stroke();
+  ctx.fillStyle = skinLite; ctx.beginPath(); ctx.arc(r*0.72,-r*0.36-sw, r*0.15, 0, 7); ctx.fill(); // fist
+  ctx.strokeStyle = skinDark; ctx.lineWidth=r*0.03;       // knuckle lines
+  for(let f=-1;f<=1;f++){ ctx.beginPath(); ctx.moveTo(r*0.66+f*r*0.05,-r*0.42-sw); ctx.lineTo(r*0.7+f*r*0.05,-r*0.3-sw); ctx.stroke(); }
+  // cleaver: broad serrated blade
+  ctx.save(); ctx.translate(r*0.72,-r*0.4-sw); ctx.rotate(-0.5);
+  ctx.fillStyle='#3a2c1d'; rr(-r*0.06,-r*0.04, r*0.16, r*0.3, 2); ctx.fill(); // grip
+  const blade = ctx.createLinearGradient(0,-r*0.1,0,-r*1.0); blade.addColorStop(0,'#aeb4ba'); blade.addColorStop(1,'#dfe4e9');
+  ctx.fillStyle = blade;
+  ctx.beginPath(); ctx.moveTo(-r*0.05,-r*0.1); ctx.lineTo(-r*0.05,-r*0.95); ctx.lineTo(r*0.22,-r*1.0); ctx.lineTo(r*0.26,-r*0.2); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#8d949b'; // serrations on the back edge
+  for(let sY=-0.25;sY>-0.95;sY-=0.16){ ctx.beginPath(); ctx.moveTo(r*0.24,sY*r); ctx.lineTo(r*0.34,(sY-0.05)*r); ctx.lineTo(r*0.24,(sY-0.1)*r); ctx.closePath(); ctx.fill(); }
+  ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=r*0.03; ctx.beginPath(); ctx.moveTo(-r*0.02,-r*0.15); ctx.lineTo(-r*0.02,-r*0.9); ctx.stroke();
+  ctx.restore();
+
+  // ---- head ----
+  ctx.fillStyle = skin;
+  ctx.beginPath(); ctx.ellipse(0, -r*0.5, r*0.72, r*0.66, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = skinShade; ctx.beginPath(); ctx.ellipse(0,-r*0.34, r*0.7, r*0.4, 0, 0.15, Math.PI-0.15); ctx.fill(); // jaw shade
+  ctx.fillStyle = skinLite; ctx.beginPath(); ctx.ellipse(-r*0.24,-r*0.68, r*0.24, r*0.16, -0.4, 0,7); ctx.fill();      // forehead light
+  // warts
+  ctx.fillStyle = skinDark; for(const wxy of [[-0.4,-0.42],[0.36,-0.6],[0.2,-0.3]]){ ctx.beginPath(); ctx.arc(wxy[0]*r,wxy[1]*r,r*0.04,0,7); ctx.fill(); }
+  // war-paint stripes
+  ctx.strokeStyle='rgba(180,40,40,0.7)'; ctx.lineWidth=r*0.05; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(-r*0.34,-r*0.32); ctx.lineTo(-r*0.18,-r*0.36); ctx.moveTo(r*0.34,-r*0.32); ctx.lineTo(r*0.18,-r*0.36); ctx.stroke();
+  // pointed ears with gold rings
+  ctx.fillStyle = skin;
+  ctx.beginPath(); ctx.moveTo(-r*0.6,-r*0.56); ctx.lineTo(-r*1.16,-r*0.86); ctx.lineTo(-r*0.52,-r*0.24); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo( r*0.6,-r*0.56); ctx.lineTo( r*1.16,-r*0.86); ctx.lineTo( r*0.52,-r*0.24); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = skinShade;
+  ctx.beginPath(); ctx.moveTo(-r*0.6,-r*0.52); ctx.lineTo(-r*0.98,-r*0.74); ctx.lineTo(-r*0.55,-r*0.34); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo( r*0.6,-r*0.52); ctx.lineTo( r*0.98,-r*0.74); ctx.lineTo( r*0.55,-r*0.34); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='#e7c14a'; ctx.lineWidth=r*0.05; ctx.beginPath(); ctx.arc(-r*0.62,-r*0.34,r*0.08,0,7); ctx.stroke();
+  // topknot / mohawk of coarse hair
+  ctx.strokeStyle='#2c1d10'; ctx.lineWidth=r*0.07; ctx.lineCap='round';
+  for(let hx=-0.18;hx<=0.18;hx+=0.12){ ctx.beginPath(); ctx.moveTo(hx*r,-r*1.0); ctx.quadraticCurveTo(hx*r*1.5,-r*1.3, hx*r*0.6+r*0.05,-r*1.45); ctx.stroke(); }
+  // angry brow
+  ctx.strokeStyle = skinDark; ctx.lineWidth=r*0.11; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(-r*0.46,-r*0.66); ctx.lineTo(-r*0.08,-r*0.5); ctx.moveTo(r*0.46,-r*0.66); ctx.lineTo(r*0.08,-r*0.5); ctx.stroke();
+  // deep-set glowing eyes
+  ctx.fillStyle='#2a3d18'; ctx.beginPath(); ctx.ellipse(-r*0.26,-r*0.42,r*0.2,r*0.15,0,0,7); ctx.ellipse(r*0.26,-r*0.42,r*0.2,r*0.15,0,0,7); ctx.fill();
+  glowEyes(-r*0.26, r*0.26, -r*0.42, r*0.13, '#ffd23b');
+  // broad nose + nostrils
+  ctx.fillStyle = skinShade; ctx.beginPath(); ctx.moveTo(0,-r*0.34); ctx.lineTo(r*0.14,-r*0.14); ctx.lineTo(-r*0.14,-r*0.14); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = skinDark; ctx.beginPath(); ctx.arc(-r*0.07,-r*0.16,r*0.035,0,7); ctx.arc(r*0.07,-r*0.16,r*0.035,0,7); ctx.fill();
+  // wide fanged grin
+  ctx.fillStyle = '#241308';
+  ctx.beginPath(); ctx.moveTo(-r*0.3,-r*0.04); ctx.quadraticCurveTo(0, r*0.16, r*0.3,-r*0.04); ctx.quadraticCurveTo(0, r*0.06, -r*0.3,-r*0.04); ctx.fill();
+  ctx.fillStyle = '#f2ead0'; // teeth row
+  for(let tx=-0.2;tx<=0.2;tx+=0.13){ ctx.beginPath(); ctx.moveTo(tx*r,-r*0.02); ctx.lineTo((tx+0.05)*r, r*0.06); ctx.lineTo((tx-0.02)*r, r*0.06); ctx.closePath(); ctx.fill(); }
+  // big lower tusks
+  ctx.fillStyle = '#f6efd8';
+  ctx.beginPath(); ctx.moveTo(-r*0.2,-r*0.02); ctx.lineTo(-r*0.1,-r*0.34); ctx.lineTo(-r*0.32,-r*0.2); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo( r*0.2,-r*0.02); ctx.lineTo( r*0.1,-r*0.34); ctx.lineTo( r*0.32,-r*0.2); ctx.closePath(); ctx.fill();
 }
 function drawScout(r, step, tint, e){
   const swirl = Math.sin(time*6 + e.wob)*r*0.2;
@@ -1223,25 +1286,44 @@ function drawTrayPiece(piece, sx, sy, size, dim){
   const ox = sx - (maxC*cs)/2, oy = sy - (maxR*cs)/2;
   const def = TYPES[piece.type];
   for (const [c,r] of cells){
-    const bx = ox + c*cs, by = oy + r*cs;
+    const bx = ox + c*cs, by = oy + r*cs, mx = bx+cs/2;
     if (dim){ ctx.fillStyle='rgba(120,110,90,0.5)'; rr(bx+1.5, by+1.5, cs-3, cs-3, 5); ctx.fill(); continue; }
-    // body with side shading
-    const g = ctx.createLinearGradient(bx, 0, bx+cs, 0);
-    g.addColorStop(0, shade(def.body,22)); g.addColorStop(1, shade(def.body,-26));
-    ctx.fillStyle = g; rr(bx+1.5, by+cs*0.34, cs-3, cs*0.6, 4); ctx.fill();
-    // tiny door + window
-    ctx.fillStyle='rgba(30,18,10,0.55)'; rr(bx+cs*0.4, by+cs*0.7, cs*0.2, cs*0.22, 1); ctx.fill();
-    // per-type crown icon
-    const mx = bx+cs/2;
+    const eaveY = by+cs*0.42, footY = by+cs*0.92, bw = cs*0.66;
+    // ground shadow
+    ctx.fillStyle='rgba(0,0,0,0.16)'; ctx.beginPath(); ctx.ellipse(mx, footY+1, bw*0.6, cs*0.07, 0, 0, 7); ctx.fill();
+    // stone plinth
+    ctx.fillStyle='#8a8170'; rr(mx-bw/2-1, footY-cs*0.1, bw+2, cs*0.14, 2); ctx.fill();
+    ctx.fillStyle='#a59a84'; rr(mx-bw/2-1, footY-cs*0.1, bw+2, cs*0.05, 2); ctx.fill();
+    // body with side-light gradient
+    const g = ctx.createLinearGradient(mx-bw/2, 0, mx+bw/2, 0);
+    g.addColorStop(0, shade(def.body,26)); g.addColorStop(0.5, def.body); g.addColorStop(1, shade(def.body,-30));
+    ctx.fillStyle = g; rr(mx-bw/2, eaveY, bw, footY-eaveY, 3); ctx.fill();
+    // brick line + corner quoins
+    ctx.strokeStyle='rgba(0,0,0,0.12)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(mx-bw/2, (eaveY+footY)/2); ctx.lineTo(mx+bw/2, (eaveY+footY)/2); ctx.stroke();
+    ctx.fillStyle=shade(def.body,30); rr(mx-bw/2, eaveY, 2.5, cs*0.16, 1); ctx.fill();
+    ctx.fillStyle=shade(def.body,-34); rr(mx+bw/2-2.5, eaveY, 2.5, cs*0.16, 1); ctx.fill();
+    // warm glowing window
+    ctx.save(); ctx.shadowColor='#ffce5a'; ctx.shadowBlur=4; ctx.fillStyle='#ffdf7e';
+    rr(mx-cs*0.06, eaveY+cs*0.12, cs*0.12, cs*0.2, 1.5); ctx.fill(); ctx.restore();
+    // per-type roof / crown
     if (piece.type==='archer'){
-      ctx.fillStyle=def.roof; ctx.beginPath(); ctx.moveTo(bx+cs*0.12, by+cs*0.36); ctx.lineTo(mx, by+cs*0.08); ctx.lineTo(bx+cs*0.88, by+cs*0.36); ctx.closePath(); ctx.fill();
+      ctx.fillStyle=def.roof; ctx.beginPath(); ctx.moveTo(mx-bw/2-2, eaveY); ctx.lineTo(mx, eaveY-cs*0.34); ctx.lineTo(mx+bw/2+2, eaveY); ctx.closePath(); ctx.fill();
+      ctx.fillStyle=shade(def.roof,28); ctx.beginPath(); ctx.moveTo(mx-bw/2-2, eaveY); ctx.lineTo(mx, eaveY-cs*0.34); ctx.lineTo(mx-2, eaveY-cs*0.3); ctx.lineTo(mx-bw/2, eaveY); ctx.closePath(); ctx.fill();
     } else if (piece.type==='cannon'){
-      ctx.fillStyle=def.roof; rr(bx+cs*0.2, by+cs*0.24, cs*0.6, cs*0.14, 2); ctx.fill();
-      ctx.save(); ctx.translate(mx, by+cs*0.26); ctx.rotate(-0.5); ctx.fillStyle='#2f2f33'; rr(-2,-2,cs*0.4,4,2); ctx.fill(); ctx.restore();
+      // parapet + little cannon
+      ctx.fillStyle=shade(def.body,-12); rr(mx-bw/2-2, eaveY-cs*0.06, bw+4, cs*0.1, 1); ctx.fill();
+      ctx.fillStyle=shade(def.body,12); for(let mxx=mx-bw/2-2; mxx<mx+bw/2; mxx+=cs*0.16){ rr(mxx, eaveY-cs*0.14, cs*0.1, cs*0.1, 1); ctx.fill(); }
+      ctx.save(); ctx.translate(mx, eaveY-cs*0.1); ctx.rotate(-0.5); ctx.fillStyle='#2f2f33'; rr(-2,-2.5,cs*0.42,5,2.5); ctx.fill(); ctx.fillStyle='#101013'; ctx.beginPath(); ctx.arc(cs*0.4,0,2.6,0,7); ctx.fill(); ctx.restore();
     } else {
-      ctx.save(); ctx.shadowColor=def.trim; ctx.shadowBlur=4; ctx.fillStyle=def.trim;
-      ctx.beginPath(); ctx.moveTo(mx, by+cs*0.04); ctx.lineTo(mx+cs*0.16, by+cs*0.3); ctx.lineTo(mx, by+cs*0.42); ctx.lineTo(mx-cs*0.16, by+cs*0.3); ctx.closePath(); ctx.fill(); ctx.restore();
+      ctx.fillStyle=shade(def.body,-10); rr(mx-bw/2-1, eaveY-cs*0.05, bw+2, cs*0.09, 2); ctx.fill();
+      ctx.fillStyle=def.roof; ctx.beginPath(); ctx.moveTo(mx-bw*0.5, eaveY-cs*0.03); ctx.lineTo(mx, eaveY-cs*0.42); ctx.lineTo(mx+bw*0.5, eaveY-cs*0.03); ctx.closePath(); ctx.fill();
+      ctx.save(); ctx.shadowColor=def.trim; ctx.shadowBlur=5; ctx.fillStyle=def.trim;
+      ctx.beginPath(); ctx.moveTo(mx, eaveY-cs*0.5); ctx.lineTo(mx+cs*0.1, eaveY-cs*0.34); ctx.lineTo(mx, eaveY-cs*0.22); ctx.lineTo(mx-cs*0.1, eaveY-cs*0.34); ctx.closePath(); ctx.fill(); ctx.restore();
     }
+    // little pennant
+    const wv = Math.sin(time*5 + bx)*1.5;
+    ctx.strokeStyle='#5b4a33'; ctx.lineWidth=1.2; ctx.beginPath(); ctx.moveTo(mx+bw/2-1, eaveY); ctx.lineTo(mx+bw/2-1, eaveY-cs*0.2); ctx.stroke();
+    ctx.fillStyle='#c0392b'; ctx.beginPath(); ctx.moveTo(mx+bw/2-1, eaveY-cs*0.2); ctx.lineTo(mx+bw/2-1+cs*0.16+wv, eaveY-cs*0.16); ctx.lineTo(mx+bw/2-1, eaveY-cs*0.11); ctx.closePath(); ctx.fill();
   }
 }
 const BTN = {
