@@ -136,7 +136,7 @@ let selected = null;           // index into hand
 let dragging = false;
 let hoverCell = null;          // {c,r} anchor for selected piece
 let sellTarget = null;         // {c,r}
-let enemies = [], projectiles = [], particles = [], floaters = [];
+let enemies = [], projectiles = [], eprojs = [], particles = [], floaters = [];
 let spawnQueue = [], fightT = 0, clearT = 0, waveTotal = 0;
 let bestWave = +(localStorage.getItem('foh_best') || 0);
 let shake = 0, time = 0;
@@ -153,8 +153,8 @@ function reset(){
   }
   hand = [randPiece(), randPiece(), randPiece()];
   gold = 30; wave = 1; wallMax = 100; wallHP = 100;
-  enemies = []; projectiles = []; particles = []; floaters = [];
-  villagers = [makeVillager(), makeVillager(), makeVillager(), makeVillager()];
+  enemies = []; projectiles = []; eprojs = []; particles = []; floaters = [];
+  villagers = [makeVillager(), makeVillager(), makeVillager(), makeVillager(), makePrincess()];
   critters = [makeCritter('chicken'), makeCritter('chicken'), makeCritter('pig')];
   hero = { x:(FIELD_L+FIELD_R)/2, y:GY+26, lvl:1, cd:0, slashT:0 };
   breached = false;
@@ -170,13 +170,21 @@ function makeVillager(){
   const hairs = ['#5d3a1e','#2c1d10','#caa66a','#8a2929'];
   const props = [null, null, null, 'basket', 'hammer'];
   const hats = ['bowl','bowl','tuft','bowl'];
+  const jobs = ['wander','wander','builder','hauler','kid'];
   return { x: GX+20+Math.random()*(COLS*CELL-40), y: GY+10+Math.random()*(ROWS*CELL-30),
            tx:0, ty:0, t:0, moving:false,
            col: cols[Math.floor(Math.random()*cols.length)],
            hair: hairs[Math.floor(Math.random()*hairs.length)],
            hat: hats[Math.floor(Math.random()*hats.length)],
            prop: props[Math.floor(Math.random()*props.length)],
+           job: jobs[Math.floor(Math.random()*jobs.length)],
            wob: Math.random()*7 };
+}
+function makePrincess(){
+  const p = makeVillager();
+  p.princess = true; p.job = 'royal'; p.prop = null;
+  p.x = ISL.cx; p.y = GY + ROWS*CELL*0.5;
+  return p;
 }
 let critters = [];
 function makeCritter(kind){
@@ -186,28 +194,55 @@ function makeCritter(kind){
 /* ---------- hero knight ---------- */
 let hero = null, heroSel = false, breached = false;
 const HERO_COST = l => 30 + 30*l;
+let knights = [];
 function updateHero(dt){
-  if (!hero || mode !== 'fight') return;
-  hero.cd -= dt; hero.slashT = Math.max(0, hero.slashT - dt);
-  let best = null, bd = 1e9;
-  for (const e of enemies){
-    if (e.y < WALL_Y - 60 && !breached) continue;       // guards the gate until the breach
-    const d = Math.hypot(e.x-hero.x, e.y-hero.y);
-    if (d < bd){ bd = d; best = e; }
-  }
-  if (best && breached && bd > 34){
-    // chase invaders through the streets
-    const dx = best.x-hero.x, dy = best.y-hero.y, d = Math.hypot(dx,dy)||1;
-    hero.x += dx/d*68*dt; hero.y += dy/d*68*dt;
-    hero.x = Math.max(FIELD_L+20, Math.min(FIELD_R-20, hero.x));
-    hero.y = Math.max(WALL_Y-10, Math.min(GY+ROWS*CELL, hero.y));
-  }
-  if (best && bd < 40 && hero.cd <= 0){
-    hero.cd = 0.65; hero.slashT = 0.16;
-    hitEnemy(best, 7*hero.lvl + 3, 0);
-    puff(best.x, best.y, '#fff');
-    sfx.shoot();
-  }
+  if (!hero) return;
+  // squad size grows with hero level (extra levels past 4 buy damage)
+  const want = Math.min(hero.lvl, 4);
+  while (knights.length < want) knights.push({ x: ISL.cx-36+knights.length*24, y: GY+20, cd:0, slashT:0, face:1, mv:false });
+  while (knights.length > want) knights.pop();
+  if (mode === 'title') return;
+  const gateX2 = ISL.cx, dmg = 6 + 2*hero.lvl;
+  knights.forEach((k, i) => {
+    k.cd -= dt; k.slashT = Math.max(0, k.slashT - dt); k.mv = false;
+    let best = null, bd = 1e9;
+    if (mode === 'fight'){
+      for (const e of enemies){
+        const d = Math.hypot(e.x-k.x, e.y-k.y) + (e.kind==='sapper' ? -40 : 0); // prioritize sappers
+        if (d < bd){ bd = d; best = e; }
+      }
+    }
+    if (best){
+      const realD = Math.hypot(best.x-k.x, best.y-k.y);
+      if (realD < 34){
+        if (k.cd <= 0){
+          k.cd = 0.6; k.slashT = 0.16;
+          hitEnemy(best, dmg, 0);
+          puff(best.x, best.y, '#fff');
+          sfx.shoot();
+        }
+        k.face = best.x < k.x ? -1 : 1;
+      } else {
+        // sortie out (or fall back in) through the gate
+        const crossing = (k.y > WALL_Y) !== (best.y > WALL_Y);
+        const nearGate = Math.abs(k.y - WALL_Y) <= 18;
+        const tx = crossing && !nearGate ? gateX2 : (crossing ? gateX2 : best.x);
+        const ty = crossing ? (k.y > WALL_Y ? WALL_Y - 22 : WALL_Y + 26) : best.y;
+        const dx = tx-k.x, dy = ty-k.y, d = Math.hypot(dx,dy)||1;
+        k.x += dx/d*80*dt; k.y += dy/d*80*dt; k.mv = true;
+        if (Math.abs(dx) > 1) k.face = dx < 0 ? -1 : 1;
+      }
+    } else {
+      // muster just inside the gate
+      const hx = gateX2 - 36 + i*24, hy = GY + 16 + (i%2)*14;
+      const dx = hx-k.x, dy = hy-k.y, d = Math.hypot(dx,dy);
+      if (d > 4){ k.x += dx/d*60*dt; k.y += dy/d*60*dt; k.mv = true; if (Math.abs(dx)>1) k.face = dx<0?-1:1; }
+    }
+    k.x = Math.max(FIELD_L+16, Math.min(FIELD_R-16, k.x));
+    k.y = Math.max(FIELD_TOP+24, Math.min(GY+ROWS*CELL-6, k.y));
+  });
+  // the lead knight is the tap target for HERO UP
+  if (knights[0]){ hero.x = knights[0].x; hero.y = knights[0].y; }
 }
 function drawHero(){
   if (!hero || mode === 'title') return;
@@ -235,7 +270,9 @@ function updateVillagers(dt){
       v.t = (mode==='fight' ? 0.8 : 2) + Math.random()*(mode==='fight' ? 1 : 3.5);
     }
     const dx = v.tx-v.x, dy = v.ty-v.y, d = Math.hypot(dx,dy);
-    const sp = mode==='fight' ? 56 : 20;   // panic scurry during the assault
+    let sp = mode==='fight' ? 56 : 20;     // panic scurry during the assault
+    if (v.job === 'kid') sp *= 1.5;        // kids zoom
+    if (v.job === 'royal') sp *= 0.6;      // the princess strolls
     if (d > 4){ v.x += dx/d*sp*dt; v.y += dy/d*sp*dt; v.moving = true; }
     else v.moving = false;
   }
@@ -312,6 +349,10 @@ function buildWave(w){
     const roll = Math.random();
     if (w>=2 && roll<0.25) kind = 'runner';
     if (w>=3 && roll>0.82) kind = 'brute';
+    if (w>=4 && roll>=0.55 && roll<0.67) kind = 'raider';
+    if (w>=3 && roll>=0.48 && roll<0.55) kind = 'sapper';  // rare: they hit hard
+    if (w>=2 && roll>=0.26 && roll<0.36) kind = 'archer';
+    if (w>=5 && roll>=0.40 && roll<0.46) kind = 'bombardier';
     q.push(makeEnemy(kind, hpS, t));
     t += gap * (0.7 + Math.random()*0.6);
   }
@@ -323,6 +364,10 @@ function makeEnemy(kind, hpS, at){
     grunt:  { hp:15,  spd:38, dps:5,  r:18, gold:2,  col:'#7ec850' },
     runner: { hp:9,   spd:82, dps:4,  r:13, gold:2,  col:'#ff7ba6' },
     brute:  { hp:62,  spd:23, dps:13, r:21, gold:7,  col:'#9db86a' },
+    raider: { hp:28,  spd:48, dps:8,  r:18, gold:4,  col:'#c9a2e8' },
+    sapper: { hp:34,  spd:30, dps:0,  r:17, gold:6,  col:'#ff9c6a' },
+    archer: { hp:18,  spd:34, dps:0,  r:16, gold:4,  col:'#e86a5a' },
+    bombardier: { hp:55, spd:26, dps:0, r:19, gold:9, col:'#b48355' },
     boss:   { hp:260, spd:15, dps:32, r:30, gold:34, col:'#8a7ae0' },
   }[kind];
   // emerge from the treeline at the island's top — never out on the water
@@ -364,6 +409,20 @@ function waveCleared(){
 }
 
 /* ---------- combat update ---------- */
+function damageBuildingAt(x, y, dmg){
+  const c = Math.floor((x-GX)/CELL), r = Math.floor((y-GY)/CELL);
+  if (c<0||c>=COLS||r<0||r>=ROWS) return;
+  const g = grid[idx(c,r)];
+  if (!g || g.obstacle || g.rubble || g.hp === undefined) return;
+  g.hp -= dmg;
+  if (g.hp <= 0){
+    const kind = g.tier >= 4 ? 'castle' : g.tier >= 2 ? 'tower' : 'house';
+    grid[idx(c,r)] = { rubble: kind };
+    addFx('explosion', cellX(c)+CELL/2, cellY(r)+CELL/2-10, 0.8);
+    floaters.push({ x:cellX(c)+CELL/2, y:cellY(r)+10, text:'RAZED!', t:0, dur:1, size:16, color:'#ff5e4d' });
+    sfx.boom(); shake = Math.max(shake, 6);
+  }
+}
 function towers(){
   const out = [];
   for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){
@@ -388,12 +447,58 @@ function updateFight(dt){
     const sp = e.spd * (e.slow>0 ? 0.55 : 1) * dt;
     e.atk = false;
     const px0 = e.x;
+    if (e.kind === 'archer'){
+      // stands off and rains arrows on the wall (or the city, once it's open)
+      const standY = (breached ? WALL_Y + 54 : WALL_Y - 124) - (e.wob*7);
+      if (e.y < standY){
+        e.y += sp;
+        e.x += Math.sin(time*3 + e.wob) * 8 * dt;
+        const hw = Math.max(e.r, islandHalfW(e.y, 8) - e.r);
+        e.x = Math.max(ISL.cx - hw, Math.min(ISL.cx + hw, e.x));
+      } else {
+        e.atk = true;
+        e.shotT = (e.shotT === undefined ? 1 + Math.random() : e.shotT) - dt;
+        if (e.shotT <= 0){
+          e.shotT = 2.4;
+          const tx = e.x + (Math.random()-0.5)*40;
+          const ty = breached ? GY + 20 + Math.random()*ROWS*CELL*0.7 : WALL_Y - 4;
+          eprojs.push({ kind:'arrow', sx:e.x, sy:e.y-14, tx, ty, t:0, dur:0.55, arc:30 });
+          sfx.shoot();
+        }
+      }
+      continue;
+    }
+    if (e.kind === 'bombardier'){
+      // a goblin raft bobbing along the coast, lobbing dynamite over the wall
+      const side = e.wob > 3.5 ? 1 : -1;
+      e.x += ((side > 0 ? FIELD_R + 16 : FIELD_L - 16) - e.x) * Math.min(1, dt*2);
+      const standY = WALL_Y - 96 + (e.wob*5);
+      if (e.y < standY) e.y += sp * 0.8;
+      else {
+        e.y = standY + Math.sin(time*1.6 + e.wob)*3;   // bob on the swell
+        e.shotT = (e.shotT === undefined ? 2 : e.shotT) - dt;
+        if (e.shotT <= 0){
+          e.shotT = 3.4;
+          const tx = ISL.cx + (Math.random()-0.5)*260;
+          const ty = breached ? GY + 16 + Math.random()*ROWS*CELL*0.6 : WALL_Y - 2;
+          eprojs.push({ kind:'dyn', sx:e.x, sy:e.y-12, tx, ty, t:0, dur:1.1, arc:90 });
+        }
+      }
+      e.face = side > 0 ? -1 : 1;
+      continue;
+    }
     if (!breached){
       if (e.y < WALL_Y - e.r - 4){
         e.y += sp;
         e.x += Math.sin(time*3 + e.wob) * 8 * dt;
         const hw = Math.max(e.r, islandHalfW(e.y, 8) - e.r);
         e.x = Math.max(ISL.cx - hw, Math.min(ISL.cx + hw, e.x));
+      } else if (e.kind === 'sapper'){
+        // dynamite barrel reaches the wall — BOOM
+        wallHP -= 22;
+        addFx('explosion', e.x, WALL_Y-6, 0.85);
+        sfx.boom(); shake = Math.max(shake, 9);
+        e.hp = 0;
       } else {
         e.atk = true;
         wallHP -= e.dps * dt;
@@ -412,6 +517,11 @@ function updateFight(dt){
         if (bd > 26){
           const dx = bt.x-e.x, dy = bt.y-e.y, d = Math.hypot(dx,dy)||1;
           e.x += dx/d*sp; e.y += dy/d*sp;
+        } else if (e.kind === 'sapper'){
+          bt.g.hp -= 40;
+          addFx('explosion', bt.x, bt.y-8, 0.85);
+          sfx.boom(); shake = Math.max(shake, 9);
+          e.hp = 0;
         } else {
           e.atk = true;
           bt.g.hp -= e.dps * dt;
@@ -473,6 +583,24 @@ function updateFight(dt){
     }
   }
   projectiles = projectiles.filter(p => !p.dead && p.y > 0);
+
+  // incoming enemy fire
+  for (const q of eprojs){
+    q.t += dt;
+    if (q.t >= q.dur){
+      q.dead = true;
+      const hitWall = !breached && q.ty >= WALL_Y - 18 && q.ty <= WALL_Y + 12;
+      if (q.kind === 'dyn'){
+        addFx('explosion', q.tx, q.ty, 0.7);
+        sfx.boom(); shake = Math.max(shake, 5);
+        if (hitWall) wallHP -= 9; else damageBuildingAt(q.tx, q.ty, 14);
+      } else {
+        puff(q.tx, q.ty, '#e8d9b0');
+        if (hitWall) wallHP -= 3.5; else damageBuildingAt(q.tx, q.ty, 6);
+      }
+    }
+  }
+  eprojs = eprojs.filter(q => !q.dead);
 
   enemies = enemies.filter(e => {
     if (e.hp > 0) return true;
@@ -663,48 +791,60 @@ function drawRock(x, y, r){
   glint(x-r*0.3, y-r*0.3, r*0.25);
 }
 function drawWall(){
+  // styled to match the Tiny Swords towers: dark ink, slate stone, teal caps, warm wood
   const wl = FIELD_L-6, wr = FIELD_R+6, ww = wr-wl;
-  ctx.fillStyle = 'rgba(47,90,28,0.25)'; rr(wl, WALL_Y+12, ww, 8, 4); ctx.fill();
-  // main rampart — clean cream stone, chunky outline
-  orr(wl, WALL_Y-14, ww, 28, 7, WALL_FILL, WALL_INK, 4);
-  // soft bottom shade
-  ctx.save(); rr(wl, WALL_Y-14, ww, 28, 7); ctx.clip();
-  ctx.fillStyle = 'rgba(110,90,55,0.16)'; ctx.fillRect(wl, WALL_Y+2, ww, 14);
-  // sparse rounded brick hints (thin internal lines)
-  ctx.strokeStyle = 'rgba(110,90,55,0.28)'; ctx.lineWidth = 1.6;
-  for (let x=wl+22; x<wr-10; x+=46){
-    rr(x, WALL_Y-7, 18, 9, 3); ctx.stroke();
-    rr(x+18, WALL_Y+3, 18, 9, 3); ctx.stroke();
+  const INKW = '#161c2e', STONE = '#435b7d', STONE_D = '#37496a', STONE_L = '#5a7aa6';
+  ctx.fillStyle = 'rgba(22,28,46,0.28)'; rr(wl, WALL_Y+12, ww, 8, 4); ctx.fill();
+  // teal merlon caps, like the tower crenellations
+  for (let x=wl+8; x<wr-22; x+=34){
+    orr(x, WALL_Y-27, 21, 17, 5, '#5ab9bb', INKW, 3);
+    ctx.fillStyle = '#448e9f'; rr(x+2.5, WALL_Y-18, 16, 6, 2); ctx.fill();
+    ctx.fillStyle = '#8fe2b9'; rr(x+3, WALL_Y-24.5, 8, 3.5, 1.5); ctx.fill();
   }
+  // slate rampart body
+  orr(wl, WALL_Y-13, ww, 27, 5, STONE, INKW, 3.5);
+  ctx.save(); rr(wl, WALL_Y-13, ww, 27, 5); ctx.clip();
+  ctx.fillStyle = STONE_D; ctx.fillRect(wl, WALL_Y+3, ww, 12);
+  ctx.fillStyle = STONE_L; ctx.fillRect(wl, WALL_Y-13, ww, 4);
+  // chunky brick courses
+  ctx.strokeStyle = 'rgba(22,28,46,0.6)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(wl, WALL_Y+1); ctx.lineTo(wr, WALL_Y+1); ctx.stroke();
+  for (let x=wl+12; x<wr; x+=26){
+    ctx.beginPath(); ctx.moveTo(x, WALL_Y-13); ctx.lineTo(x, WALL_Y+1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x+13, WALL_Y+1); ctx.lineTo(x+13, WALL_Y+14); ctx.stroke();
+  }
+  // mint chips catching the light
+  ctx.fillStyle = 'rgba(143,226,185,0.3)';
+  for (let x=wl+20; x<wr-12; x+=64){ rr(x, WALL_Y-9, 9, 3.5, 1.5); ctx.fill(); }
   ctx.restore();
-  // rounded merlons
-  for (let x=wl+6; x<wr-20; x+=34){
-    orr(x, WALL_Y-25, 18, 15, 4, WALL_FILL, WALL_INK, 3.5);
-  }
-  // gate (smashed open while breached)
+  // gate (smashed open while breached) — warm Tiny Swords wood
   const gx = (wl+wr)/2;
   if (breached){
-    ctx.fillStyle = '#2c1d10';
+    ctx.fillStyle = '#161c2e';
     ctx.beginPath(); ctx.moveTo(gx-16, WALL_Y+14); ctx.lineTo(gx-16, WALL_Y-2);
     ctx.arc(gx, WALL_Y-2, 16, Math.PI, 0); ctx.lineTo(gx+16, WALL_Y+14); ctx.closePath(); ctx.fill();
-    opoly([[gx-16,WALL_Y+12],[gx-26,WALL_Y+22],[gx-8,WALL_Y+16]], '#9a6a3c', '#5d3a1e', 2);
-    opoly([[gx+14,WALL_Y+10],[gx+26,WALL_Y+20],[gx+6,WALL_Y+18]], '#9a6a3c', '#5d3a1e', 2);
-    drawRock(gx-12, WALL_Y+20, 6); drawRock(gx+10, WALL_Y+23, 5);
+    opoly([[gx-16,WALL_Y+12],[gx-27,WALL_Y+23],[gx-8,WALL_Y+16]], '#b48355', '#161c2e', 2.2);
+    opoly([[gx+14,WALL_Y+10],[gx+27,WALL_Y+21],[gx+6,WALL_Y+18]], '#dab570', '#161c2e', 2.2);
   } else {
-    ctx.fillStyle = '#9a6a3c';
+    ctx.fillStyle = '#dab570';
     ctx.beginPath(); ctx.moveTo(gx-15, WALL_Y+14); ctx.lineTo(gx-15, WALL_Y-2);
     ctx.arc(gx, WALL_Y-2, 15, Math.PI, 0); ctx.lineTo(gx+15, WALL_Y+14); ctx.closePath();
-    ctx.fill(); ctx.strokeStyle = '#5d3a1e'; ctx.lineWidth = 3.5; ctx.lineJoin = 'round'; ctx.stroke();
-    ctx.strokeStyle = 'rgba(93,58,30,0.55)'; ctx.lineWidth = 2;
-    for (let i=-1;i<=1;i++){ ctx.beginPath(); ctx.moveTo(gx+i*8, WALL_Y-6); ctx.lineTo(gx+i*8, WALL_Y+13); ctx.stroke(); }
+    ctx.fill(); ctx.strokeStyle = '#161c2e'; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.stroke();
+    ctx.strokeStyle = '#b48355'; ctx.lineWidth = 2.4;
+    for (let i=-1;i<=1;i++){ ctx.beginPath(); ctx.moveTo(gx+i*8, WALL_Y-7+(i%2?2:5)); ctx.lineTo(gx+i*8, WALL_Y+13); ctx.stroke(); }
+    ctx.fillStyle = '#161c2e';
+    ctx.beginPath(); ctx.arc(gx-9, WALL_Y+3, 1.4, 0, 7); ctx.arc(gx+9, WALL_Y+3, 1.4, 0, 7); ctx.fill();
   }
+  // guard towers bookending the wall
+  img('tower_b', wl+11, WALL_Y+30, 0.27);
+  img('tower_b', wr-11, WALL_Y+30, 0.27);
   // damage cracks scale with HP
   const dmg = 1 - wallHP/wallMax;
   if (dmg > 0.05){
-    ctx.strokeStyle = 'rgba(80,55,25,'+(0.3+dmg*0.5)+')'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(22,28,46,'+(0.35+dmg*0.45)+')'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
     for (let i=0;i<Math.ceil(dmg*8);i++){
       const x = FIELD_L + 30 + ((i*137)%(ww-70));
-      ctx.beginPath(); ctx.moveTo(x, WALL_Y-12); ctx.lineTo(x+5, WALL_Y-2); ctx.lineTo(x-3, WALL_Y+8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, WALL_Y-11); ctx.lineTo(x+5, WALL_Y-1); ctx.lineTo(x-3, WALL_Y+9); ctx.stroke();
     }
   }
 }
@@ -1279,10 +1419,7 @@ function drawEnemy(e){
   ctx.translate(e.x, y);
   if (e.spawnT > 0){ const k = 1 - e.spawnT/0.4; ctx.scale(k, k); }   // grow in from the treeline
   if (e.hitT > 0){ const k = 1 + e.hitT*0.9; ctx.scale(k, 2-k); } // squash-pop on hit
-  if (e.kind === 'grunt')       drawGoblin(r, step, e);
-  else if (e.kind === 'runner') drawScout(r, step, e);
-  else if (e.kind === 'brute')  drawOgre(r, step, e);
-  else                          drawDarkKnight(r, step, e);
+  ((typeof ENEMY_DRAW !== 'undefined' && ENEMY_DRAW[e.kind]) || drawDarkKnight)(r, step, e);
   ctx.restore();
 
   // frost coating
@@ -1912,6 +2049,7 @@ function frame(now){
   drawHero();
   for (const e of enemies.slice().sort((a,b)=>a.y-b.y)) drawEnemy(e);
   for (const pr of projectiles) drawProjectile(pr);
+  drawEprojs();
   drawParticles(dt);
   drawFx(dt);
   if (mode === 'build' || mode === 'clear') drawTray(); else if (mode === 'fight') drawFightHUD();
@@ -1946,8 +2084,8 @@ function I(name){
 }
 ['water','tiles','foam','rocks','tree','sheep','deco01','deco02','deco03','deco07','deco09','deco10','deco14','deco16',
  'house_b','house_r','house_p','house_x','tower_b','tower_r','tower_p','tower_x','castle_b','castle_r','castle_p','castle_x',
- 'pawn_b','pawn_p','pawn_r','pawn_y','warrior_b','warrior_r','torch_r','torch_y','tnt_r',
- 'explosions','fire','arrow','dynamite'].forEach(I);
+ 'pawn_b','pawn_p','pawn_r','pawn_y','warrior_b','warrior_r','torch_r','torch_y','torch_p','tnt_r','tnt_y',
+ 'barrel_r','archer_r','explosions','fire','arrow','dynamite'].forEach(I);
 function assetsReady(){ return imgLoaded >= imgCount; }
 function spr(name, fw, fh, col, row, dx, dy, s, flip, ay){
   const im = I(name); if (!im.complete || !im.naturalWidth) return;
@@ -2087,14 +2225,55 @@ function drawBuildings(dt){
 }
 
 /* ---------- units ---------- */
-function unitSpr(name, e, s){
-  const row = e.atk ? 2 : (e.spawnT > 0 ? 0 : 1);
-  const f = Math.floor(time*10 + (e.wob||0)*7) % 6;
-  spr(name, 192, 192, f, row, 0, e.r*0.95, s, e.face < 0);
+function unitSpr(name, e, s, o){
+  o = o || {};
+  const fw = o.fw || 192, cols = o.cols || 6;
+  const rows = o.rows || { idle:0, run:1, atk:2 };
+  const row = e.atk ? rows.atk : (e.spawnT > 0 ? rows.idle : rows.run);
+  const f = Math.floor(time*(o.fps||10) + (e.wob||0)*7) % cols;
+  spr(name, fw, fw, f, row, 0, e.r*0.95, s, e.face < 0, o.ay);
 }
 function drawGoblin(r, step, e){ unitSpr('torch_r', e, 0.66*r/18); }
 function drawScout(r, step, e){ unitSpr('torch_y', e, 0.5*r/13); }
 function drawOgre(r, step, e){ unitSpr('tnt_r', e, 0.82*r/21); }
+function drawRaider(r, step, e){ unitSpr('torch_p', e, 0.72*r/18); }
+function drawSapper(r, step, e){
+  // a walking TNT barrel with a lit fuse
+  unitSpr('barrel_r', e, 1.0*r/17, { fw:128, cols:6, rows:{ idle:1, run:3, atk:1 }, fps:9, ay:0.8 });
+}
+function drawArcherE(r, step, e){
+  unitSpr('archer_r', e, 0.62*r/16, { cols:6, rows:{ idle:0, run:1, atk:6 }, fps:8 });
+}
+function drawBombardier(r, step, e){
+  // wooden raft riding the swell
+  orr(-21, 3, 42, 14, 5, '#b48355', '#161c2e', 3);
+  ctx.strokeStyle = '#8a5f3c'; ctx.lineWidth = 2;
+  for (let k=-1;k<=1;k++){ ctx.beginPath(); ctx.moveTo(k*11, 4); ctx.lineTo(k*11, 16); ctx.stroke(); }
+  ctx.fillStyle = '#dab570'; rr(-21, 3, 42, 4, 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.beginPath(); ctx.ellipse(-24, 14+Math.sin(time*2)*1.5, 5, 2, 0, 0, 7);
+  ctx.ellipse(25, 12+Math.cos(time*2.3)*1.5, 5, 2, 0, 0, 7); ctx.fill();
+  unitSpr('tnt_y', e, 0.62*r/19);
+}
+const ENEMY_DRAW = { grunt:drawGoblin, runner:drawScout, brute:drawOgre,
+                     raider:drawRaider, sapper:drawSapper, boss:drawDarkKnight,
+                     archer:drawArcherE, bombardier:drawBombardier };
+function drawEprojs(){
+  for (const q of eprojs){
+    const k = Math.min(1, q.t/q.dur);
+    const x = q.sx + (q.tx-q.sx)*k;
+    const y = q.sy + (q.ty-q.sy)*k - q.arc*4*k*(1-k);
+    if (q.kind === 'dyn'){
+      spr('dynamite', 64, 64, Math.floor(time*14)%6, 0, x, y, 0.55, false, 0.5);
+    } else {
+      const vx = (q.tx-q.sx)/q.dur, vy = (q.ty-q.sy)/q.dur - q.arc*4*(1-2*k)/q.dur;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(vy, vx) + Math.PI/2);
+      const im = I('arrow');
+      if (im.complete && im.naturalWidth) ctx.drawImage(im, -9, -14, 18, 36);
+      ctx.restore();
+    }
+  }
+}
 function drawDarkKnight(r, step, e){
   ctx.save(); ctx.globalAlpha = 0.4 + Math.sin(time*3)*0.1;
   const ag = ctx.createRadialGradient(0, -r*0.2, r*0.3, 0, -r*0.2, r*1.6);
@@ -2110,13 +2289,22 @@ function drawVillagers(){
     spr('sheep', 128, 128, f, 0, c.x, c.y+6, 0.42, c.tx < c.x, 0.78);
   }
   for (const v of villagers){
-    const name = PAWNS[Math.floor(v.wob*10)%4];
+    const name = v.princess ? 'pawn_y' : PAWNS[Math.floor(v.wob*10)%4];
     let row = v.moving ? 1 : 0, fps = v.moving ? 10 : 7;
-    if (v.prop === 'basket') row = v.moving ? 5 : 4;       // hauling goods
-    else if (v.prop === 'hammer' && !v.moving) row = 2;    // hammering away
+    let sc = 0.36;
+    if (v.job === 'kid') sc = 0.27;                            // little ones
+    else if (v.job === 'hauler') row = v.moving ? 5 : 4;       // hauling goods
+    else if (v.job === 'builder' && !v.moving) row = 2;        // hammering away
+    if (v.princess) sc = 0.38;
     const f = Math.floor(time*fps + v.wob*6) % 6;
-    spr(name, 192, 192, f, row, v.x, v.y+9, 0.36, v.tx < v.x);
-    if (mode === 'fight') chunkyText('!', v.x+8, v.y-26, 11, '#ff5e4d', '#fff');
+    spr(name, 192, 192, f, row, v.x, v.y+9, sc, v.tx < v.x);
+    if (v.princess){
+      // gold crown + sparkle
+      const cy = v.y - 27;
+      opoly([[v.x-5,cy],[v.x-4,cy-5],[v.x-1.8,cy-1.5],[v.x,cy-6],[v.x+1.8,cy-1.5],[v.x+4,cy-5],[v.x+5,cy],[v.x+5,cy+3],[v.x-5,cy+3]],
+            '#ffd95e', '#a8761c', 1.6);
+      if (Math.sin(time*3 + 1) > 0.5) star(v.x+9, cy-6, 2.6, 'rgba(255,255,255,0.9)', null);
+    }
   }
 }
 function drawChibiKnight(x, y, s){
@@ -2125,9 +2313,11 @@ function drawChibiKnight(x, y, s){
 }
 function drawHero(){
   if (!hero || mode === 'title') return;
-  const row = hero.slashT > 0 ? 2 : 0;
-  const f = hero.slashT > 0 ? (5 - Math.floor(hero.slashT/0.16*5)) % 6 : Math.floor(time*7)%6;
-  spr('warrior_b', 192, 192, f, row, hero.x, hero.y+8, 0.42, hero.fl, 0.76);
+  knights.forEach((k, i) => {
+    const row = k.slashT > 0 ? 2 : (k.mv ? 1 : 0);
+    const f = k.slashT > 0 ? (5 - Math.floor(k.slashT/0.16*5)) % 6 : Math.floor(time*8 + i*2)%6;
+    spr('warrior_b', 192, 192, f, row, k.x, k.y+8, 0.42, k.face < 0, 0.76);
+  });
   badge(hero.x-14, hero.y+4, hero.lvl);
   if (heroSel && mode === 'build') orr(hero.x-20, hero.y-38, 40, 50, 10, null, '#ffd95e', 3);
 }
