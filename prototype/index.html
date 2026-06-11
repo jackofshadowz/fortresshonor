@@ -799,70 +799,78 @@ function drawWall(){
   // styled to match the Tiny Swords towers: dark ink, slate stone, teal caps, warm wood
   const wl = FIELD_L-6, wr = FIELD_R+6, ww = wr-wl;
   const INKW = '#161c2e', STONE = '#435b7d', STONE_D = '#37496a', STONE_L = '#5a7aa6';
-  ctx.fillStyle = 'rgba(22,28,46,0.28)'; rr(wl, WALL_Y+12, ww, 8, 4); ctx.fill();
-  // teal merlon caps, like the tower crenellations
+  const DECK = '#6c87ad', DECK_D = '#5a7398';
+  ctx.fillStyle = 'rgba(22,28,46,0.28)'; rr(wl, WALL_Y+27, ww, 8, 4); ctx.fill();
+  // far battlement: teal merlon caps behind the parapet
   for (let x=wl+8; x<wr-22; x+=34){
-    orr(x, WALL_Y-27, 21, 17, 5, '#5ab9bb', INKW, 3);
-    ctx.fillStyle = '#448e9f'; rr(x+2.5, WALL_Y-18, 16, 6, 2); ctx.fill();
-    ctx.fillStyle = '#8fe2b9'; rr(x+3, WALL_Y-24.5, 8, 3.5, 1.5); ctx.fill();
+    orr(x, WALL_Y-40, 21, 16, 5, '#5ab9bb', INKW, 3);
+    ctx.fillStyle = '#448e9f'; rr(x+2.5, WALL_Y-32, 16, 6, 2); ctx.fill();
+    ctx.fillStyle = '#8fe2b9'; rr(x+3, WALL_Y-37.5, 8, 3.5, 1.5); ctx.fill();
   }
-  // slate rampart body
-  orr(wl, WALL_Y-13, ww, 27, 5, STONE, INKW, 3.5);
-  ctx.save(); rr(wl, WALL_Y-13, ww, 27, 5); ctx.clip();
-  ctx.fillStyle = STONE_D; ctx.fillRect(wl, WALL_Y+3, ww, 12);
-  ctx.fillStyle = STONE_L; ctx.fillRect(wl, WALL_Y-13, ww, 4);
-  // chunky brick courses
+  // parapet rail
+  orr(wl, WALL_Y-28, ww, 9, 4, STONE_D, INKW, 3);
+  // walkway deck — wide enough for the garrison to patrol
+  orr(wl, WALL_Y-21, ww, 24, 4, DECK, INKW, 3);
+  ctx.save(); rr(wl, WALL_Y-21, ww, 24, 4); ctx.clip();
+  ctx.fillStyle = DECK_D; ctx.fillRect(wl, WALL_Y-21, ww, 4);
+  ctx.strokeStyle = 'rgba(22,28,46,0.35)'; ctx.lineWidth = 1.6;
+  for (let x=wl+20; x<wr; x+=40){ ctx.beginPath(); ctx.moveTo(x, WALL_Y-21); ctx.lineTo(x, WALL_Y+3); ctx.stroke(); }
+  ctx.restore();
+  // tall front face dropping into the courtyard
+  orr(wl, WALL_Y+3, ww, 26, 5, STONE, INKW, 3.5);
+  ctx.save(); rr(wl, WALL_Y+3, ww, 26, 5); ctx.clip();
+  ctx.fillStyle = STONE_D; ctx.fillRect(wl, WALL_Y+17, ww, 12);
+  ctx.fillStyle = STONE_L; ctx.fillRect(wl, WALL_Y+3, ww, 3);
   ctx.strokeStyle = 'rgba(22,28,46,0.6)'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(wl, WALL_Y+1); ctx.lineTo(wr, WALL_Y+1); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(wl, WALL_Y+16); ctx.lineTo(wr, WALL_Y+16); ctx.stroke();
   for (let x=wl+12; x<wr; x+=26){
-    ctx.beginPath(); ctx.moveTo(x, WALL_Y-13); ctx.lineTo(x, WALL_Y+1); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x+13, WALL_Y+1); ctx.lineTo(x+13, WALL_Y+14); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, WALL_Y+3); ctx.lineTo(x, WALL_Y+16); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x+13, WALL_Y+16); ctx.lineTo(x+13, WALL_Y+29); ctx.stroke();
   }
-  // mint chips catching the light
   ctx.fillStyle = 'rgba(143,226,185,0.3)';
-  for (let x=wl+20; x<wr-12; x+=64){ rr(x, WALL_Y-9, 9, 3.5, 1.5); ctx.fill(); }
+  for (let x=wl+20; x<wr-12; x+=64){ rr(x, WALL_Y+7, 9, 3.5, 1.5); ctx.fill(); }
   ctx.restore();
   // gate (smashed open while breached) — warm Tiny Swords wood
   const gx = (wl+wr)/2;
   if (breached){
     ctx.fillStyle = '#161c2e';
-    ctx.beginPath(); ctx.moveTo(gx-16, WALL_Y+14); ctx.lineTo(gx-16, WALL_Y-2);
-    ctx.arc(gx, WALL_Y-2, 16, Math.PI, 0); ctx.lineTo(gx+16, WALL_Y+14); ctx.closePath(); ctx.fill();
-    opoly([[gx-16,WALL_Y+12],[gx-27,WALL_Y+23],[gx-8,WALL_Y+16]], '#b48355', '#161c2e', 2.2);
-    opoly([[gx+14,WALL_Y+10],[gx+27,WALL_Y+21],[gx+6,WALL_Y+18]], '#dab570', '#161c2e', 2.2);
+    ctx.beginPath(); ctx.moveTo(gx-16, WALL_Y+29); ctx.lineTo(gx-16, WALL_Y+12);
+    ctx.arc(gx, WALL_Y+12, 16, Math.PI, 0); ctx.lineTo(gx+16, WALL_Y+29); ctx.closePath(); ctx.fill();
+    opoly([[gx-16,WALL_Y+27],[gx-27,WALL_Y+38],[gx-8,WALL_Y+31]], '#b48355', '#161c2e', 2.2);
+    opoly([[gx+14,WALL_Y+25],[gx+27,WALL_Y+36],[gx+6,WALL_Y+33]], '#dab570', '#161c2e', 2.2);
   } else {
     ctx.fillStyle = '#dab570';
-    ctx.beginPath(); ctx.moveTo(gx-15, WALL_Y+14); ctx.lineTo(gx-15, WALL_Y-2);
-    ctx.arc(gx, WALL_Y-2, 15, Math.PI, 0); ctx.lineTo(gx+15, WALL_Y+14); ctx.closePath();
+    ctx.beginPath(); ctx.moveTo(gx-15, WALL_Y+29); ctx.lineTo(gx-15, WALL_Y+12);
+    ctx.arc(gx, WALL_Y+12, 15, Math.PI, 0); ctx.lineTo(gx+15, WALL_Y+29); ctx.closePath();
     ctx.fill(); ctx.strokeStyle = '#161c2e'; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.stroke();
     ctx.strokeStyle = '#b48355'; ctx.lineWidth = 2.4;
-    for (let i=-1;i<=1;i++){ ctx.beginPath(); ctx.moveTo(gx+i*8, WALL_Y-7+(i%2?2:5)); ctx.lineTo(gx+i*8, WALL_Y+13); ctx.stroke(); }
+    for (let i=-1;i<=1;i++){ ctx.beginPath(); ctx.moveTo(gx+i*8, WALL_Y+7+(i%2?2:5)); ctx.lineTo(gx+i*8, WALL_Y+28); ctx.stroke(); }
     ctx.fillStyle = '#161c2e';
-    ctx.beginPath(); ctx.arc(gx-9, WALL_Y+3, 1.4, 0, 7); ctx.arc(gx+9, WALL_Y+3, 1.4, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(gx-9, WALL_Y+18, 1.4, 0, 7); ctx.arc(gx+9, WALL_Y+18, 1.4, 0, 7); ctx.fill();
   }
   // guard towers bookending the wall
-  img('tower_b', wl+11, WALL_Y+30, 0.27);
-  img('tower_b', wr-11, WALL_Y+30, 0.27);
-  // lancer guards flanking the gate
+  img('tower_b', wl+11, WALL_Y+42, 0.3);
+  img('tower_b', wr-11, WALL_Y+42, 0.3);
+  // lancer guards flanking the gate on the courtyard side
   const lf = Math.floor(time*5)%6;
-  spr('lancer_down', 320, 320, lf, 0, gx-30, WALL_Y+36, 0.17, false, 0.74);
-  spr('lancer_down', 320, 320, (lf+3)%6, 0, gx+30, WALL_Y+36, 0.17, true, 0.74);
-  // archers pacing the rampart (loose arrows during an assault)
+  spr('lancer_down', 320, 320, lf, 0, gx-32, WALL_Y+50, 0.17, false, 0.74);
+  spr('lancer_down', 320, 320, (lf+3)%6, 0, gx+32, WALL_Y+50, 0.17, true, 0.74);
+  // archers pacing ON the walkway deck, loosing arrows during an assault
   for (let k2=0;k2<2;k2++){
     const ph = time*0.22 + k2*2.4;
-    const seg = k2===0 ? [wl+50, 130] : [wr-180, 130];
+    const seg = k2===0 ? [wl+44, 140] : [wr-190, 140];
     const ax = seg[0] + (Math.sin(ph)*0.5+0.5)*seg[1];
     const goingRight = Math.cos(ph) > 0;
     const row = mode==='fight' ? 6 : 1;
-    spr('archer_b', 192, 192, Math.floor(time*8 + k2*3)%6, row, ax, WALL_Y-13, 0.48, !goingRight, 0.8);
+    spr('archer_b', 192, 192, Math.floor(time*8 + k2*3)%6, row, ax, WALL_Y+1, 0.46, !goingRight, 0.82);
   }
-  // damage cracks scale with HP
+  // damage cracks scale with HP (front face)
   const dmg = 1 - wallHP/wallMax;
   if (dmg > 0.05){
     ctx.strokeStyle = 'rgba(22,28,46,'+(0.35+dmg*0.45)+')'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
     for (let i=0;i<Math.ceil(dmg*8);i++){
       const x = FIELD_L + 30 + ((i*137)%(ww-70));
-      ctx.beginPath(); ctx.moveTo(x, WALL_Y-11); ctx.lineTo(x+5, WALL_Y-1); ctx.lineTo(x-3, WALL_Y+9); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, WALL_Y+5); ctx.lineTo(x+5, WALL_Y+15); ctx.lineTo(x-3, WALL_Y+27); ctx.stroke();
     }
   }
 }
