@@ -2187,7 +2187,7 @@ function drawBuildings(dt){
     if (!g) continue;
     const ox = cellX(c)+CELL/2, oy = cellY(r)+CELL/2;
     if (g.obstacle){
-      if (g.obstacle === 'tree') drawTree(ox, oy+18, 1.25, c*7+r);
+      if (g.obstacle === 'tree') drawTree(ox, oy+14, 0.95, c*7+r);
       else img('deco09', ox, oy+12, 1.05, 0.7);
       if (sellTarget && sellTarget.c===c && sellTarget.r===r)
         orr(cellX(c)+3, cellY(r)+3, CELL-6, CELL-6, 10, null, '#ffd95e', 4);
