@@ -156,7 +156,7 @@ function reset(){
   enemies = []; projectiles = []; eprojs = []; particles = []; floaters = [];
   villagers = [makeVillager(), makeVillager(), makeVillager(), makeVillager(), makePrincess()];
   critters = [makeCritter('chicken'), makeCritter('chicken'), makeCritter('pig')];
-  hero = { x:(FIELD_L+FIELD_R)/2, y:GY+26, lvl:1, cd:0, slashT:0 };
+  hero = { x:(FIELD_L+FIELD_R)/2, y:GY+26, lvl:1, cd:0, slashT:0, sortie:false };
   breached = false;
   selected = null; sellTarget = null; heroSel = false;
   mode = 'build';
@@ -206,8 +206,10 @@ function updateHero(dt){
   knights.forEach((k, i) => {
     k.cd -= dt; k.slashT = Math.max(0, k.slashT - dt); k.mv = false;
     let best = null, bd = 1e9;
-    if (mode === 'fight'){
+    if (mode === 'fight' && (hero.sortie || breached)){
+      // knights only leave their post when the player orders a sortie (or the city is breached)
       for (const e of enemies){
+        if (e.kind === 'bombardier') continue;            // can't swim
         const d = Math.hypot(e.x-k.x, e.y-k.y) + (e.kind==='sapper' ? -40 : 0); // prioritize sappers
         if (d < bd){ bd = d; best = e; }
       }
@@ -351,7 +353,7 @@ function buildWave(w){
     if (w>=3 && roll>0.82) kind = 'brute';
     if (w>=4 && roll>=0.55 && roll<0.67) kind = 'raider';
     if (w>=3 && roll>=0.48 && roll<0.55) kind = 'sapper';  // rare: they hit hard
-    if (w>=2 && roll>=0.26 && roll<0.36) kind = 'archer';
+    if (w>=2 && roll>=0.25 && roll<0.38) kind = 'archer';
     if (w>=5 && roll>=0.40 && roll<0.46) kind = 'bombardier';
     q.push(makeEnemy(kind, hpS, t));
     t += gap * (0.7 + Math.random()*0.6);
@@ -606,6 +608,7 @@ function updateFight(dt){
     if (e.hp > 0) return true;
     gold += e.gold;
     floaters.push({ x:e.x, y:e.y-10, text:'+'+e.gold, t:0, dur:0.8, size:15, color:'#ffd95e' });
+    addFx('dead', e.x, e.y + e.r*0.6, Math.max(0.45, e.r/30*0.6));
     puff(e.x, e.y, e.col); sfx.die();
     return false;
   });
@@ -838,6 +841,19 @@ function drawWall(){
   // guard towers bookending the wall
   img('tower_b', wl+11, WALL_Y+30, 0.27);
   img('tower_b', wr-11, WALL_Y+30, 0.27);
+  // lancer guards flanking the gate
+  const lf = Math.floor(time*5)%6;
+  spr('lancer_down', 320, 320, lf, 0, gx-30, WALL_Y+36, 0.17, false, 0.74);
+  spr('lancer_down', 320, 320, (lf+3)%6, 0, gx+30, WALL_Y+36, 0.17, true, 0.74);
+  // archers pacing the rampart (loose arrows during an assault)
+  for (let k2=0;k2<2;k2++){
+    const ph = time*0.22 + k2*2.4;
+    const seg = k2===0 ? [wl+50, 130] : [wr-180, 130];
+    const ax = seg[0] + (Math.sin(ph)*0.5+0.5)*seg[1];
+    const goingRight = Math.cos(ph) > 0;
+    const row = mode==='fight' ? 6 : 1;
+    spr('archer_b', 192, 192, Math.floor(time*8 + k2*3)%6, row, ax, WALL_Y-13, 0.48, !goingRight, 0.8);
+  }
   // damage cracks scale with HP
   const dmg = 1 - wallHP/wallMax;
   if (dmg > 0.05){
@@ -1584,13 +1600,17 @@ function drawTray(){
   chunkyBtn(-fb.w/2, -fb.h/2, fb.w, fb.h, '#ff9c3f', '#d9742a', '#9c4f12', 'FIGHT!', 22);
   ctx.restore();
 }
+const SORTIE_BTN = { x:10, y:TRAY_Y+24, w:112, h:46 };
 function drawFightHUD(){
   const left = spawnQueue.length + enemies.length;
-  orr(W/2-115, TRAY_Y+22, 230, 52, 18, 'rgba(43,40,70,0.88)', 'rgba(255,255,255,0.25)', 2.5);
-  chunkyText(left + ' foes remain', W/2, TRAY_Y+41, 17, '#fff', null, '600');
-  orr(W/2-92, TRAY_Y+54, 184, 11, 5.5, 'rgba(0,0,0,0.45)', null);
+  orr(W/2-86, TRAY_Y+22, 230, 52, 18, 'rgba(43,40,70,0.88)', 'rgba(255,255,255,0.25)', 2.5);
+  chunkyText(left + ' foes remain', W/2+29, TRAY_Y+41, 17, '#fff', null, '600');
+  orr(W/2-63, TRAY_Y+54, 184, 11, 5.5, 'rgba(0,0,0,0.45)', null);
   const f = 1 - left/Math.max(1, waveTotal);
-  if (f > 0.02){ ctx.fillStyle = '#ff9c3f'; rr(W/2-90, TRAY_Y+56, Math.max(4,180*f), 7, 3.5); ctx.fill(); }
+  if (f > 0.02){ ctx.fillStyle = '#ff9c3f'; rr(W/2-61, TRAY_Y+56, Math.max(4,180*f), 7, 3.5); ctx.fill(); }
+  // the player commands the knights
+  if (hero.sortie) chunkyBtn(SORTIE_BTN.x, SORTIE_BTN.y, SORTIE_BTN.w, SORTIE_BTN.h, '#52b3f0', '#2f7fb5', '#1d5a8a', 'RECALL', 16);
+  else chunkyBtn(SORTIE_BTN.x, SORTIE_BTN.y, SORTIE_BTN.w, SORTIE_BTN.h, '#ff9c3f', '#d9742a', '#9c4f12', 'SORTIE!', 16);
 }
 const UPG_COST = [25, 60, 140, 320];
 function drawSellButton(){
@@ -1885,6 +1905,12 @@ cv.addEventListener('pointerdown', ev => {
   if (mode === 'title'){ reset(); return; }
   if (mode === 'over'){ if (inRect(p, {x:W/2-105,y:450,w:210,h:56})) reset(); return; }
   if (inRect(p, {x:W-44, y:11, w:36, h:36})){ muted = !muted; return; }
+  if (mode === 'fight' && inRect(p, SORTIE_BTN)){
+    hero.sortie = !hero.sortie;
+    banner(hero.sortie ? 'CHARGE!' : 'FALL BACK!', hero.sortie ? '#ff9c3f' : '#52b3f0');
+    sfx.fanfare();
+    return;
+  }
   if (mode !== 'build') return;
 
   // hero / sell / upgrade / clear buttons
@@ -2043,6 +2069,7 @@ function frame(now){
   drawGulls();
   drawIsland();
   drawGrid();
+  drawCorpses();
   drawWall();
   drawBuildings(dt);
   drawVillagers();
@@ -2085,14 +2112,43 @@ function I(name){
 ['water','tiles','foam','rocks','tree','sheep','deco01','deco02','deco03','deco07','deco09','deco10','deco14','deco16',
  'house_b','house_r','house_p','house_x','tower_b','tower_r','tower_p','tower_x','castle_b','castle_r','castle_p','castle_x',
  'pawn_b','pawn_p','pawn_r','pawn_y','warrior_b','warrior_r','torch_r','torch_y','torch_p','tnt_r','tnt_y',
- 'barrel_r','archer_r','explosions','fire','arrow','dynamite'].forEach(I);
+ 'barrel_r','archer_r','archer_b','explosions','fire','arrow','dynamite','dead',
+ 'archery_b','barracks_r','monastery_p','house1_b','house2_r','house3_p','lancer_down'].forEach(I);
 function assetsReady(){ return imgLoaded >= imgCount; }
-function spr(name, fw, fh, col, row, dx, dy, s, flip, ay){
-  const im = I(name); if (!im.complete || !im.naturalWidth) return;
+function sprIm(im, fw, fh, col, row, dx, dy, s, flip, ay){
   ctx.save(); ctx.translate(dx, dy);
   if (flip) ctx.scale(-1, 1);
   ctx.drawImage(im, col*fw, row*fh, fw, fh, -fw*s/2, -fh*s*(ay===undefined?0.74:ay), fw*s, fh*s);
   ctx.restore();
+}
+function spr(name, fw, fh, col, row, dx, dy, s, flip, ay){
+  const im = I(name); if (!im.complete || !im.naturalWidth) return;
+  sprIm(im, fw, fh, col, row, dx, dy, s, flip, ay);
+}
+// the princess: a true palette-swap of the pawn — blue garment becomes a rose gown
+let princessImg = null, princessTried = false;
+function makePrincessSprite(){
+  const src = I('pawn_y');
+  if (!src.complete || !src.naturalWidth) return;
+  princessTried = true;
+  try {
+    const c = document.createElement('canvas');
+    c.width = src.width; c.height = src.height;
+    const g = c.getContext('2d');
+    g.drawImage(src, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+    for (let i=0;i<p.length;i+=4){
+      const r = p[i], gg = p[i+1], b = p[i+2];
+      if (!p[i+3]) continue;
+      if (b > r*1.25 && b > gg*1.1 && b > 70){
+        p[i]   = Math.min(255, b*0.98);
+        p[i+1] = Math.max(0, gg*0.5);
+        p[i+2] = Math.min(255, b*0.8);
+      }
+    }
+    g.putImageData(d, 0, 0);
+    princessImg = c;
+  } catch(err){ princessImg = null; }   // file:// canvas taint — fall back to plain pawn
 }
 function img(name, dx, dy, s, ay){
   const im = I(name); if (!im.complete || !im.naturalWidth) return;
@@ -2167,16 +2223,20 @@ function drawTree(x, y, s, seed){
 const BCOL = { archer:'b', cannon:'r', frost:'p' };
 function drawBuilding(x, y, type, tier, recoil, noBadge){
   const cx = x+CELL/2, baseY = y+CELL-2;
-  const c = BCOL[type];
+  // distinct silhouettes per line: house → guild hall → tower → castle
+  const BSPRITE = {
+    archer: ['house1_b','archery_b','tower_b','castle_b','castle_b'],
+    cannon: ['house2_r','barracks_r','tower_r','castle_r','castle_r'],
+    frost:  ['house3_p','monastery_p','tower_p','castle_p','castle_p'],
+  }[type];
+  const BSCALE = [0.42, 0.30, 0.38, 0.26, 0.34];
   ctx.save(); ctx.translate(0, recoil ? recoil*8 : 0);
-  if (tier===1)      img('house_'+c, cx, baseY, 0.42);
-  else if (tier===2) img('tower_'+c, cx, baseY, 0.30);
-  else if (tier===3) img('tower_'+c, cx, baseY, 0.38);
-  else if (tier===4) img('castle_'+c, cx, baseY, 0.26);
-  else {
+  if (tier===5){
     aura(cx, baseY-34, 46, TYPES[type].trim);
-    img('castle_'+c, cx, baseY, 0.34);
+    img(BSPRITE[4], cx, baseY, 0.34);
     star(cx, baseY-92, 7, '#ffd95e', '#a8761c');
+  } else {
+    img(BSPRITE[tier-1], cx, baseY, BSCALE[tier-1] * (BSPRITE[tier-1]==='monastery_p' ? 0.92 : 1));
   }
   ctx.restore();
   if (!noBadge) badge(cx-17, baseY-8, tier);
@@ -2267,9 +2327,9 @@ function drawEprojs(){
       spr('dynamite', 64, 64, Math.floor(time*14)%6, 0, x, y, 0.55, false, 0.5);
     } else {
       const vx = (q.tx-q.sx)/q.dur, vy = (q.ty-q.sy)/q.dur - q.arc*4*(1-2*k)/q.dur;
-      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(vy, vx) + Math.PI/2);
+      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.atan2(vy, vx));
       const im = I('arrow');
-      if (im.complete && im.naturalWidth) ctx.drawImage(im, -9, -14, 18, 36);
+      if (im.complete && im.naturalWidth) ctx.drawImage(im, 0, 0, 64, 64, -16, -8, 32, 16);
       ctx.restore();
     }
   }
@@ -2288,6 +2348,7 @@ function drawVillagers(){
     const f = Math.floor(time*8 + c.wob*5) % 6;
     spr('sheep', 128, 128, f, 0, c.x, c.y+6, 0.42, c.tx < c.x, 0.78);
   }
+  if (!princessTried) makePrincessSprite();
   for (const v of villagers){
     const name = v.princess ? 'pawn_y' : PAWNS[Math.floor(v.wob*10)%4];
     let row = v.moving ? 1 : 0, fps = v.moving ? 10 : 7;
@@ -2297,7 +2358,8 @@ function drawVillagers(){
     else if (v.job === 'builder' && !v.moving) row = 2;        // hammering away
     if (v.princess) sc = 0.38;
     const f = Math.floor(time*fps + v.wob*6) % 6;
-    spr(name, 192, 192, f, row, v.x, v.y+9, sc, v.tx < v.x);
+    if (v.princess && princessImg) sprIm(princessImg, 192, 192, f, row, v.x, v.y+9, sc, v.tx < v.x);
+    else spr(name, 192, 192, f, row, v.x, v.y+9, sc, v.tx < v.x);
     if (v.princess){
       // gold crown + sparkle
       const cy = v.y - 27;
@@ -2326,9 +2388,10 @@ function drawHero(){
 function drawProjectile(p){
   const dx = p.tx-p.x, dy = p.ty-p.y;
   if (p.kind === 'arrow'){
-    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.atan2(dy, dx) + Math.PI/2);
+    // the arrow sprite points RIGHT natively — rotate to flight direction
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.atan2(dy, dx));
     const im = I('arrow');
-    if (im.complete && im.naturalWidth) ctx.drawImage(im, -10, -16, 20, 40);
+    if (im.complete && im.naturalWidth) ctx.drawImage(im, 0, 0, 64, 64, -17, -8.5, 34, 17);
     ctx.restore();
   } else if (p.kind === 'ball'){
     spr('dynamite', 64, 64, Math.floor(time*14)%6, 0, p.x, p.y, 0.55, false, 0.5);
@@ -2343,6 +2406,16 @@ function drawProjectile(p){
 }
 let fx = [];
 function addFx(kind, x, y, s){ fx.push({ kind, x, y, s: s||0.65, t: 0 }); }
+function drawCorpses(){
+  // fallen foes linger on the field, under everything that still moves
+  for (const f of fx){
+    if (f.kind !== 'dead') continue;
+    const fr = Math.min(6, Math.floor(f.t/0.09));
+    ctx.globalAlpha = f.t < 1.4 ? 1 : Math.max(0, 1 - (f.t-1.4)/0.8);
+    spr('dead', 128, 128, fr, 1, f.x, f.y, f.s, false, 0.7);
+    ctx.globalAlpha = 1;
+  }
+}
 function drawFx(dt){
   for (const f of fx){
     f.t += dt;
@@ -2351,7 +2424,7 @@ function drawFx(dt){
       if (fr < 9) spr('explosions', 192, 192, fr, 0, f.x, f.y, f.s, false, 0.6);
     }
   }
-  fx = fx.filter(f => f.t < 0.63);
+  fx = fx.filter(f => f.t < (f.kind === 'dead' ? 2.2 : 0.63));
 }
 
 /* ---------- title & tray reskin ---------- */
@@ -2369,7 +2442,7 @@ function drawTrayPiece(piece, sx, sy, size, dim){
     const bx = ox + c*cs, by = oy + r*cs, mx = bx+cs/2;
     if (dim){ orr(bx+1.5, by+1.5, cs-3, cs-3, 6, 'rgba(150,140,110,0.5)', null); continue; }
     orr(bx+1, by+1, cs-2, cs-2, 7, '#9ed468', '#6aa844', 2.5);
-    img('house_'+BCOL[piece.type], mx, by+cs-3, 0.19);
+    img({archer:'house1_b', cannon:'house2_r', frost:'house3_p'}[piece.type], mx, by+cs-3, 0.19);
   }
 }
 </script>
