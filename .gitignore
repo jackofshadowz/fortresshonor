@@ -6,5 +6,10 @@ node_modules/
 # third-party reference images — keep local, not in repo
 screenshots/
 
-# raw asset packs (~6GB) — kept local; catalogued in ASSET_LIBRARY.md
-asset library/
+# raw asset packs (~6GB) — kept local; catalogued in ASSET_LIBRARY.md.
+# Exception: the CC0 Tiny Swords packs (the game's art source of record)
+# and our generated sheets are versioned so the repo is self-contained.
+asset library/*
+!asset library/Tiny Swords (Update 010)/
+!asset library/Tiny Swords (Free Pack)/
+!asset library/generated/
