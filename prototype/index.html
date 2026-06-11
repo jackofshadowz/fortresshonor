@@ -355,6 +355,7 @@ function buildWave(w){
     if (w>=3 && roll>=0.48 && roll<0.55) kind = 'sapper';  // rare: they hit hard
     if (w>=2 && roll>=0.25 && roll<0.38) kind = 'archer';
     if (w>=5 && roll>=0.40 && roll<0.46) kind = 'bombardier';
+    if (w>=6 && roll>=0.67 && roll<0.73) kind = 'golem';
     q.push(makeEnemy(kind, hpS, t));
     t += gap * (0.7 + Math.random()*0.6);
   }
@@ -370,6 +371,7 @@ function makeEnemy(kind, hpS, at){
     sapper: { hp:34,  spd:30, dps:0,  r:17, gold:6,  col:'#ff9c6a' },
     archer: { hp:18,  spd:34, dps:0,  r:16, gold:4,  col:'#e86a5a' },
     bombardier: { hp:55, spd:26, dps:0, r:19, gold:9, col:'#b48355' },
+    golem:  { hp:170, spd:14, dps:20, r:24, gold:16, col:'#8a7a64' },
     boss:   { hp:260, spd:15, dps:32, r:30, gold:34, col:'#8a7ae0' },
   }[kind];
   // emerge from the treeline at the island's top — never out on the water
@@ -2113,7 +2115,8 @@ function I(name){
  'house_b','house_r','house_p','house_x','tower_b','tower_r','tower_p','tower_x','castle_b','castle_r','castle_p','castle_x',
  'pawn_b','pawn_p','pawn_r','pawn_y','warrior_b','warrior_r','torch_r','torch_y','torch_p','tnt_r','tnt_y',
  'barrel_r','archer_r','archer_b','explosions','fire','arrow','dynamite','dead',
- 'archery_b','barracks_r','monastery_p','house1_b','house2_r','house3_p','lancer_down'].forEach(I);
+ 'archery_b','barracks_r','monastery_p','house1_b','house2_r','house3_p','lancer_down',
+ 'princess','golem'].forEach(I);
 function assetsReady(){ return imgLoaded >= imgCount; }
 function sprIm(im, fw, fh, col, row, dx, dy, s, flip, ay){
   ctx.save(); ctx.translate(dx, dy);
@@ -2315,9 +2318,14 @@ function drawBombardier(r, step, e){
   ctx.ellipse(25, 12+Math.cos(time*2.3)*1.5, 5, 2, 0, 0, 7); ctx.fill();
   unitSpr('tnt_y', e, 0.62*r/19);
 }
+function drawGolem(r, step, e){
+  // stone golem — generated sheet, 4 walk frames
+  const f = Math.floor(time*6 + (e.wob||0)*5) % 4;
+  spr('golem', 96, 112, f, 0, 0, e.r*0.95, 1.15*r/24, e.face < 0, 0.95);
+}
 const ENEMY_DRAW = { grunt:drawGoblin, runner:drawScout, brute:drawOgre,
                      raider:drawRaider, sapper:drawSapper, boss:drawDarkKnight,
-                     archer:drawArcherE, bombardier:drawBombardier };
+                     archer:drawArcherE, bombardier:drawBombardier, golem:drawGolem };
 function drawEprojs(){
   for (const q of eprojs){
     const k = Math.min(1, q.t/q.dur);
@@ -2348,7 +2356,6 @@ function drawVillagers(){
     const f = Math.floor(time*8 + c.wob*5) % 6;
     spr('sheep', 128, 128, f, 0, c.x, c.y+6, 0.42, c.tx < c.x, 0.78);
   }
-  if (!princessTried) makePrincessSprite();
   for (const v of villagers){
     const name = v.princess ? 'pawn_y' : PAWNS[Math.floor(v.wob*10)%4];
     let row = v.moving ? 1 : 0, fps = v.moving ? 10 : 7;
@@ -2358,14 +2365,12 @@ function drawVillagers(){
     else if (v.job === 'builder' && !v.moving) row = 2;        // hammering away
     if (v.princess) sc = 0.38;
     const f = Math.floor(time*fps + v.wob*6) % 6;
-    if (v.princess && princessImg) sprIm(princessImg, 192, 192, f, row, v.x, v.y+9, sc, v.tx < v.x);
-    else spr(name, 192, 192, f, row, v.x, v.y+9, sc, v.tx < v.x);
     if (v.princess){
-      // gold crown + sparkle
-      const cy = v.y - 27;
-      opoly([[v.x-5,cy],[v.x-4,cy-5],[v.x-1.8,cy-1.5],[v.x,cy-6],[v.x+1.8,cy-1.5],[v.x+4,cy-5],[v.x+5,cy],[v.x+5,cy+3],[v.x-5,cy+3]],
-            '#ffd95e', '#a8761c', 1.6);
-      if (Math.sin(time*3 + 1) > 0.5) star(v.x+9, cy-6, 2.6, 'rgba(255,255,255,0.9)', null);
+      // the real princess — her own sprite, crown included
+      spr('princess', 64, 96, Math.floor(time*4 + v.wob)%4, 0, v.x, v.y+9, 0.46, v.tx < v.x, 0.95);
+      if (Math.sin(time*3 + 1) > 0.5) star(v.x+10, v.y-32, 2.6, 'rgba(255,255,255,0.9)', null);
+    } else {
+      spr(name, 192, 192, f, row, v.x, v.y+9, sc, v.tx < v.x);
     }
   }
 }
