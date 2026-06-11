@@ -5,3 +5,6 @@ node_modules/
 
 # third-party reference images — keep local, not in repo
 screenshots/
+
+# raw asset packs (~6GB) — kept local; catalogued in ASSET_LIBRARY.md
+asset library/
