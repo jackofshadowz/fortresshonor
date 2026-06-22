@@ -56,13 +56,16 @@ Verified with `node --check` (syntax clean). No assets added; pure logic + canva
 * **Rarity axis** ✅ — pieces spawn Common or Rare (16%); rarity carries through placement and merge (`tryMerge` takes the group max; an all-rare merge promotes to Epic), multiplying tower damage (`CONFIG.rarity.dmgMult`). Shown via a corner gem on the grid and a colored outline in the tray. Mirrors Fortress Merge's `Rarity` enum. See [enums](okf/data-model/enums.md).
 * **Second mode (Boss Rush)** ✅ — a title toggle (Siege ↔ Boss Rush); `runMode` drives `bossRushWave()` (golem+brute escorts plus 1–2 bosses each wave) vs the standard `buildWave`. Mirrors Fortress Merge's mode-as-thin-variant-over-one-combat-core. See [game-modes](okf/systems/game-modes.md).
 * **Analytics logger** ✅ — `ANALYTICS.log(ev, data)` writes to console + `localStorage('foh_events')`. Emits `run_start`, `wave_start`, `wave_clear`, `perk`, and `run_over` (with the wave reached — the equivalent of FM's `player_lost_at_level_wave`). Inspect via `JSON.parse(localStorage.foh_events)`. See [analytics-events](okf/references/analytics-events.md).
+* **Perk synergy sets** ✅ — `SETS` (Warband/Fortune/Elements); owning 2 or 3 perks from a theme grants escalating bonuses via `checkSetBonus` (reusing existing RUN fields). Draft cards show their set tag. Mirrors Fortress Merge's "Wardrum" synergy clusters. See [perk-system](okf/systems/perk-system.md).
+
+**The in-run combat track is now complete** (perks, config, buffs, rarity, 2nd mode, analytics, synergy).
 
 # What to adapt next (mapped to the blueprint)
 
-Prioritized follow-ons from [the blueprint](okf/blueprint/index.md), in rough ROI order:
+The remaining work is the two large meta tracks:
 
-1. **Perk synergy sets** — themed clusters (Fortress Merge's "Wardrum") for build identity. See [perk-system](okf/systems/perk-system.md).
-2. **Hero & city/meta spines** — larger separate tracks (collectible heroes w/ gear/revive; idle village + base meta). See [hero-system](okf/systems/hero-system.md).
+1. **Hero spine** — turn the knight into collectible heroes (heroes as cards, gear/blueprints, revive-cost loop). See [hero-system](okf/systems/hero-system.md).
+2. **City/meta spine** — deepen the persistent base (idle village, building collection, meta upgrades). See [game-modes](okf/systems/game-modes.md) + [economy-currencies](okf/systems/economy-currencies.md).
 
 # How to run / test
 

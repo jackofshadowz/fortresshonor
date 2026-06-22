@@ -168,6 +168,30 @@ const PERKS = [
   { id:'concuss',   name:'Concussion',      rarity:'Rare',    desc:'25% chance to stun on hit', apply:r=>r.stunChance+=0.25 },
   { id:'quarry',    name:'Free Quarry',     rarity:'Rare',    desc:'rerolls are free this run', apply:r=>r.freeReroll=true },
 ];
+/* perk synergy sets — owning several from a theme grants escalating bonuses
+   (adapted from Fortress Merge's "Wardrum" synergy clusters). Bonuses reuse the
+   existing RUN fields, so no new combat plumbing is needed. */
+const SETS = {
+  warband:  { name:'Warband',  members:['sharpedge','quickhands','overwhelm'],
+              bonus:{ 2:r=>r.dmgMult*=1.10, 3:r=>r.rateMult*=1.15 } },
+  fortune:  { name:'Fortune',  members:['merchant','alchemy','warchest'],
+              bonus:{ 2:r=>r.goldMult*=1.20, 3:r=>r.wallPerKill+=1 } },
+  elements: { name:'Elements', members:['wildfire','venom','frostbite','concuss'],
+              bonus:{ 2:r=>r.slowBonus+=0.3, 3:r=>r.critChance+=0.10 } },
+};
+function setOf(id){ for (const k in SETS) if (SETS[k].members.includes(id)) return SETS[k].name; return null; }
+function checkSetBonus(pid){
+  for (const k in SETS){
+    const S = SETS[k];
+    if (!S.members.includes(pid)) continue;
+    const count = RUN.perks.filter(id => S.members.includes(id)).length;
+    if (S.bonus[count]){
+      S.bonus[count](RUN);
+      floaters.push({ x:W/2, y:344, text:S.name.toUpperCase()+' SET ('+count+')!', t:0, dur:1.6, size:18, color:'#ffd95e' });
+      sfx.fanfare();
+    }
+  }
+}
 const RARITY_W   = { Common:5, Uncommon:3, Rare:1 };
 const RARITY_COL = { Common:'#9fb3c8', Uncommon:'#5cc04c', Rare:'#c9a2e8' };
 let perkChoices = [], perkBtns = [];
@@ -187,6 +211,7 @@ function choosePerk(p){
   ANALYTICS.log('perk', { id: p.id, rarity: p.rarity });
   floaters.push({ x:W/2, y:300, text:p.name+'!', t:0, dur:1.3, size:24, color:RARITY_COL[p.rarity] });
   sfx.merge();
+  checkSetBonus(p.id);
   mode = 'build'; banner('WAVE ' + wave, '#ffd95e');
 }
 function drawPerkDraft(){
@@ -203,6 +228,8 @@ function drawPerkDraft(){
     chunkyText(p.name, x+98, y+33, 19, '#ffffff', '#10131f', '700', 'left');
     chunkyText(p.desc, x+98, y+60, 14, '#cfe0f5', null, '500', 'left');
     chunkyText(p.rarity.toUpperCase(), x+98, y+80, 10, col, null, '600', 'left');
+    const sn = setOf(p.id);
+    if (sn) chunkyText('◆ ' + sn.toUpperCase() + ' SET', x+cw-14, y+80, 10, '#ffd95e', null, '600', 'right');
     perkBtns.push({ x, y, w:cw, h:ch, perk:p });
     y += ch + gap;
   }
