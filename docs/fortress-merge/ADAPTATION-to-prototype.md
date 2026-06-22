@@ -76,12 +76,12 @@ Every adaptation is tagged by how directly it derives from the Fortress Merge te
 * 🔵 **Kingdom notebook** — a consolidated overview screen (`drawKingdom`): a city-view panel (keep + owned decorations + champion), then rows for champion/idle income/village/keep-upgrades/decorations/badges/best-wave/stats, plus links to Store/Heroes/Badges. Reached from a **KINGDOM** button on the title (alongside a prominent **STORE** button). Our IA enrichment — FM has per-system screens, not a single dashboard.
 
 * 🔵 **Building identification (UX)** — every tower now shows a **role emblem** (`typeGlyph`: bow=archer, cannonball=cannon, snowflake=frost) in-game and on tray pieces, and the selected-building panel shows its **name + role + damage**. Fixes "which building is which" — works even when a tower skin makes all three share a sprite.
+* 🔵 **Store art (bugfix + icons)** — store cosmetics showed a green placeholder for every item because `it.slot` was only set on the `CATALOG_BY_ID` copies, not the originals the store iterates — so `chipPreview` always hit the terrain branch (and equip/buy detection broke). Fixed by tagging `slot` on the original catalog objects; previews now render real hero sprites / tower images / banner flags / terrain swatches. Added icons to the Upgrades (chevron) and Prestige (`drawDeco`) rows too.
 
 # What to adapt next (mapped to the blueprint)
 
-1. **Store art** — store items render generic placeholders; give each a real icon/preview. *(in progress)*
-2. **In-run gold shop** + **meta store expansion** — both requested.
-3. **Hero depth** — gear/blueprints + per-hero levels + the revive-cost loop.
+1. **In-run gold shop** + **meta store expansion** — both requested.
+2. **Hero depth** — gear/blueprints + per-hero levels + the revive-cost loop.
 
 # How to run / test
 

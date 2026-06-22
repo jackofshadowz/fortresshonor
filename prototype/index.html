@@ -2865,6 +2865,12 @@ const HEROES = [
 ];
 const HERO_BY_ID = {}; for (const h of HEROES) HERO_BY_ID[h.id] = h;
 
+// tag every catalog item with its slot on the ORIGINAL objects (store previews,
+// equip state, and buying all read it.slot — previously only the copies had it,
+// so every cosmetic preview fell through to the terrain green-box branch).
+for (const k in SKIN_CAT) for (const it of SKIN_CAT[k]) it.slot = k;
+for (const m of MOD_CAT) m.slot = 'mod';
+for (const p of PRESTIGE_CAT) p.slot = 'prestige';
 const CATALOG_BY_ID = {};
 for (const k in SKIN_CAT) for (const it of SKIN_CAT[k]) CATALOG_BY_ID[it.id] = Object.assign({ slot:k }, it);
 for (const m of MOD_CAT) CATALOG_BY_ID[m.id] = Object.assign({ slot:'mod' }, m);
@@ -3059,8 +3065,19 @@ function drawChip(it, x, y, w, h){
 function drawStoreRow(it, yy, owned, ownLabel){
   const afford = META.s.gems >= it.cost;
   orr(12, yy, W-24, 56, 12, 'rgba(255,255,255,0.12)', owned?'#7ed05f':'rgba(255,255,255,0.3)', owned?3:2);
-  chunkyText(it.name, 26, yy+20, 15, '#fff', null, '600', 'left');
-  chunkyText(it.desc, 26, yy+39, 11, '#dfe6ff', null, '500', 'left');
+  // icon: prestige shows its decoration, upgrades show an "upgrade" chevron
+  const icx = 42, icy = yy+28;
+  if (it.slot === 'prestige'){
+    ocirc(icx, icy, 20, 'rgba(20,30,60,0.4)', 'rgba(255,255,255,0.25)', 2);
+    ctx.save(); rr(icx-19, icy-19, 38, 38, 14); ctx.clip(); drawDeco(it.id, icx, icy+12, 0.78); ctx.restore();
+  } else {
+    ocirc(icx, icy, 18, '#ffce5a', '#9c6f12', 2.5);
+    ctx.strokeStyle = '#9c6f12'; ctx.lineWidth = 2.8; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(icx-5, icy+3); ctx.lineTo(icx, icy-5); ctx.lineTo(icx+5, icy+3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(icx-5, icy+7); ctx.lineTo(icx, icy-1); ctx.lineTo(icx+5, icy+7); ctx.stroke();
+  }
+  chunkyText(it.name, 72, yy+20, 15, '#fff', null, '600', 'left');
+  chunkyText(it.desc, 72, yy+39, 11, '#dfe6ff', null, '500', 'left');
   if (it.honor) chunkyText('+'+it.honor+' Honor', W-150, yy+39, 10, '#ffd95e', null, '600', 'left');
   if (owned) chunkyText(ownLabel, W-58, yy+30, 14, '#7ed05f', null, '600');
   else {
