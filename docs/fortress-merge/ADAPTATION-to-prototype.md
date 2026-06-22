@@ -93,9 +93,16 @@ Every adaptation is tagged by how directly it derives from the Fortress Merge te
 * 🔵 **Merge feel** — on merge the two consumed towers stream particles into the survivor, a golden burst pops, and a "3 → TIER N!" floater + scaled shake fire. (Pairs with the merge-clarity hints.)
 * 🟢 **Hero gear** — equippable loadout (`GEAR`, 3 slots Weapon/Armor/Trinket, 2 options each) bought with Gems, applied each run in `reset`; a **Gear** screen reachable from a GEAR button on the Heroes screen. Mirrors FM's hero gear slots (our items/effects).
 
-# What to adapt next (mapped to the blueprint)
+* 🟢 **Hero revive-cost loop** — the in-run champion (lead knight) now has **HP** (`hero.hp/maxhp`, scales with level), takes damage while engaged on sortie/breach, and **falls** at 0 HP (knights vanish, can't sortie). A **REVIVE −gold** button appears between waves; reviving restores full HP. HP bar + downed skull marker shown. Mirrors FM's hero revive economy.
 
-1. **Hero revive-cost loop** — needs an in-run hero *unit* that can fall and be revived for a cost; the prototype's champions are passive boons today, so this is a larger mechanic (would tie a champion to an in-run presence with HP). Deferred — flagged for discussion.
+**HERO SPINE COMPLETE** (roster → levels → gear → revive). All three adaptation tracks (in-run combat, City/Meta, Hero) are now done; the rest is polish/iteration.
+
+# What to adapt next
+
+Open / iteration ideas (no committed direction):
+- Difficulty/economy balancing pass using the `foh_events` telemetry.
+- Hero-revive perks (`FreeHeroRevive`/`HeroReviveCostReduction`) — observed in FM, not yet added to the prototype's perk pool.
+- Further merge-feel / homepage polish per playtest feedback.
 
 # How to run / test
 

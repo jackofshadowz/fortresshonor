@@ -310,7 +310,8 @@ function reset(){
   enemies = []; projectiles = []; eprojs = []; particles = []; floaters = [];
   villagers = [makeVillager(), makeVillager(), makeVillager(), makeVillager(), makePrincess()];
   critters = [makeCritter('chicken'), makeCritter('chicken'), makeCritter('pig')];
-  hero = { x:(FIELD_L+FIELD_R)/2, y:GY+26, lvl:(META.s.mods.squire ? 2 : 1), cd:0, slashT:0, sortie:false };
+  hero = { x:(FIELD_L+FIELD_R)/2, y:GY+26, lvl:(META.s.mods.squire ? 2 : 1), cd:0, slashT:0, sortie:false, down:false };
+  hero.maxhp = 80 + 25*hero.lvl; hero.hp = hero.maxhp;
   breached = false;
   selected = null; sellTarget = null; heroSel = false;
   mode = 'build';
@@ -350,11 +351,12 @@ function makeCritter(kind){
 /* ---------- hero knight ---------- */
 let hero = null, heroSel = false, breached = false;
 const HERO_COST = l => 30 + 30*l;
+function heroReviveCost(){ return 40 + 15*wave; }   // in-run gold to revive a fallen champion
 let knights = [];
 function updateHero(dt){
   if (!hero) return;
   // squad size grows with hero level (extra levels past 4 buy damage)
-  const want = Math.min(hero.lvl, 4);
+  const want = hero.down ? 0 : Math.min(hero.lvl, 4);
   while (knights.length < want) knights.push({ x: ISL.cx-36+knights.length*24, y: GY+20, cd:0, slashT:0, face:1, mv:false });
   while (knights.length > want) knights.pop();
   if (mode === 'title') return;
@@ -373,6 +375,7 @@ function updateHero(dt){
     if (best){
       const realD = Math.hypot(best.x-k.x, best.y-k.y);
       if (realD < 34){
+        if (!hero.down) hero.hp -= (best.dps || 5) * dt * 0.6;   // the champion takes hits while engaged
         if (k.cd <= 0){
           k.cd = 0.6; k.slashT = 0.16;
           hitEnemy(best, dmg, 0);
@@ -399,6 +402,11 @@ function updateHero(dt){
     k.x = Math.max(FIELD_L+16, Math.min(FIELD_R-16, k.x));
     k.y = Math.max(FIELD_TOP+24, Math.min(GY+ROWS*CELL-6, k.y));
   });
+  // champion falls when overwhelmed — revive for gold between waves
+  if (!hero.down && hero.hp <= 0){
+    hero.down = true; hero.hp = 0; hero.sortie = false; knights.length = 0;
+    banner('HERO DOWN!', '#ff5e4d'); sfx.defeat(); puff(hero.x, hero.y, '#ff5e4d'); shake = Math.max(shake, 8);
+  }
   // the lead knight is the tap target for HERO UP
   if (knights[0]){ hero.x = knights[0].x; hero.y = knights[0].y; }
 }
@@ -1932,6 +1940,12 @@ function drawFightHUD(){
 const UPG_COST = [25, 60, 140, 320];
 function drawSellButton(){
   if (mode!=='build') return null;
+  if (hero && hero.down){
+    const cost = heroReviveCost(), ok = gold >= cost;
+    const bx = Math.max(8, Math.min(W-156, hero.x-74)), by = hero.y-70;
+    chunkyBtn(bx, by, 148, 34, ok?'#ff7b5e':'#b0ada6', ok?'#d9542a':'#8d8a83', '#9c2f12', 'REVIVE −'+cost, 14);
+    return { revive:true, x:bx, y:by, w:148, h:34, cost };
+  }
   if (heroSel && hero){
     const cost = HERO_COST(hero.lvl), ok = gold >= cost;
     const bx = Math.max(8, Math.min(W-156, hero.x-74)), by = hero.y-70;
@@ -2290,6 +2304,14 @@ cv.addEventListener('pointerdown', ev => {
 
   // hero / sell / upgrade / clear buttons
   if (sellBtnRect){
+    if (sellBtnRect.revive && inRect(p, sellBtnRect)){
+      if (gold >= sellBtnRect.cost){
+        gold -= sellBtnRect.cost; hero.down = false; hero.hp = hero.maxhp;
+        puff(hero.x, hero.y-12, '#ff7b5e'); sfx.fanfare();
+        floaters.push({ x:hero.x, y:hero.y-34, text:'REVIVED!', t:0, dur:1.0, size:16, color:'#ff7b5e' });
+      } else floaters.push({ x:hero.x, y:hero.y-40, text:'need '+sellBtnRect.cost+'g', t:0, dur:0.8, size:14, color:'#ff8d7e' });
+      return;
+    }
     if (sellBtnRect.hero && inRect(p, sellBtnRect)){
       if (gold >= sellBtnRect.cost){
         gold -= sellBtnRect.cost; hero.lvl++;
@@ -2800,6 +2822,16 @@ function drawHero(){
     spr(hspr, 192, 192, f, row, k.x, k.y+8, 0.42, k.face < 0, 0.76);
   });
   badge(hero.x-14, hero.y+4, hero.lvl);
+  if (hero.down){
+    ocirc(hero.x, hero.y-6, 13, 'rgba(60,60,80,0.85)', '#ff5e4d', 2.5);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(hero.x-4, hero.y-10); ctx.lineTo(hero.x+4, hero.y-2); ctx.moveTo(hero.x+4, hero.y-10); ctx.lineTo(hero.x-4, hero.y-2); ctx.stroke();
+  } else if (hero.hp < hero.maxhp){
+    const w2 = 34, hx = hero.x, hy = hero.y-30;
+    orr(hx-w2/2-1, hy-1, w2+2, 7, 3.5, 'rgba(38,35,58,0.9)', null);
+    const f = Math.max(0, hero.hp/hero.maxhp);
+    ctx.fillStyle = f>0.5 ? '#7ee860' : f>0.25 ? '#ffcf4d' : '#ff5e4d'; rr(hx-w2/2, hy, Math.max(3, w2*f), 5, 2.5); ctx.fill();
+  }
   if (heroSel && mode === 'build') orr(hero.x-20, hero.y-38, 40, 50, 10, null, '#ffd95e', 3);
 }
 
