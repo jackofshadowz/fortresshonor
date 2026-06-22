@@ -1867,6 +1867,9 @@ function drawSellButton(){
   const canUp = g.tier < MAX_TIER;
   const totalW = canUp ? 200 : 96;
   const bx = Math.max(8, Math.min(W-totalW-8, cx0-totalW/2));
+  const def = TYPES[g.type], lx = Math.max(64, Math.min(W-64, cx0));
+  chunkyText(def.name + '  L' + g.tier, lx, by-22, 12, '#fff', '#10131f', '700');
+  chunkyText(TYPE_ROLE[g.type], lx, by-8, 9, '#dfe6ff', 'rgba(20,30,50,0.7)', '600');
   chunkyBtn(bx, by, 96, 32, '#ffce5a', '#dba32c', '#9c6f12', 'SELL +'+v, 13);
   const out = { x:bx, y:by, w:96, h:32, v };
   if (canUp){
@@ -2512,6 +2515,23 @@ function drawTree(x, y, s, seed){
 
 /* ---------- buildings ---------- */
 const BCOL = { archer:'b', cannon:'r', frost:'p' };
+// role emblem so players can read tower type at a glance: bow=archer, ball=cannon, snowflake=frost
+function typeGlyph(cx, cy, type){
+  const T = TYPES[type];
+  ocirc(cx, cy, 8.5, T.roof, '#1c2030', 2.2);
+  ctx.save(); ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff'; ctx.lineWidth = 1.8; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (type === 'archer'){
+    ctx.beginPath(); ctx.moveTo(cx-4, cy+4); ctx.lineTo(cx+4, cy-4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx+4.5, cy-4.5); ctx.lineTo(cx+0.5, cy-4); ctx.lineTo(cx+4, cy-0.5); ctx.closePath(); ctx.fill();
+  } else if (type === 'cannon'){
+    ctx.beginPath(); ctx.arc(cx, cy+1, 3.4, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#ffd95e'; ctx.beginPath(); ctx.moveTo(cx+2.4, cy-2); ctx.lineTo(cx+4.6, cy-5); ctx.stroke();
+  } else {
+    for (let k=0;k<3;k++){ const a = k*Math.PI/3; ctx.beginPath(); ctx.moveTo(cx-Math.cos(a)*4.5, cy-Math.sin(a)*4.5); ctx.lineTo(cx+Math.cos(a)*4.5, cy+Math.sin(a)*4.5); ctx.stroke(); }
+  }
+  ctx.restore();
+}
+const TYPE_ROLE = { archer:'fast • single target', cannon:'slow • splash', frost:'slows enemies' };
 function drawBuilding(x, y, type, tier, recoil, noBadge){
   const cx = x+CELL/2, baseY = y+CELL-2;
   const skin = metaEquip('tower');
@@ -2537,7 +2557,7 @@ function drawBuilding(x, y, type, tier, recoil, noBadge){
   img(sprite, cx, baseY, scale);
   if (tier===5) star(cx, baseY-92, 7, '#ffd95e', '#a8761c');
   ctx.restore();
-  if (!noBadge) badge(cx-17, baseY-8, tier);
+  if (!noBadge){ badge(cx-17, baseY-8, tier); typeGlyph(cx, y+9, type); }
 }
 function drawBuildings(dt){
   for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){
@@ -2751,6 +2771,7 @@ function drawTrayPiece(piece, sx, sy, size, dim){
     orr(bx+1, by+1, cs-2, cs-2, 7, '#9ed468', rk ? CONFIG.rarity.col[rk] : '#6aa844', rk ? 3.5 : 2.5);
     img({archer:'house1_b', cannon:'house2_r', frost:'house3_p'}[piece.type], mx, by+cs-3, 0.19);
   }
+  if (!dim) typeGlyph(ox+9, oy+9, piece.type);
 }
 
 /* ============================================================

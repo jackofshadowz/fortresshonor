@@ -75,10 +75,13 @@ Every adaptation is tagged by how directly it derives from the Fortress Merge te
 
 * 🔵 **Kingdom notebook** — a consolidated overview screen (`drawKingdom`): a city-view panel (keep + owned decorations + champion), then rows for champion/idle income/village/keep-upgrades/decorations/badges/best-wave/stats, plus links to Store/Heroes/Badges. Reached from a **KINGDOM** button on the title (alongside a prominent **STORE** button). Our IA enrichment — FM has per-system screens, not a single dashboard.
 
+* 🔵 **Building identification (UX)** — every tower now shows a **role emblem** (`typeGlyph`: bow=archer, cannonball=cannon, snowflake=frost) in-game and on tray pieces, and the selected-building panel shows its **name + role + damage**. Fixes "which building is which" — works even when a tower skin makes all three share a sprite.
+
 # What to adapt next (mapped to the blueprint)
 
-1. **Hero depth** — gear/blueprints + per-hero levels + the revive-cost loop, deepening the roster. See [hero-system](okf/systems/hero-system.md).
-2. **Store expansion or in-run shop** — see open question with the user (existing meta Store vs a new mid-run gold shop).
+1. **Store art** — store items render generic placeholders; give each a real icon/preview. *(in progress)*
+2. **In-run gold shop** + **meta store expansion** — both requested.
+3. **Hero depth** — gear/blueprints + per-hero levels + the revive-cost loop.
 
 # How to run / test
 
