@@ -82,10 +82,12 @@ Every adaptation is tagged by how directly it derives from the Fortress Merge te
 
 * 🔵 **Meta store expansion + gem acquisition** — 3 new keep-upgrades (Treasury/Bulwark/War Horn, wired in `reset`); a 4th store tab **GEMS** with a free daily claim + IAP-style demo bundles (`GEM_PACKS`, `buyGems` — clean-room mock, no real payment); an in-run **Mint Gems** option (100 gold → 3 gems) in the Quartermaster. Homepage now has **STORE / HEROES / KINGDOM** buttons.
 
+* 🔵 **Store art polish + bigger homepage knight** — distinct per-upgrade icons (`modGlyph`: coins/shield/arrow/dice/helmet/horn/gem/wall); larger prestige + cosmetic previews; a textured grass terrain tile (was a flat green box); homepage champion knight enlarged (scale 1.1→1.9).
+
 # What to adapt next (mapped to the blueprint)
 
-1. **Store art polish** — make item icons larger + more distinct (per-upgrade glyphs, bigger prestige/cosmetic previews, nicer terrain swatches). *(requested)*
-2. **Hero depth** — gear/blueprints + per-hero levels + the revive-cost loop.
+1. **Hero depth** — gear/blueprints + per-hero levels + the revive-cost loop.
+2. **Homepage layout polish** — the title is getting busy (city-income text overlaps the logo; village/champion labels overlap the island). Worth a tidy pass.
 
 # How to run / test
 

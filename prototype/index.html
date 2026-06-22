@@ -2144,7 +2144,7 @@ function drawTitle(){
   // owned prestige decorations grow the city (back-to-front for layering)
   const DECO_SLOTS = { p_cathedral:[92,-16], p_statue:[-66,-2], p_fountain:[70,2], p_garden:[-104,8], p_throne:[26,12] };
   for (const id in DECO_SLOTS) if (META.s.owned.includes(id)){ const sl = DECO_SLOTS[id]; drawDeco(id, W/2+sl[0], iy+sl[1], 1); }
-  drawChibiKnight(W/2, iy+13, 1.1);
+  drawChibiKnight(W/2, iy+22, 1.9);
   // drifting fireflies
   for (let k=0;k<9;k++){
     const a = time*0.5 + k*0.7;
@@ -3109,10 +3109,16 @@ function drawMenuToast(){
   }
 }
 function chipPreview(it, cx, cy){
-  if (it.slot === 'hero'){ spr(it.sprite||'warrior_b', 192,192, Math.floor(time*6)%6, 0, cx, cy+12, 0.15, false, 0.76); }
-  else if (it.slot === 'tower'){ img('tower_'+(it.suffix||'b'), cx, cy+14, 0.15); if (it.glow) star(cx, cy-12, 5, '#ffe08a', '#a8761c'); }
-  else if (it.slot === 'banner'){ flag(cx, cy+13, 16, it.color, it.ink); }
-  else { orr(cx-15,cy-7,30,22,5,'#8bd05e','#5fa83c',2); if (it.wash){ ctx.fillStyle=it.wash; rr(cx-15,cy-7,30,22,5); ctx.fill(); } }
+  if (it.slot === 'hero'){ spr(it.sprite||'warrior_b', 192,192, Math.floor(time*6)%6, 0, cx, cy+15, 0.2, false, 0.76); }
+  else if (it.slot === 'tower'){ img('tower_'+(it.suffix||'b'), cx, cy+17, 0.2); if (it.glow) star(cx, cy-13, 6, '#ffe08a', '#a8761c'); }
+  else if (it.slot === 'banner'){ flag(cx, cy+16, 21, it.color, it.ink); }
+  else {
+    // grass tile with texture + tint
+    orr(cx-19, cy-10, 38, 28, 7, '#8bd05e', '#5fa83c', 2.5);
+    ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.beginPath(); ctx.ellipse(cx-6, cy-3, 10, 4, -0.2, 0, 7); ctx.fill();
+    ctx.fillStyle = '#7ec24e'; for (const d of [[-11,7],[2,9],[11,3]]){ ctx.beginPath(); ctx.arc(cx+d[0], cy+d[1], 1.8, 0, 7); ctx.fill(); }
+    if (it.wash){ ctx.fillStyle = it.wash; rr(cx-19, cy-10, 38, 28, 7); ctx.fill(); }
+  }
 }
 function drawChip(it, x, y, w, h){
   const owned = it.cost===0 || META.s.owned.includes(it.id);
@@ -3128,22 +3134,36 @@ function drawChip(it, x, y, w, h){
   }
   hit(x, y, w, h, ()=>buyItem(it));
 }
+// distinct icon per keep-upgrade so the Upgrades tab reads at a glance
+function modGlyph(id, cx, cy){
+  ctx.save(); ctx.lineCap='round'; ctx.lineJoin='round';
+  if (id==='treasury'){ gemIcon(cx, cy, 9); }
+  else if (id==='coffers'){ for (let k=0;k<3;k++) ocirc(cx-5+k*5, cy+4-k*4, 6, '#ffd95e', '#9c6f12', 2); }
+  else if (id==='gate' || id==='bulwark'){
+    orr(cx-9, cy-8, 18, 16, 3, '#cfd6e2', '#5a6478', 2.4);
+    ctx.strokeStyle='#5a6478'; ctx.lineWidth=1.8;
+    ctx.beginPath(); ctx.moveTo(cx-9,cy-1); ctx.lineTo(cx+9,cy-1); ctx.moveTo(cx-2,cy-8); ctx.lineTo(cx-2,cy-1); ctx.moveTo(cx-6,cy-1); ctx.lineTo(cx-6,cy+7); ctx.moveTo(cx+4,cy-1); ctx.lineTo(cx+4,cy+7); ctx.stroke();
+  }
+  else if (id==='fletcher'){ ctx.strokeStyle='#7a4a1a'; ctx.lineWidth=2.6; ctx.beginPath(); ctx.moveTo(cx-8,cy+7); ctx.lineTo(cx+7,cy-7); ctx.stroke(); opoly([[cx+9,cy-9],[cx+1,cy-7],[cx+7,cy-1]], '#7a4a1a', null); }
+  else if (id==='quarter'){ orr(cx-8,cy-8,16,16,3,'#fff','#5a6478',2.2); ctx.fillStyle='#5a6478'; for (const d of [[-3.5,-3.5],[3.5,3.5],[3.5,-3.5],[-3.5,3.5],[0,0]]){ ctx.beginPath(); ctx.arc(cx+d[0],cy+d[1],1.4,0,7); ctx.fill(); } }
+  else if (id==='squire'){ ctx.fillStyle='#cfd6e2'; ctx.beginPath(); ctx.arc(cx,cy,8,Math.PI,0); ctx.lineTo(cx+8,cy+4); ctx.lineTo(cx-8,cy+4); ctx.closePath(); ctx.fill(); ctx.strokeStyle='#5a6478'; ctx.lineWidth=2; ctx.stroke(); ctx.fillStyle='#5a6478'; rr(cx-2,cy-7,4,11,1.5); ctx.fill(); }
+  else if (id==='warhorn'){ ctx.fillStyle='#f0e2c2'; ctx.beginPath(); ctx.moveTo(cx-8,cy+5); ctx.quadraticCurveTo(cx+9,cy+7,cx+9,cy-6); ctx.quadraticCurveTo(cx+2,cy-1,cx-8,cy-1); ctx.closePath(); ctx.fill(); ctx.strokeStyle='#9c6f12'; ctx.lineWidth=1.8; ctx.stroke(); }
+  else { ctx.strokeStyle='#9c6f12'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(cx-6,cy+4); ctx.lineTo(cx,cy-5); ctx.lineTo(cx+6,cy+4); ctx.stroke(); }
+  ctx.restore();
+}
 function drawStoreRow(it, yy, owned, ownLabel){
   const afford = META.s.gems >= it.cost;
   orr(12, yy, W-24, 56, 12, 'rgba(255,255,255,0.12)', owned?'#7ed05f':'rgba(255,255,255,0.3)', owned?3:2);
-  // icon: prestige shows its decoration, upgrades show an "upgrade" chevron
-  const icx = 42, icy = yy+28;
+  // icon: prestige shows its decoration, upgrades show a distinct glyph
+  const icx = 46, icy = yy+28;
   if (it.slot === 'prestige'){
-    ocirc(icx, icy, 20, 'rgba(20,30,60,0.4)', 'rgba(255,255,255,0.25)', 2);
-    ctx.save(); rr(icx-19, icy-19, 38, 38, 14); ctx.clip(); drawDeco(it.id, icx, icy+12, 0.78); ctx.restore();
+    ocirc(icx, icy, 24, 'rgba(20,30,60,0.45)', 'rgba(255,255,255,0.3)', 2.5);
+    ctx.save(); ctx.beginPath(); ctx.arc(icx, icy, 23, 0, 7); ctx.clip(); drawDeco(it.id, icx, icy+15, 1.15); ctx.restore();
   } else {
-    ocirc(icx, icy, 18, '#ffce5a', '#9c6f12', 2.5);
-    ctx.strokeStyle = '#9c6f12'; ctx.lineWidth = 2.8; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.beginPath(); ctx.moveTo(icx-5, icy+3); ctx.lineTo(icx, icy-5); ctx.lineTo(icx+5, icy+3); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(icx-5, icy+7); ctx.lineTo(icx, icy-1); ctx.lineTo(icx+5, icy+7); ctx.stroke();
+    ocirc(icx, icy, 23, '#ffce5a', '#9c6f12', 2.5); modGlyph(it.id, icx, icy);
   }
-  chunkyText(it.name, 72, yy+20, 15, '#fff', null, '600', 'left');
-  chunkyText(it.desc, 72, yy+39, 11, '#dfe6ff', null, '500', 'left');
+  chunkyText(it.name, 82, yy+20, 15, '#fff', null, '600', 'left');
+  chunkyText(it.desc, 82, yy+39, 11, '#dfe6ff', null, '500', 'left');
   if (it.honor) chunkyText('+'+it.honor+' Honor', W-150, yy+39, 10, '#ffd95e', null, '600', 'left');
   if (owned) chunkyText(ownLabel, W-58, yy+30, 14, '#7ed05f', null, '600');
   else {
