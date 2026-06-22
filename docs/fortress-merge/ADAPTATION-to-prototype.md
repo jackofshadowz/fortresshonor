@@ -51,17 +51,18 @@ Verified with `node --check` (syntax clean). No assets added; pure logic + canva
 # Implemented so far
 
 * **Roguelite perk draft** (above) — `PERKS` data + `RUN` modifiers + `mode='perk'` draft.
-* **Data-driven CONFIG** ✅ — a single `CONFIG` "balance surface" now holds economy (start gold, wall, reroll, wave-clear bonus/regen), tier tables (dmg/range/sell/max), wave generation (count/gap/hp-scaling/boss cadence), and the full enemy stat table. `buildWave`, `makeEnemy`, `reset`, `waveCleared`, and `rerollCost` all read from it. This mirrors Fortress Merge's remote-config indirection — the entire game can be rebalanced by editing one object, no logic changes. See [remote-config](okf/references/remote-config.md).
+* **Data-driven CONFIG** ✅ — a single `CONFIG` "balance surface" now holds economy (start gold, wall, reroll, wave-clear bonus/regen), tier tables (dmg/range/sell/max), wave generation (count/gap/hp-scaling/boss cadence), the full enemy stat table, buff tunables, and rarity tunables. `buildWave`, `makeEnemy`, `reset`, `waveCleared`, and `rerollCost` all read from it. This mirrors Fortress Merge's remote-config indirection — the entire game can be rebalanced by editing one object, no logic changes. See [remote-config](okf/references/remote-config.md).
+* **Buff/status engine** ✅ — `applyBuff`/`hasBuff`/`tickBuffs` with tunables in `CONFIG.buffs`; Slow (speed), Stun (freeze), Burn/Poison (DoT) applied to enemies via `hitEnemy`'s `fx` arg. Adds perks Wildfire/Venom/Concussion + per-status visual overlays. Mirrors Fortress Merge's `BuffId` system. See [buff-status-system](okf/systems/buff-status-system.md).
+* **Rarity axis** ✅ — pieces spawn Common or Rare (16%); rarity carries through placement and merge (`tryMerge` takes the group max; an all-rare merge promotes to Epic), multiplying tower damage (`CONFIG.rarity.dmgMult`). Shown via a corner gem on the grid and a colored outline in the tray. Mirrors Fortress Merge's `Rarity` enum. See [enums](okf/data-model/enums.md).
 
 # What to adapt next (mapped to the blueprint)
 
 Prioritized follow-ons from [the blueprint](okf/blueprint/index.md), in rough ROI order:
 
-1. **Buff/status system** — generalize `slow` into a `BuffId`-style engine (Slow/Stun/Burn/Poison/Shield…) shared by towers and enemies. See [buff-status-system](okf/systems/buff-status-system.md).
-2. **Rarity/Tier on towers** — add a quality axis (a rare tower line) to deepen merge decisions. See [enums](okf/data-model/enums.md).
-3. **A second mode** — Endless (already most of the way there) or a Boss mode using the existing boss-every-5 logic promoted to a dedicated flow. See [game-modes](okf/systems/game-modes.md).
-4. **Analytics logger** — emit `wave_start/clear/fail` + `lost_at_wave` to localStorage/console for balancing. See [analytics-events](okf/references/analytics-events.md).
-5. **Perk synergy sets** — themed clusters (Fortress Merge's "Wardrum") for build identity. See [perk-system](okf/systems/perk-system.md).
+1. **A second mode** — Endless (already most of the way there) or a Boss mode using the existing boss-every-5 logic promoted to a dedicated flow. See [game-modes](okf/systems/game-modes.md).
+2. **Analytics logger** — emit `wave_start/clear/fail` + `lost_at_wave` to localStorage/console for balancing. See [analytics-events](okf/references/analytics-events.md).
+3. **Perk synergy sets** — themed clusters (Fortress Merge's "Wardrum") for build identity. See [perk-system](okf/systems/perk-system.md).
+4. **Hero & city/meta spines** — larger separate tracks (collectible heroes w/ gear/revive; idle village + base meta). See [hero-system](okf/systems/hero-system.md).
 
 # How to run / test
 

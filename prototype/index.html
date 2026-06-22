@@ -111,6 +111,8 @@ const CONFIG = {
              waveBonusBase:25, waveBonusPerWave:8, waveWallRegen:12 },
   tiers:   { dmg:[1, 2.6, 7, 18, 45], range:[240, 330, 430, 560, 720],
              sell:[3, 9, 24, 60, 150], max:5 },
+  rarity:  { spawnRare:0.16, dmgMult:[1, 1.4, 1.9],            // Common / Rare / Epic
+             col:['', '#ffd95e', '#c9a2e8'], name:['', 'RARE', 'EPIC'] },
   wave:    { baseCount:7, perWave:2.7, gapBase:1.4, gapPerWave:0.07, gapMin:0.35,
              hpLin:0.42, hpQuad:0.032, bossEvery:5 },
   enemies: {
@@ -226,7 +228,8 @@ function randShape(){
   return s;
 }
 function randPiece(){
-  return { shape: randShape(), type: TYPE_KEYS[Math.floor(Math.random()*TYPE_KEYS.length)] };
+  return { shape: randShape(), type: TYPE_KEYS[Math.floor(Math.random()*TYPE_KEYS.length)],
+           rarity: Math.random() < CONFIG.rarity.spawnRare ? 1 : 0 };
 }
 
 /* ---------- game state ---------- */
@@ -423,11 +426,14 @@ function tryMerge(c, r){
   if (!g || g.tier >= MAX_TIER) return;
   const group = floodSame(c, r, g.type, g.tier, new Set());
   if (group.length < 3) return;
+  const rars = group.map(([gc,gr]) => grid[idx(gc,gr)].rarity || 0);
+  let outR = Math.max.apply(null, rars);
+  if (Math.min.apply(null, rars) >= 1) outR = Math.min(2, outR + 1);   // all-rare merge promotes a tier
   for (const [gc,gr] of group){
     grid[idx(gc,gr)] = null;
     puff(cellX(gc)+CELL/2, cellY(gr)+CELL/2, TYPES[g.type].trim);
   }
-  grid[idx(c,r)] = { type:g.type, tier:g.tier+1, pop:0.001 };
+  grid[idx(c,r)] = { type:g.type, tier:g.tier+1, pop:0.001, rarity:outR };
   floaters.push({ x:cellX(c)+CELL/2, y:cellY(r)+10, text:'LEVEL UP!', t:0, dur:0.9, size:20, color:'#ffd95e' });
   if (RUN && RUN.goldOnMerge){
     gold += RUN.goldOnMerge;
@@ -440,7 +446,7 @@ function placeSelected(anchor){
   const piece = hand[selected];
   if (!piece || !canPlace(piece, anchor)) return false;
   const cells = shapeCells(piece, anchor);
-  for (const [c,r] of cells) grid[idx(c,r)] = { type:piece.type, tier:1, pop:0.001 };
+  for (const [c,r] of cells) grid[idx(c,r)] = { type:piece.type, tier:1, pop:0.001, rarity:piece.rarity||0 };
   hand[selected] = null;
   selected = null; dragging = false; hoverCell = null;
   sfx.place();
@@ -667,7 +673,7 @@ function updateFight(dt){
     if (best){
       g.cd = 1/(def.rate * RUN.rateMult);
       g.recoil = 0.12;
-      let dmg = def.dmg * TIER_DMG[g.tier-1] * metaDmgMult() * RUN.dmgMult;
+      let dmg = def.dmg * TIER_DMG[g.tier-1] * metaDmgMult() * RUN.dmgMult * CONFIG.rarity.dmgMult[g.rarity||0];
       const crit = RUN.critChance > 0 && Math.random() < RUN.critChance;
       if (crit) dmg *= 2;
       projectiles.push({ x:t.x, y:t.y-18, tgt:best, tx:best.x, ty:best.y,
@@ -2470,6 +2476,11 @@ function drawBuildings(dt){
     ctx.translate(-(cellX(c)+CELL/2), -(cellY(r)+CELL/2));
     drawBuilding(cellX(c), cellY(r), g.type, g.tier, g.recoil||0);
     ctx.restore();
+    // rarity gem (Rare/Epic towers hit harder)
+    if (g.rarity){
+      const gx = cellX(c)+CELL-13, gy = cellY(r)+12;
+      ocirc(gx, gy, 6, CONFIG.rarity.col[g.rarity], '#161c2e', 2.5); glint(gx-2, gy-2.5, 1.7);
+    }
     // burning when badly damaged in a siege
     if (mode==='fight' && g.hp !== undefined && g.hp < g.maxhp*0.6){
       spr('fire', 128, 128, Math.floor(time*10 + c*3)%7, 0, ox, cellY(r)+16, 0.5, false, 0.65);
@@ -2646,7 +2657,8 @@ function drawTrayPiece(piece, sx, sy, size, dim){
   for (const [c,r] of cells){
     const bx = ox + c*cs, by = oy + r*cs, mx = bx+cs/2;
     if (dim){ orr(bx+1.5, by+1.5, cs-3, cs-3, 6, 'rgba(150,140,110,0.5)', null); continue; }
-    orr(bx+1, by+1, cs-2, cs-2, 7, '#9ed468', '#6aa844', 2.5);
+    const rk = piece.rarity || 0;
+    orr(bx+1, by+1, cs-2, cs-2, 7, '#9ed468', rk ? CONFIG.rarity.col[rk] : '#6aa844', rk ? 3.5 : 2.5);
     img({archer:'house1_b', cannon:'house2_r', frost:'house3_p'}[piece.type], mx, by+cs-3, 0.19);
   }
 }
