@@ -84,10 +84,11 @@ Every adaptation is tagged by how directly it derives from the Fortress Merge te
 
 * 🔵 **Store art polish + bigger homepage knight** — distinct per-upgrade icons (`modGlyph`: coins/shield/arrow/dice/helmet/horn/gem/wall); larger prestige + cosmetic previews; a textured grass terrain tile (was a flat green box); homepage champion knight enlarged (scale 1.1→1.9).
 
+* 🔵 **Homepage tidy** — moved the Granary/Warehouse buy buttons + city-income rate + champion line off the cluttered title (they overlapped the island/castle) into the **Kingdom** hub. Homepage is now: wallet, rank, "earned while away" (only if >0), the island/castle/knight centerpiece, MODE toggle, and STORE/HEROES/KINGDOM. Village upgrade loop now lives in Kingdom.
+
 # What to adapt next (mapped to the blueprint)
 
 1. **Hero depth** — gear/blueprints + per-hero levels + the revive-cost loop.
-2. **Homepage layout polish** — the title is getting busy (city-income text overlaps the logo; village/champion labels overlap the island). Worth a tidy pass.
 
 # How to run / test
 

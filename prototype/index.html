@@ -3306,8 +3306,13 @@ function drawKingdom(){
     chunkyText(row[1], W-26, y+16, 12, '#fff', null, '600', 'right');
     y += 35;
   }
+  // --- village idle upgrades ---
+  chunkyBtn(14, y+2, 222, 40, '#7ed05f', '#56a83c', '#2e6326', 'GRANARY  '+granaryCost()+'◆', 14);
+  hit(14, y+2, 222, 40, ()=>buyVillage('granary'));
+  chunkyBtn(244, y+2, 222, 40, '#5cb0f0', '#3b80d2', '#2a5a9e', 'WAREHOUSE  '+warehouseCost()+'◆', 13);
+  hit(244, y+2, 222, 40, ()=>buyVillage('warehouse'));
   // --- links to detail screens ---
-  const by = y + 8;
+  const by = y + 52;
   chunkyBtn(W/2-168, by, 104, 44, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 17);  hit(W/2-168, by, 104, 44, ()=>{ mode='store'; storeTab='cos'; });
   chunkyBtn(W/2-50,  by, 100, 44, '#7fc4ff', '#3b80d2', '#2a5a9e', 'HEROES', 16); hit(W/2-50, by, 100, 44, ()=>{ mode='heroes'; });
   chunkyBtn(W/2+64,  by, 104, 44, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BADGES', 16); hit(W/2+64, by, 104, 44, ()=>{ mode='badges'; });
@@ -3316,25 +3321,16 @@ function drawKingdom(){
 function drawTitleMenu(){
   uiHits = [];
   drawWallet(W/2-95, 10);
-  chunkyText('Rank: ' + honorRank(), W/2, 54, 13, '#ffd95e', '#5a3a0a', '600');
+  chunkyText('Rank: ' + honorRank(), W/2, 52, 13, '#ffd95e', '#5a3a0a', '600');
   if (idleEarned > 0)
-    chunkyText('Your city earned +' + idleEarned + ' gems while away', W/2, 80, 12, '#9fe8ff', 'rgba(20,40,70,0.55)', '600');
-  chunkyText('City income: ' + idleRate() + ' gems/hr while away', W/2, idleEarned > 0 ? 98 : 80, 11, '#cfe0f5', null, '500');
-  // village upgrades — spend Gems to grow idle income (closes the loop)
-  chunkyBtn(W/2-168, 506, 164, 44, '#7ed05f', '#56a83c', '#2e6326', 'GRANARY  '+granaryCost()+'◆', 15);
-  hit(W/2-168, 506, 164, 44, ()=>buyVillage('granary'));
-  chunkyBtn(W/2+4, 506, 164, 44, '#5cb0f0', '#3b80d2', '#2a5a9e', 'WAREHOUSE  '+warehouseCost()+'◆', 13);
-  hit(W/2+4, 506, 164, 44, ()=>buyVillage('warehouse'));
-  chunkyText('Granary Lv'+META.s.village.granary+' (+'+IDLE.granaryRate+'/hr)   ·   Warehouse Lv'+META.s.village.warehouse+' (+'+IDLE.warehouseCap+'h cap)', W/2, 558, 10, '#cfe0f5', null, '500');
-  // mode toggle — tap to switch Siege / Boss Rush; tap anywhere else to play
+    chunkyText('Your city earned +' + idleEarned + ' gems while away', W/2, 76, 12, '#9fe8ff', 'rgba(20,40,70,0.55)', '600');
+  // mode toggle — tap anywhere else to play (village + champion live in KINGDOM)
   const boss = runMode === 'boss';
   chunkyBtn(W/2-168, 600, 336, 46,
     boss ? '#ff7b5e' : '#5cc04c', boss ? '#d9542a' : '#41973a', boss ? '#9c2f12' : '#2e6326',
     boss ? 'MODE: BOSS RUSH' : 'MODE: SIEGE', 20);
   hit(W/2-168, 600, 336, 46, ()=>{ runMode = boss ? 'normal' : 'boss'; sfx.reroll(); });
   chunkyText('tap anywhere to play', W/2, 638, 12, '#eaf2ff', 'rgba(20,40,70,0.5)', '600');
-  const champ = HERO_BY_ID[META.s.heroes.sel] || HEROES[0];
-  chunkyText('Champion: ' + champ.name + ' — ' + champ.desc, W/2, 582, 10, '#ffe6a8', null, '500');
   chunkyBtn(W/2-168, 662, 104, 46, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 17);
   hit(W/2-168, 662, 104, 46, ()=>{ mode='store'; storeTab='cos'; });
   chunkyBtn(W/2-50, 662, 100, 46, '#7fc4ff', '#3b80d2', '#2a5a9e', 'HEROES', 16);
