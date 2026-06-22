@@ -476,17 +476,26 @@ function tryMerge(c, r){
   const rars = group.map(([gc,gr]) => grid[idx(gc,gr)].rarity || 0);
   let outR = Math.max.apply(null, rars);
   if (Math.min.apply(null, rars) >= 1) outR = Math.min(2, outR + 1);   // all-rare merge promotes a tier
+  const rx = cellX(c)+CELL/2, ry = cellY(r)+CELL/2;
   for (const [gc,gr] of group){
+    const sx = cellX(gc)+CELL/2, sy = cellY(gr)+CELL/2;
     grid[idx(gc,gr)] = null;
-    puff(cellX(gc)+CELL/2, cellY(gr)+CELL/2, TYPES[g.type].trim);
+    puff(sx, sy, TYPES[g.type].trim);
+    // the other two towers visibly stream INTO the survivor
+    if (!(gc===c && gr===r)){
+      const dx = rx-sx, dy = ry-sy, d = Math.hypot(dx,dy)||1;
+      for (let i=0;i<6;i++) particles.push({ x:sx, y:sy, vx:dx/d*(90+Math.random()*70), vy:dy/d*(90+Math.random()*70), t:0, dur:0.30+Math.random()*0.16, r:3+Math.random()*3, col:TYPES[g.type].roof });
+    }
   }
   grid[idx(c,r)] = { type:g.type, tier:g.tier+1, pop:0.001, rarity:outR };
-  floaters.push({ x:cellX(c)+CELL/2, y:cellY(r)+10, text:'LEVEL UP!', t:0, dur:0.9, size:20, color:'#ffd95e' });
+  // golden burst at the survivor
+  for (let i=0;i<12;i++){ const a = Math.random()*7, s = 45+Math.random()*70; particles.push({ x:rx, y:ry, vx:Math.cos(a)*s, vy:Math.sin(a)*s-25, t:0, dur:0.4+Math.random()*0.25, r:2.5+Math.random()*3.5, col:'#ffd95e' }); }
+  floaters.push({ x:rx, y:cellY(r)+2, text:'3 → TIER '+(g.tier+1)+'!', t:0, dur:1.1, size:21, color:'#ffd95e' });
   if (RUN && RUN.goldOnMerge){
     gold += RUN.goldOnMerge;
-    floaters.push({ x:cellX(c)+CELL/2, y:cellY(r)+26, text:'+'+RUN.goldOnMerge, t:0, dur:0.8, size:14, color:'#ffd95e' });
+    floaters.push({ x:rx, y:cellY(r)+26, text:'+'+RUN.goldOnMerge, t:0, dur:0.8, size:14, color:'#ffd95e' });
   }
-  sfx.merge(); shake = Math.max(shake, 5);
+  sfx.merge(); shake = Math.max(shake, 5 + g.tier*1.5);
   tryMerge(c, r); // cascade
 }
 function placeSelected(anchor){
