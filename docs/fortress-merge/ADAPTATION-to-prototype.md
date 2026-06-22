@@ -69,11 +69,14 @@ Every adaptation is tagged by how directly it derives from the Fortress Merge te
 * 🟡 **Village-upgrade loop** — two leveled, Gems-bought upgrades on the title (`buyVillage`): **Granary** (+idle rate) and **Warehouse** (+idle cap), stored in `META.s.village`. Closes the idle loop (idle gems → upgrade → more idle). **Observed:** FM's `AfkVillageSettings.villageUpgrade` / `VillageUpgradeData` (a village-upgrade list exists). **Inferred:** the specific upgrades and their effects are our design.
 * 🟢 **Visible city growth** — owned `PRESTIGE_CAT` decorations (statue/fountain/gardens/cathedral/throne) render on the title keep via `drawDeco` + `DECO_SLOTS`, so spending Gems on prestige visibly builds your city. Observed feature: the prestige decorations already exist as data; the chunky art is our rendering.
 
-**The in-run combat track is complete** (perks, config, buffs, rarity, 2nd mode, analytics, synergy). **The City/Meta spine is complete** (idle income → village upgrades → visible city growth — a full loop: idle gems fund prestige/village, which raise idle and grow the keep).
+* 🟢 **Hero roster** — `HEROES` catalog of 5 collectible champions (Commander/Markswoman/Merchant Prince/Pyromancer/Frostweaver), each granting a run-long boon applied in `reset()`; owned/selected in `META.s.heroes`; a dedicated **Heroes screen** (`drawHeroes`, reachable from the title) to select owned or recruit locked ones with Gems. Observed: FM's multi-hero collection; our heroes/effects are clean-room (shared knight art for now).
+
+**The in-run combat track is complete** (perks, config, buffs, rarity, 2nd mode, analytics, synergy). **The City/Meta spine is complete** (idle income → village upgrades → visible city growth). **Hero spine started** (roster + selection).
 
 # What to adapt next (mapped to the blueprint)
 
-1. **Hero spine** — turn the knight into collectible heroes (cards, gear/blueprints, revive-cost loop). The last big track. See [hero-system](okf/systems/hero-system.md).
+1. **Kingdom notebook** 🔵 — a consolidated overview screen (city view, champion, currencies/rank, idle income, owned upgrades, badges summary, run stats) linking to Store/Heroes/Badges. The "one place to see everything" dashboard. *(Our IA addition; FM has per-system screens.)*
+2. **Hero depth** — gear/blueprints + per-hero levels + the revive-cost loop, deepening the roster. See [hero-system](okf/systems/hero-system.md).
 
 # How to run / test
 

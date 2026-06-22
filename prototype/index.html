@@ -261,7 +261,7 @@ function randPiece(){
 }
 
 /* ---------- game state ---------- */
-let mode = 'title';            // title | build | fight | clear | perk | over | store | badges
+let mode = 'title';            // title | build | fight | clear | perk | over | store | badges | heroes
 let runMode = 'normal';        // 'normal' (Siege) | 'boss' (Boss Rush) — chosen on the title
 let grid, hand, gold, wave, wallHP, wallMax;
 let selected = null;           // index into hand
@@ -300,6 +300,7 @@ function reset(){
   // store upgrades ("mods") apply at the start of every run
   gold = CONFIG.economy.startGold + (META.s.mods.coffers ? 20 : 0);
   RUN = freshRun(); perkChoices = [];
+  (HERO_BY_ID[META.s.heroes.sel] || HEROES[0]).apply(RUN);   // selected champion's run-long boon
   wave = 1;
   wallMax = CONFIG.economy.wallBase + (META.s.mods.gate ? 25 : 0); wallHP = wallMax;
   runKills = 0;
@@ -2178,7 +2179,7 @@ cv.addEventListener('pointerdown', ev => {
   downPos = p; downSlot = null;
 
   if (mode === 'title'){ if (handleMenuTap(p)) return; reset(); return; }
-  if (mode === 'store' || mode === 'badges'){ handleMenuTap(p); return; }
+  if (mode === 'store' || mode === 'badges' || mode === 'heroes'){ handleMenuTap(p); return; }
   if (mode === 'over'){ handleMenuTap(p); return; }
   if (mode === 'perk'){
     for (const b of perkBtns){ if (inRect(p, b)){ choosePerk(b.perk); return; } }
@@ -2336,8 +2337,8 @@ function frame(now){
     requestAnimationFrame(frame);
     return;
   }
-  if (mode === 'store' || mode === 'badges'){
-    (mode === 'store' ? drawStore : drawBadges)();
+  if (mode === 'store' || mode === 'badges' || mode === 'heroes'){
+    (mode === 'store' ? drawStore : mode === 'badges' ? drawBadges : drawHeroes)();
     ctx.restore();
     requestAnimationFrame(frame);
     return;
@@ -2765,6 +2766,7 @@ const META = (function(){
     equip: { hero:'hero_blue', tower:'tower_mixed', banner:'banner_red', terrain:'terrain_verdant' },
     mods: {},
     village: { granary:0, warehouse:0 },   // City/Meta: leveled idle upgrades
+    heroes: { owned:['commander'], sel:'commander' },   // Hero spine: roster + selection
     lastSeen: 0,
     badges: {}, seenBadges: {},
     bestWave: 0,
@@ -2830,6 +2832,18 @@ const PRESTIGE_CAT = [
   { id:'p_cathedral',name:'Grand Cathedral', desc:'Spires touch the clouds',   cost:1200, honor:600 },
   { id:'p_throne',   name:'Golden Throne',   desc:'Fit for a true sovereign',  cost:2500, honor:1400 },
 ];
+// Hero roster — collectible champions; the selected one grants a run-long boon (Hero spine).
+// Observed in FM: a multi-hero collection (Baker/Berserker/Paladin/Elf Archer/Undertaker/King…).
+// Our heroes/effects are a clean-room interpretation (shared knight art for now).
+const HEROES = [
+  { id:'commander',  name:'Commander',      rarity:'Common',   cost:0,   desc:'+12% tower damage',          apply:r=>r.dmgMult*=1.12 },
+  { id:'markswoman', name:'Markswoman',     rarity:'Uncommon', cost:150, desc:'+15% range, +10% fire rate', apply:r=>{ r.rangeMult*=1.15; r.rateMult*=1.10; } },
+  { id:'trader',     name:'Merchant Prince',rarity:'Uncommon', cost:250, desc:'+25% gold from kills',       apply:r=>r.goldMult*=1.25 },
+  { id:'pyromancer', name:'Pyromancer',     rarity:'Rare',     cost:400, desc:'tower hits set foes ablaze', apply:r=>r.burnDur=Math.max(r.burnDur,2) },
+  { id:'frostweaver',name:'Frostweaver',    rarity:'Rare',     cost:400, desc:'tower hits slow foes',       apply:r=>r.slowBonus+=0.5 },
+];
+const HERO_BY_ID = {}; for (const h of HEROES) HERO_BY_ID[h.id] = h;
+
 const CATALOG_BY_ID = {};
 for (const k in SKIN_CAT) for (const it of SKIN_CAT[k]) CATALOG_BY_ID[it.id] = Object.assign({ slot:k }, it);
 for (const m of MOD_CAT) CATALOG_BY_ID[m.id] = Object.assign({ slot:'mod' }, m);
@@ -3082,6 +3096,32 @@ function drawBadges(){
   });
   drawMenuToast();
 }
+function drawHeroes(){
+  uiHits = []; menuBg(); menuHeader('HEROES');
+  chunkyText('Choose your champion — each grants a run-long boon', W/2, 104, 11, '#dfe6ff', null, '500');
+  let y = 124;
+  for (const h of HEROES){
+    const owned = META.s.heroes.owned.includes(h.id), sel = META.s.heroes.sel === h.id;
+    const col = RARITY_COL[h.rarity] || '#9fb3c8';
+    orr(14, y, W-28, 74, 12, sel ? 'rgba(255,217,94,0.16)' : 'rgba(255,255,255,0.10)', sel ? '#ffd95e' : col, sel ? 3.5 : 2.5);
+    ocirc(52, y+37, 22, owned ? col : '#5a6488', '#2a3050', 3);
+    chunkyText(owned ? h.name[0] : '?', 52, y+38, 22, '#fff', '#101626');
+    chunkyText(h.name, 88, y+24, 17, '#fff', '#10131f', '700', 'left');
+    chunkyText(h.desc, 88, y+46, 12, '#cfe0f5', null, '500', 'left');
+    chunkyText(h.rarity.toUpperCase(), 88, y+63, 9, col, null, '600', 'left');
+    const bx = W-122, bw = 104, by = y+21, bh = 32;
+    if (sel){ chunkyText('SELECTED', bx+bw/2, by+bh/2+1, 13, '#ffd95e', null, '700'); }
+    else if (owned){
+      chunkyBtn(bx, by, bw, bh, '#5cc04c', '#41973a', '#2e6326', 'SELECT', 15);
+      hit(bx, by, bw, bh, ()=>{ META.s.heroes.sel = h.id; META.save(); sfx.place(); });
+    } else {
+      chunkyBtn(bx, by, bw, bh, '#ffce5a', '#dba32c', '#9c6f12', h.cost+'◆', 15);
+      hit(bx, by, bw, bh, ()=>{ if (spendGems(h.cost)){ META.s.heroes.owned.push(h.id); META.s.heroes.sel = h.id; META.save(); toast(h.name+' recruited!'); sfx.fanfare(); } else toast('Need '+h.cost+' gems'); });
+    }
+    y += 82;
+  }
+  drawMenuToast();
+}
 function drawTitleMenu(){
   uiHits = [];
   drawWallet(W/2-95, 10);
@@ -3102,11 +3142,15 @@ function drawTitleMenu(){
     boss ? 'MODE: BOSS RUSH' : 'MODE: SIEGE', 20);
   hit(W/2-168, 600, 336, 46, ()=>{ runMode = boss ? 'normal' : 'boss'; sfx.reroll(); });
   chunkyText('tap anywhere to play', W/2, 638, 12, '#eaf2ff', 'rgba(20,40,70,0.5)', '600');
-  chunkyBtn(W/2-168, 662, 160, 46, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 22);
-  hit(W/2-168, 662, 160, 46, ()=>{ mode='store'; storeTab='cos'; });
-  chunkyBtn(W/2+8, 662, 160, 46, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BADGES', 20);
-  hit(W/2+8, 662, 160, 46, ()=>{ mode='badges'; });
-  if (hasNewBadge()){ ocirc(W/2+160, 660, 8, '#ff5e4d', '#fff', 2.5); }
+  const champ = HERO_BY_ID[META.s.heroes.sel] || HEROES[0];
+  chunkyText('Champion: ' + champ.name + ' — ' + champ.desc, W/2, 582, 10, '#ffe6a8', null, '500');
+  chunkyBtn(W/2-168, 662, 104, 46, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 17);
+  hit(W/2-168, 662, 104, 46, ()=>{ mode='store'; storeTab='cos'; });
+  chunkyBtn(W/2-50, 662, 100, 46, '#7fc4ff', '#3b80d2', '#2a5a9e', 'HEROES', 16);
+  hit(W/2-50, 662, 100, 46, ()=>{ mode='heroes'; });
+  chunkyBtn(W/2+64, 662, 104, 46, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BADGES', 16);
+  hit(W/2+64, 662, 104, 46, ()=>{ mode='badges'; });
+  if (hasNewBadge()){ ocirc(W/2+164, 660, 8, '#ff5e4d', '#fff', 2.5); }
 }
 </script>
 </body>
