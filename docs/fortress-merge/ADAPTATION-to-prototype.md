@@ -88,10 +88,11 @@ Every adaptation is tagged by how directly it derives from the Fortress Merge te
 
 * 🟢 **Hero depth — levels** — each hero's boon now scales with a meta level (`META.s.heroes.lvl`, `apply(RUN, lvl)`, `eff(lvl)` for display); Heroes screen shows level + a **LVL UP** button (Gems, scaling cost); Kingdom champion row shows the leveled effect. (Gear/blueprints + revive-cost loop still pending — observed in FM.)
 
+* 🔵 **Merge clarity (UX)** — `drawMergeHints`: connected same-type/tier towers pulse-outline in the tower's colour with a **"2/3" badge** (a lingering pair = one away, since 3 auto-merges); and while placing a piece, the cells that *would* merge glow gold with a **MERGE!** label. Directly teaches the 3-connected → 1 mergecore rule.
+
 # What to adapt next (mapped to the blueprint)
 
-1. **Merge clarity (UX)** — make the 3-connected → 1 merge legible (highlight matching clusters, "2/3" hint, placement preview). *(requested)*
-2. **Hero depth cont.** — gear/blueprints + revive-cost loop.
+1. **Hero depth cont.** — gear/blueprints + revive-cost loop.
 
 # How to run / test
 
