@@ -233,7 +233,8 @@ function randPiece(){
 }
 
 /* ---------- game state ---------- */
-let mode = 'title';            // title | build | fight | clear | over
+let mode = 'title';            // title | build | fight | clear | perk | over | store | badges
+let runMode = 'normal';        // 'normal' (Siege) | 'boss' (Boss Rush) — chosen on the title
 let grid, hand, gold, wave, wallHP, wallMax;
 let selected = null;           // index into hand
 let dragging = false;
@@ -455,10 +456,23 @@ function placeSelected(anchor){
 }
 
 /* ---------- waves ---------- */
+function bossRushWave(w, hpS){
+  // Boss Rush: a knot of heavies escorting a boss (or two) every wave — single-target test
+  const q = [];
+  let t = 1.0;
+  const golems = 1 + Math.floor(w/2);
+  for (let i=0;i<golems;i++){ q.push(makeEnemy('golem', hpS*0.8, t)); t += 1.1; }
+  const brutes = 2 + Math.floor(w*0.6);
+  for (let i=0;i<brutes;i++){ q.push(makeEnemy('brute', hpS, t)); t += 0.55; }
+  q.push(makeEnemy('boss', hpS*1.15, t + 1.0));
+  if (w % 3 === 0) q.push(makeEnemy('boss', hpS*1.15, t + 3.2));
+  return q;
+}
 function buildWave(w){
   const q = [];
   const wc = CONFIG.wave;
   const hpS = 1 + wc.hpLin*(w-1) + wc.hpQuad*(w-1)*(w-1);
+  if (runMode === 'boss') return bossRushWave(w, hpS);
   const count = wc.baseCount + Math.floor(w*wc.perWave);
   const gap = Math.max(wc.gapMin, wc.gapBase - w*wc.gapPerWave);
   let t = 0.8;
@@ -2960,6 +2974,13 @@ function drawTitleMenu(){
   uiHits = [];
   drawWallet(W/2-95, 10);
   chunkyText('Rank: ' + honorRank(), W/2, 54, 13, '#ffd95e', '#5a3a0a', '600');
+  // mode toggle — tap to switch Siege / Boss Rush; tap anywhere else to play
+  const boss = runMode === 'boss';
+  chunkyBtn(W/2-168, 600, 336, 46,
+    boss ? '#ff7b5e' : '#5cc04c', boss ? '#d9542a' : '#41973a', boss ? '#9c2f12' : '#2e6326',
+    boss ? 'MODE: BOSS RUSH' : 'MODE: SIEGE', 20);
+  hit(W/2-168, 600, 336, 46, ()=>{ runMode = boss ? 'normal' : 'boss'; sfx.reroll(); });
+  chunkyText('tap anywhere to play', W/2, 638, 12, '#eaf2ff', 'rgba(20,40,70,0.5)', '600');
   chunkyBtn(W/2-168, 662, 160, 46, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 22);
   hit(W/2-168, 662, 160, 46, ()=>{ mode='store'; storeTab='cos'; });
   chunkyBtn(W/2+8, 662, 160, 46, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BADGES', 20);
