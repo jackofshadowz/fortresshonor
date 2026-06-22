@@ -13,3 +13,8 @@ asset library/*
 !asset library/Tiny Swords (Update 010)/
 !asset library/Tiny Swords (Free Pack)/
 !asset library/generated/
+*.apk
+*.xapk
+*.so
+_work_backup/
+global-metadata.dat

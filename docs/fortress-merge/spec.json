@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "meta": {
+    "title": "Fortress Merge — machine-readable design spec",
+    "package": "com.ttt.fortressmerge",
+    "version": "0.7.1",
+    "publisher": "TapNation",
+    "engine": "Unity 6000.2.6f2 (IL2CPP, metadata v31)",
+    "genre": "merge + tower-defense auto-battler roguelite",
+    "generated": "2026-06-21",
+    "source": "static reverse-engineering (no assets/code reproduced)",
+    "balanceNumbers": "NOT statically present — server-delivered via Firebase Remote Config + TapNation A/B"
+  },
+  "coreLoop": ["produce (spawners)", "merge (tier up)", "defend (auto-combat vs waves)", "draft perk", "progress/rewards", "spend in meta"],
+  "enums": {
+    "Rarity": ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"],
+    "Tier": ["Normal", "S", "SS", "SSS"],
+    "CardType": ["Unit", "Building", "Hero"],
+    "GameMode": ["Home", "Gameplay"],
+    "ResourceType": {
+      "Tokens": 0, "Gems": 1, "XP": 2, "Coins": 3, "SkipIt": 4,
+      "BlueprintHead": 100, "BlueprintChest": 101, "BlueprintBoots": 102, "BlueprintRing": 103, "BlueprintHero": 110,
+      "EpicChestKeys": 200, "CommonChestKeys": 201,
+      "EndlessModeTicket": 301, "BossFightModeTicket": 302, "HeroBattleModeTicket": 303,
+      "CommonBagKey": 401, "EpicBagKey": 402,
+      "Pumpkin": 801, "ValentineGiftBox": 802, "EasterEgg": 803, "TrampolineCoin": 804
+    },
+    "RewardType": ["None", "Resource", "Gear", "SpeedUp", "Unit", "NoAds", "RandomGear", "RandomBlueprint", "Blessing", "RandomShardContent", "RandomGearContent", "GooglePlayPass", "DiscountedBundle", "BlessingLimitedTime", "InfiniteSkipItTicket"],
+    "BuffId": {
+      "crowdControl": {"Slow": 100, "Stun": 101, "Freeze": 102, "Glue": 103},
+      "damageOverTime": {"Burn": 200, "Poison": 201, "Bleed": 202},
+      "offense": {"AtkDmgBuff": 300, "AttackSpeedBuff": 301, "CriticalBuff": 303, "DrunkBuff": 304},
+      "defense": {"HealOverTime": 400, "Shield": 401, "Invincibility": 402},
+      "mobility": {"SpeedBuff": 500, "Sprint": 501},
+      "area": {"RangeBuff": 600, "AOERadiusBuff": 601, "AOEDamageBuff": 602}
+    }
+  },
+  "mergeLines": {
+    "melee": ["Peasant", "Warrior", "Knight"],
+    "ranged": ["Bowman", "Archer", "Marksman"],
+    "cavalry": ["Horseman", "Chevalier"],
+    "other": ["Farmer", "Melee3D", "Range3D", "RoyalArcher", "AllyMage", "AllySkeleton"]
+  },
+  "heroes": ["Baker", "Berserker", "Commander", "ElectricGoddess", "ElfArcher", "Esmeralda", "Paladin", "Undertaker", "King"],
+  "enemies": {
+    "basic": ["Warrior", "Archer", "Mage", "Horseman", "Skeleton", "SlimeMelee", "FireSlime", "SlimeRange", "FlyingMonster", "Dummy"],
+    "families": {
+      "zombie": ["ZombieWarrior", "ZombieArcher", "ZombieHorsemen", "ZombieMage"],
+      "cursed": ["CursedWarrior", "CursedArcher", "CursedHorsemen", "CursedMage"],
+      "orc": ["OrcWarrior", "OrcArcher", "OrcHorsemen", "OrcMage"]
+    },
+    "bosses": ["Melee2DGiantBoss", "SlimeBoss", "DragonBoss", "DemonBoss", "Medusa", "Reaper", "GreenGolemBoss", "GreyGolemBoss", "SandGolemBoss", "RedGolemBoss", "BlueGolemBoss", "GoldMimic", "GoldPurpleMimic", "GoldRedMimic", "IronBrownMimic", "IronPurpleMimic"]
+  },
+  "perks": {
+    "interface": "ICardPassiveEffect.ExecuteEffect(float value, PassiveContext)",
+    "note": "magnitude is data-driven via CardPassiveValues.value",
+    "offense": ["CritChance", "AOERadiusIncrease", "AtkRangeIncrease", "CooldownReduction", "DoubleProjectile", "DoubleLightning", "ExplosionDamageBonus", "IncreaseFireRadius", "IncreaseFireDuration", "BashChance", "BounceCountBonus", "Thorn", "Lifesteal", "ThrowPerCooldownIncrease", "HPIncrease", "UnitSpeedIncrease"],
+    "economy": ["GainGoldOnMerge", "OnTreeGold", "DoubleGoldProduction", "OnMergeFreeReroll", "BannerRerollCostReduction", "OnMergeFreeTree", "AddResellCost", "IncreaseStartingResellValue", "IncreaseSummoningPool", "MaxPopIncrease", "DuplicationIncrease", "XPGainBonus", "TokenGainBonus"],
+    "spawn": ["SpawnTwoUnitsChance", "IncreaseDoubleSpawn", "IncreaseTripleSpawn"],
+    "heroSupport": ["FreeHeroRevive", "HeroReviveCostReduction", "FountainHealHeroBonus", "FountainHealBuilding", "SupplyCooldownReductionBonus", "SupplyProjectileBonus"],
+    "wardrumSet": ["WardrumAttackSpeed", "WardrumEnemyKnockback", "WardrumHealOverTime"]
+  },
+  "buildings": ["Spawner(Archer/Mage/Hero)", "Bank", "Banner(summon)", "Barricade", "Catapult"],
+  "modes": {
+    "Campaign": "RoundManager — leveled progression",
+    "Endless": "EndlessModeRoundManager + PBManager — survival/high-score",
+    "BossFight": "BossFightModeRoundManager — boss encounters",
+    "HeroBattle": "HeroBattleModeRoundManager — build-phase + fight-phase deckbuilder",
+    "TLE": "seasonal reskins: Easter, Valentine, StPatrick, Halloween, Undertaker, TrampolineMadness"
+  },
+  "economy": {
+    "softCurrency": "Coins",
+    "premiumCurrency": "Gems",
+    "upgradeMaterials": ["Shards", "Blueprints(Head/Chest/Boots/Ring/Hero)"],
+    "bigNumberType": "LNum",
+    "cardUpgradePrices": ["CoinsPriceUpgrade", "GemsPriceUpgrade", "ShardsPriceUpgrade"]
+  },
+  "chests": {
+    "definition": "ChestSettings { CardChests, GearChests, cardsForRiggedchests }",
+    "tiers": ["big", "medium", "legendary"],
+    "kinds": ["gear", "shard", "card_x10"],
+    "rigged": "deterministic FTUE/pity contents via cardsForRiggedchests",
+    "rarityWeights": "CardsSystemSettings.RaritySettings (server-tunable)"
+  },
+  "techStack": {
+    "mediation": ["AppLovin MAX", "IronSource", "AdMob", "Meta Audience Network", "Moloco", "Mintegral", "Fyber"],
+    "attribution": "Adjust",
+    "adQuality": "AppHarbr",
+    "analytics": ["GameAnalytics", "Firebase"],
+    "remoteConfig": "Firebase Remote Config",
+    "abTesting": "TapNation (api.tnapps.xyz)",
+    "uaTesting": "GeekLab",
+    "backend": "Firebase Cloud Functions (cloud-save only: saveOps, transferSave, adminGetState, devWipe)"
+  },
+  "remoteConfigLevers": ["interstitial_starts_from_level", "interstitial_allow_end_level", "interstitial_allow_end_wave", "interstitial_allow_perks_screen", "interstitial_default_delay", "disable_b2b_ad_unit_ids", "difficulty_offset_start_level", "plane_mode_blocker_appear_level", "fail_offer_enabled", "fail_offer_min_level", "fail_offer_relaunch_count", "can_buy_hero_with_gems", "big_gear_chest", "medium_gear_chest", "legendary_gear_chest", "big_shard_chest", "medium_shard_chest", "legendary_shard_chest", "cards_chest_x10_opened", "pp_fg_ab_test_ids"],
+  "analyticsEvents": ["level_start", "level_complete", "level_fail", "level_up", "player_lost_at_level_wave", "chest_open", "cards_chest_x10_opened", "daily_reward_claim", "daily_mission_completed", "daily_missions_reroll_bought", "ad_impression", "rewarded_ad", "no_ads"]
+}

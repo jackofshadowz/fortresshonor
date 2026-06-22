@@ -1,0 +1,172 @@
+
+AllPurchasedProductIdentifiers: 
+
+ProductId: 
+
+ProductIdentifier: 
+
+StoreProductId: 
+
+SubscriptionsByProductIdentifier: 
+()Landroid/os/Bundle;
+*monoscripts*.bundle
+*unitybuiltinassets*.bundle
+*unitybuiltinshaders*.bundle
+.bundle
+Attempt #{0} at downloading AssetBundle...
+Bundle cache is already being cleaned.
+Cannot find purchase for product: 
+Cannot set productId to an empty or null string
+Catalog bundle path is null.
+Couldn't load AssetBundles: {0}
+Couldn't load sceneassetbundle: {0}
+Couldn't load textureassetbundle: {0}
+Discounted Bundle
+Do you want to initialize purchasing for products {
+ERR: Failed to get products
+{0}
+Error removing AssetBundle {0}: {1}
+Extended_UNIX_Code_Packed_Format_for_Japanese
+Failed to download AssetBundle: {0}
+Failed to load AssetBundle from request.
+Failed to purchase unknown product {0}
+GetProductList
+Got {0} products
+HasBoughtStarterPack
+IAPProductCatalog
+Input AssetBundle name cannot be null or empty.
+Invalid path in AssetBundleProvider: '{0}'.
+Invalid transaction id for old product: 
+IsPurchasedProductDeferred: the product is null.
+Landroid/os/Bundle;
+LoadBundleTaskProgressHandler
+Loading Products
+No catalog text assets where found in bundle 
+No product returned from the store.
+No products were found when fetching from the store
+OnProductsRetrieved
+Product
+Product 
+Product Purchased: 
+Product consumed correctly! ProductID:
+Product info already exists for product 
+Product info not found for product 
+Product: 
+ProductCategory
+ProductID
+ProductID: 
+ProductId
+ProductIdentifier: 
+Products
+Products returned from the store don't match.
+Purchase Subscription Product Id: 
+Purchasing product : 
+Raw data access is not supported for asset bundles
+Restoring product : 
+RetrieveProducts
+RetrieveProducts failed: 
+Starting to retrieve AssetBundle
+StoreProduct
+String access is not supported for asset bundles
+SubscribableProducts
+Subscription info already exists for product 
+Subscription info not found for product 
+The product receipt does not contain enough information
+There is already an active request for AssetBundle: {0}
+Trying to purchase null Product
+Unable to confirm purchase with null Product
+Unable to load asset bundle from : 
+Unable to load dependent bundle from file location : 
+Unable to load dependent bundle from location 
+Unable to load dependent bundle from remote location : 
+Unable to purchase unknown product with id: {0}
+Unavailable product {0}-{1}
+Unity IAP - QueryAsyncProductWithRetries: {0}
+UnityEngine.UDP.ProductInfo
+Unknown ProductID
+You must supply a valid bundle file path.
+[GPP] Cannot check for GPP products - IAP system not ready
+[GPP] No ShopOffer found for GPP product ID: 
+[IAP] ShopOffer not found for product 
+_getEligibleWinBackOffersForProduct 
+_purchaseProductWithWinBackOffer 
+_receiveProducts 
+addCustomEventExtrasBundle
+addNetworkExtrasBundle
+allPurchasedProductIdentifiers
+android.os.Bundle
+android/os/Bundle
+baker_pack_id
+berserker_pack_id
+bundleData
+bundlePath
+catalog.bundle
+com.android.billingclient.api.QueryProductDetailsParams
+com.mSubscription1.product
+com.mSubscription2.product
+com.myConsumable1.product
+com.myConsumable2.product
+com.myNonConsumable1.product
+com.myNonConsumable2.product
+dequeue_query_products_time
+discount:baker_discounted_pack
+discount:berserker_discounted_pack
+discount:undertaker_discounted_pack
+electric_goddess_pack_id
+fail_offer_enabled
+fail_offer_min_level
+fail_offer_relaunch_count
+getEligibleWinBackOffersForProduct
+getProductId
+getProductType
+getProducts
+https://api.tnapps.xyz/v1/abtests/com.TapNation.SDKv3
+invalid_product_error
+metadata key not found in product details json
+notifyUnableToFulfillUnavailableProduct
+onProductPurchaseDeferred
+paladin_pack_id
+product
+productCategory
+productID
+productId
+productId:
+productIdentifier
+product_id
+production
+products
+purchase:baker_discounted_pack
+purchase:baker_pack
+purchase:berserker_discounted_pack
+purchase:berserker_pack
+purchase:blessing_pack
+purchase:electric_goddess_pack
+purchase:fail_offer_pack
+purchase:paladin_pack
+purchase:premium_pack
+purchase:set_pack
+purchase:st_patrick_pack
+purchase:starter_pack
+purchase:ultimate_premium_noads_pack
+purchase:undertaker_discounted_pack
+purchase:undertaker_pack
+purchaseProduct
+purchaseProductWithWinBackOffer
+queryProductDetailsAsync
+retrieve_products
+sceneassetbundle
+setProductDetails
+setProductDetailsParamsList
+setProductId
+setProductList
+setProductType
+storeProductId
+storeSpecificId key not found in product details json
+subscribable_products
+subscriptionsByProductIdentifier
+textureassetbundle
+ultimate_premium_pack_enabled
+undertaker_pack_id
+unity5BuildAssetBundles
+{ "error" : "already retrieving products" }
+{{ product = {0}, metadata = {1} }}
