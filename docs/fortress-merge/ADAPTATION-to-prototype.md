@@ -65,17 +65,17 @@ Every adaptation is tagged by how directly it derives from the Fortress Merge te
 * 🟢 **Second mode (Boss Rush)** — title toggle; `runMode` drives `bossRushWave()` vs `buildWave`. Observed: FM ships a Boss Fight mode (and modes as thin variants over one combat core); the specific wave composition is our tuning.
 * 🟢 **Analytics logger** — `ANALYTICS.log` → console + `localStorage('foh_events')`; `run_over` carries the wave reached. Observed: FM's analytics funnel incl. `player_lost_at_level_wave`. See [analytics-events](okf/references/analytics-events.md).
 * 🟢 **Perk synergy sets** — `SETS` (Warband/Fortune/Elements), escalating bonuses via `checkSetBonus`; cards show set tags. Observed: FM's "Wardrum" synergy cluster. See [perk-system](okf/systems/perk-system.md).
-* 🟡 **Idle "AFK village" income** — the city produces Gems in real time while closed (`claimIdle`, claimed on load + tab-return, 8h cap), scaling with owned prestige buildings (`IDLE.yield`). **Observed:** FM's AFK Village *exists* (`AfkVillageTouchManager`, `AfkVillageSettings.villageUpgrade`, ~40 `AFKVillageUnitPrefab`). **Inferred:** the actual idle-income logic/rate is server/native-side and was not directly read — this gems-per-hour model is our interpretation of "AFK village." See [hero-system](okf/systems/hero-system.md) (meta systems).
+* 🟡 **Idle "AFK village" income** — the city produces Gems in real time while closed (`claimIdle`, claimed on load + tab-return, capped), scaling with owned prestige buildings (`IDLE.yield`). **Observed:** FM's AFK Village *exists* (`AfkVillageTouchManager`, `AfkVillageSettings.villageUpgrade`, ~40 `AFKVillageUnitPrefab`). **Inferred:** the actual idle-income logic/rate is server/native-side and was not directly read — this gems-per-hour model is our interpretation of "AFK village." See [hero-system](okf/systems/hero-system.md) (meta systems).
+* 🟡 **Village-upgrade loop** — two leveled, Gems-bought upgrades on the title (`buyVillage`): **Granary** (+idle rate) and **Warehouse** (+idle cap), stored in `META.s.village`. Closes the idle loop (idle gems → upgrade → more idle). **Observed:** FM's `AfkVillageSettings.villageUpgrade` / `VillageUpgradeData` (a village-upgrade list exists). **Inferred:** the specific upgrades and their effects are our design.
 
-**The in-run combat track is complete** (perks, config, buffs, rarity, 2nd mode, analytics, synergy). City/Meta spine started (idle income).
+**The in-run combat track is complete** (perks, config, buffs, rarity, 2nd mode, analytics, synergy). **City/Meta spine: idle income + village-upgrade loop done.**
 
 # What to adapt next (mapped to the blueprint)
 
 City/Meta spine continued, then the Hero spine:
 
 1. **Visible city growth** 🟢 — render owned `PRESTIGE_CAT` decorations (statue→throne) on the title keep so building the city is tangible. Observed feature (the decorations already exist as data).
-2. **Village-upgrade screen** 🟢 — surface `AfkVillageSettings.villageUpgrade` as a buyable upgrade list (e.g., raise idle rate / cap). Observed: `VillageUpgradeData`.
-3. **Hero spine** — turn the knight into collectible heroes (cards, gear/blueprints, revive-cost loop). See [hero-system](okf/systems/hero-system.md).
+2. **Hero spine** — turn the knight into collectible heroes (cards, gear/blueprints, revive-cost loop). See [hero-system](okf/systems/hero-system.md).
 
 # How to run / test
 

@@ -2734,6 +2734,8 @@ const META = (function(){
     owned: ['hero_blue','tower_mixed','banner_red','terrain_verdant'],
     equip: { hero:'hero_blue', tower:'tower_mixed', banner:'banner_red', terrain:'terrain_verdant' },
     mods: {},
+    village: { granary:0, warehouse:0 },   // City/Meta: leveled idle upgrades
+    lastSeen: 0,
     badges: {}, seenBadges: {},
     bestWave: 0,
     stats: { runs:0, kills:0, bossKills:0, fullClears:0, gemsEarned:0 },
@@ -2807,15 +2809,24 @@ for (const p of PRESTIGE_CAT) CATALOG_BY_ID[p.id] = Object.assign({ slot:'presti
    The city produces Gems in real time while the app is closed, scaling with the
    prestige buildings you've raised. Claimed on load and on tab-return, capped so it
    stays a nudge — not an auto-win. Adapted from Fortress Merge's AFK village. */
-const IDLE = { capH:8, base:3, yield:{ p_statue:5, p_fountain:12, p_garden:25, p_cathedral:50, p_throne:100 } };
+const IDLE = { capH:8, base:3, granaryRate:5, warehouseCap:2,
+               yield:{ p_statue:5, p_fountain:12, p_garden:25, p_cathedral:50, p_throne:100 } };
 function idleRate(){                                  // gems per hour
-  let r = IDLE.base;
+  let r = IDLE.base + META.s.village.granary * IDLE.granaryRate;
   for (const id in IDLE.yield) if (META.s.owned.includes(id)) r += IDLE.yield[id];
   return r;
 }
+function idleCapH(){ return IDLE.capH + META.s.village.warehouse * IDLE.warehouseCap; }
+function granaryCost(){ return 40 + META.s.village.granary * 40; }     // leveled (VillageUpgradeData)
+function warehouseCost(){ return 60 + META.s.village.warehouse * 60; }
+function buyVillage(which){
+  const cost = which === 'granary' ? granaryCost() : warehouseCost();
+  if (spendGems(cost)){ META.s.village[which]++; META.save(); toast((which==='granary'?'Granary':'Warehouse')+' upgraded!'); sfx.merge(); }
+  else toast('Need ' + cost + ' gems');
+}
 function claimIdle(){
   const now = Date.now(), last = META.s.lastSeen || now;
-  const g = Math.floor(idleRate() * Math.min(IDLE.capH, (now - last) / 3.6e6));
+  const g = Math.floor(idleRate() * Math.min(idleCapH(), (now - last) / 3.6e6));
   if (g > 0) META.s.gems += g;
   META.s.lastSeen = now; META.save();
   return g;
@@ -3048,6 +3059,12 @@ function drawTitleMenu(){
   if (idleEarned > 0)
     chunkyText('Your city earned +' + idleEarned + ' gems while away', W/2, 80, 12, '#9fe8ff', 'rgba(20,40,70,0.55)', '600');
   chunkyText('City income: ' + idleRate() + ' gems/hr while away', W/2, idleEarned > 0 ? 98 : 80, 11, '#cfe0f5', null, '500');
+  // village upgrades — spend Gems to grow idle income (closes the loop)
+  chunkyBtn(W/2-168, 506, 164, 44, '#7ed05f', '#56a83c', '#2e6326', 'GRANARY  '+granaryCost()+'◆', 15);
+  hit(W/2-168, 506, 164, 44, ()=>buyVillage('granary'));
+  chunkyBtn(W/2+4, 506, 164, 44, '#5cb0f0', '#3b80d2', '#2a5a9e', 'WAREHOUSE  '+warehouseCost()+'◆', 13);
+  hit(W/2+4, 506, 164, 44, ()=>buyVillage('warehouse'));
+  chunkyText('Granary Lv'+META.s.village.granary+' (+'+IDLE.granaryRate+'/hr)   ·   Warehouse Lv'+META.s.village.warehouse+' (+'+IDLE.warehouseCap+'h cap)', W/2, 558, 10, '#cfe0f5', null, '500');
   // mode toggle — tap to switch Siege / Boss Rush; tap anywhere else to play
   const boss = runMode === 'boss';
   chunkyBtn(W/2-168, 600, 336, 46,
