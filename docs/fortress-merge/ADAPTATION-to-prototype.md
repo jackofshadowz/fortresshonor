@@ -48,24 +48,34 @@ A **between-wave perk draft**, modeled directly on Fortress Merge's `ICardPassiv
 
 Verified with `node --check` (syntax clean). No assets added; pure logic + canvas UI in the existing style.
 
+# Provenance legend
+
+Every adaptation is tagged by how directly it derives from the Fortress Merge teardown — important for an honest clean-room/educational record:
+
+* 🟢 **Ported** — the mechanic was *observed* in FM (class/enum/string evidence) and faithfully adapted.
+* 🟡 **Inferred** — the *feature* was observed in FM, but its exact logic is server-side/native and was not directly readable, so the mechanic here is our reasonable interpretation.
+* 🔵 **Enrichment** — our own addition, not evidenced in FM.
+
 # Implemented so far
 
-* **Roguelite perk draft** (above) — `PERKS` data + `RUN` modifiers + `mode='perk'` draft.
-* **Data-driven CONFIG** ✅ — a single `CONFIG` "balance surface" now holds economy (start gold, wall, reroll, wave-clear bonus/regen), tier tables (dmg/range/sell/max), wave generation (count/gap/hp-scaling/boss cadence), the full enemy stat table, buff tunables, and rarity tunables. `buildWave`, `makeEnemy`, `reset`, `waveCleared`, and `rerollCost` all read from it. This mirrors Fortress Merge's remote-config indirection — the entire game can be rebalanced by editing one object, no logic changes. See [remote-config](okf/references/remote-config.md).
-* **Buff/status engine** ✅ — `applyBuff`/`hasBuff`/`tickBuffs` with tunables in `CONFIG.buffs`; Slow (speed), Stun (freeze), Burn/Poison (DoT) applied to enemies via `hitEnemy`'s `fx` arg. Adds perks Wildfire/Venom/Concussion + per-status visual overlays. Mirrors Fortress Merge's `BuffId` system. See [buff-status-system](okf/systems/buff-status-system.md).
-* **Rarity axis** ✅ — pieces spawn Common or Rare (16%); rarity carries through placement and merge (`tryMerge` takes the group max; an all-rare merge promotes to Epic), multiplying tower damage (`CONFIG.rarity.dmgMult`). Shown via a corner gem on the grid and a colored outline in the tray. Mirrors Fortress Merge's `Rarity` enum. See [enums](okf/data-model/enums.md).
-* **Second mode (Boss Rush)** ✅ — a title toggle (Siege ↔ Boss Rush); `runMode` drives `bossRushWave()` (golem+brute escorts plus 1–2 bosses each wave) vs the standard `buildWave`. Mirrors Fortress Merge's mode-as-thin-variant-over-one-combat-core. See [game-modes](okf/systems/game-modes.md).
-* **Analytics logger** ✅ — `ANALYTICS.log(ev, data)` writes to console + `localStorage('foh_events')`. Emits `run_start`, `wave_start`, `wave_clear`, `perk`, and `run_over` (with the wave reached — the equivalent of FM's `player_lost_at_level_wave`). Inspect via `JSON.parse(localStorage.foh_events)`. See [analytics-events](okf/references/analytics-events.md).
-* **Perk synergy sets** ✅ — `SETS` (Warband/Fortune/Elements); owning 2 or 3 perks from a theme grants escalating bonuses via `checkSetBonus` (reusing existing RUN fields). Draft cards show their set tag. Mirrors Fortress Merge's "Wardrum" synergy clusters. See [perk-system](okf/systems/perk-system.md).
+* 🟢 **Roguelite perk draft** — `PERKS` data + `RUN` modifiers + `mode='perk'` draft. Observed: `*CPEffect` / `ICardPassiveEffect` classes.
+* 🟢 **Data-driven CONFIG** — one `CONFIG` "balance surface" (economy, tiers, wave gen, enemy table, buff + rarity tunables) read by `buildWave`/`makeEnemy`/`reset`/`waveCleared`/`rerollCost`. Observed: FM's remote-config indirection (`FGRemoteConfigManager`, key surface). See [remote-config](okf/references/remote-config.md).
+* 🟢 **Buff/status engine** — `applyBuff`/`hasBuff`/`tickBuffs` + `CONFIG.buffs`; Slow/Stun/Burn/Poison via `hitEnemy`'s `fx` arg; perks Wildfire/Venom/Concussion + overlays. Observed: `BuffId` enum (Slow/Stun/Burn/Poison/…). See [buff-status-system](okf/systems/buff-status-system.md).
+* 🟢 **Rarity axis** — Common/Rare/Epic carried through merge (`tryMerge` group-max, all-rare promotes), multiplying damage; grid gem + tray outline. Observed: `Rarity` enum. See [enums](okf/data-model/enums.md).
+* 🟢 **Second mode (Boss Rush)** — title toggle; `runMode` drives `bossRushWave()` vs `buildWave`. Observed: FM ships a Boss Fight mode (and modes as thin variants over one combat core); the specific wave composition is our tuning.
+* 🟢 **Analytics logger** — `ANALYTICS.log` → console + `localStorage('foh_events')`; `run_over` carries the wave reached. Observed: FM's analytics funnel incl. `player_lost_at_level_wave`. See [analytics-events](okf/references/analytics-events.md).
+* 🟢 **Perk synergy sets** — `SETS` (Warband/Fortune/Elements), escalating bonuses via `checkSetBonus`; cards show set tags. Observed: FM's "Wardrum" synergy cluster. See [perk-system](okf/systems/perk-system.md).
+* 🟡 **Idle "AFK village" income** — the city produces Gems in real time while closed (`claimIdle`, claimed on load + tab-return, 8h cap), scaling with owned prestige buildings (`IDLE.yield`). **Observed:** FM's AFK Village *exists* (`AfkVillageTouchManager`, `AfkVillageSettings.villageUpgrade`, ~40 `AFKVillageUnitPrefab`). **Inferred:** the actual idle-income logic/rate is server/native-side and was not directly read — this gems-per-hour model is our interpretation of "AFK village." See [hero-system](okf/systems/hero-system.md) (meta systems).
 
-**The in-run combat track is now complete** (perks, config, buffs, rarity, 2nd mode, analytics, synergy).
+**The in-run combat track is complete** (perks, config, buffs, rarity, 2nd mode, analytics, synergy). City/Meta spine started (idle income).
 
 # What to adapt next (mapped to the blueprint)
 
-The remaining work is the two large meta tracks:
+City/Meta spine continued, then the Hero spine:
 
-1. **Hero spine** — turn the knight into collectible heroes (heroes as cards, gear/blueprints, revive-cost loop). See [hero-system](okf/systems/hero-system.md).
-2. **City/meta spine** — deepen the persistent base (idle village, building collection, meta upgrades). See [game-modes](okf/systems/game-modes.md) + [economy-currencies](okf/systems/economy-currencies.md).
+1. **Visible city growth** 🟢 — render owned `PRESTIGE_CAT` decorations (statue→throne) on the title keep so building the city is tangible. Observed feature (the decorations already exist as data).
+2. **Village-upgrade screen** 🟢 — surface `AfkVillageSettings.villageUpgrade` as a buyable upgrade list (e.g., raise idle rate / cap). Observed: `VillageUpgradeData`.
+3. **Hero spine** — turn the knight into collectible heroes (cards, gear/blueprints, revive-cost loop). See [hero-system](okf/systems/hero-system.md).
 
 # How to run / test
 

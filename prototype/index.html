@@ -310,6 +310,7 @@ function reset(){
   breached = false;
   selected = null; sellTarget = null; heroSel = false;
   mode = 'build';
+  idleEarned = 0;
   ANALYTICS.log('run_start', { mode: runMode });
   banner('WAVE ' + wave, '#ffd95e');
 }
@@ -2802,6 +2803,31 @@ for (const k in SKIN_CAT) for (const it of SKIN_CAT[k]) CATALOG_BY_ID[it.id] = O
 for (const m of MOD_CAT) CATALOG_BY_ID[m.id] = Object.assign({ slot:'mod' }, m);
 for (const p of PRESTIGE_CAT) CATALOG_BY_ID[p.id] = Object.assign({ slot:'prestige' }, p);
 
+/* ---------- idle "AFK village" income (City/Meta spine) ----------
+   The city produces Gems in real time while the app is closed, scaling with the
+   prestige buildings you've raised. Claimed on load and on tab-return, capped so it
+   stays a nudge — not an auto-win. Adapted from Fortress Merge's AFK village. */
+const IDLE = { capH:8, base:3, yield:{ p_statue:5, p_fountain:12, p_garden:25, p_cathedral:50, p_throne:100 } };
+function idleRate(){                                  // gems per hour
+  let r = IDLE.base;
+  for (const id in IDLE.yield) if (META.s.owned.includes(id)) r += IDLE.yield[id];
+  return r;
+}
+function claimIdle(){
+  const now = Date.now(), last = META.s.lastSeen || now;
+  const g = Math.floor(idleRate() * Math.min(IDLE.capH, (now - last) / 3.6e6));
+  if (g > 0) META.s.gems += g;
+  META.s.lastSeen = now; META.save();
+  return g;
+}
+function markAway(){ META.s.lastSeen = Date.now(); META.save(); }
+let idleEarned = claimIdle();
+window.addEventListener('beforeunload', markAway);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) markAway();
+  else { const g = claimIdle(); if (g > 0){ idleEarned = g; toast('Your city earned +' + g + ' gems'); } }
+});
+
 // Honor ranks — your title scales with prestige
 const RANKS = [[0,'Peasant'],[50,'Squire'],[150,'Knight'],[350,'Baron'],[700,'Earl'],[1300,'Duke'],[2600,'Sovereign']];
 function honorRank(){ let r='Peasant'; for (const t of RANKS) if (META.s.honor >= t[0]) r = t[1]; return r; }
@@ -3019,6 +3045,9 @@ function drawTitleMenu(){
   uiHits = [];
   drawWallet(W/2-95, 10);
   chunkyText('Rank: ' + honorRank(), W/2, 54, 13, '#ffd95e', '#5a3a0a', '600');
+  if (idleEarned > 0)
+    chunkyText('Your city earned +' + idleEarned + ' gems while away', W/2, 80, 12, '#9fe8ff', 'rgba(20,40,70,0.55)', '600');
+  chunkyText('City income: ' + idleRate() + ' gems/hr while away', W/2, idleEarned > 0 ? 98 : 80, 11, '#cfe0f5', null, '500');
   // mode toggle — tap to switch Siege / Boss Rush; tap anywhere else to play
   const boss = runMode === 'boss';
   chunkyBtn(W/2-168, 600, 336, 46,
