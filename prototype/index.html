@@ -261,7 +261,7 @@ function randPiece(){
 }
 
 /* ---------- game state ---------- */
-let mode = 'title';            // title | build | fight | clear | perk | over | store | badges | heroes | kingdom
+let mode = 'title';            // title | build | fight | clear | perk | over | store | badges | heroes | kingdom | gear
 let runMode = 'normal';        // 'normal' (Siege) | 'boss' (Boss Rush) — chosen on the title
 let grid, hand, gold, wave, wallHP, wallMax;
 let selected = null;           // index into hand
@@ -301,6 +301,7 @@ function reset(){
   gold = CONFIG.economy.startGold + (META.s.mods.coffers ? 20 : 0);
   RUN = freshRun(); perkChoices = [];
   { const h = HERO_BY_ID[META.s.heroes.sel] || HEROES[0]; h.apply(RUN, heroLvl(h.id)); }   // champion boon (scales with level)
+  for (const sl of GEAR_SLOTS){ const gid = META.s.gear.equip[sl]; if (gid && GEAR_BY_ID[gid]) GEAR_BY_ID[gid].apply(RUN); }   // equipped gear
   if (META.s.mods.treasury) RUN.goldMult *= 1.2;            // expanded keep-upgrades
   if (META.s.mods.warhorn)  RUN.rateMult *= 1.12;
   wave = 1;
@@ -2265,7 +2266,7 @@ cv.addEventListener('pointerdown', ev => {
   downPos = p; downSlot = null;
 
   if (mode === 'title'){ if (handleMenuTap(p)) return; reset(); return; }
-  if (mode === 'store' || mode === 'badges' || mode === 'heroes' || mode === 'kingdom'){ handleMenuTap(p); return; }
+  if (mode === 'store' || mode === 'badges' || mode === 'heroes' || mode === 'kingdom' || mode === 'gear'){ handleMenuTap(p); return; }
   if (mode === 'over'){ handleMenuTap(p); return; }
   if (mode === 'perk'){
     for (const b of perkBtns){ if (inRect(p, b)){ choosePerk(b.perk); return; } }
@@ -2430,8 +2431,8 @@ function frame(now){
     requestAnimationFrame(frame);
     return;
   }
-  if (mode === 'store' || mode === 'badges' || mode === 'heroes' || mode === 'kingdom'){
-    (mode === 'store' ? drawStore : mode === 'badges' ? drawBadges : mode === 'heroes' ? drawHeroes : drawKingdom)();
+  if (mode === 'store' || mode === 'badges' || mode === 'heroes' || mode === 'kingdom' || mode === 'gear'){
+    (mode === 'store' ? drawStore : mode === 'badges' ? drawBadges : mode === 'heroes' ? drawHeroes : mode === 'gear' ? drawGear : drawKingdom)();
     ctx.restore();
     requestAnimationFrame(frame);
     return;
@@ -2880,6 +2881,7 @@ const META = (function(){
     mods: {},
     village: { granary:0, warehouse:0 },   // City/Meta: leveled idle upgrades
     heroes: { owned:['commander'], sel:'commander', lvl:{ commander:1 } },   // Hero spine: roster + levels
+    gear: { owned:[], equip:{ weapon:null, armor:null, trinket:null } },     // Hero spine: equippable gear
     lastSeen: 0, lastFreeGem: 0,
     badges: {}, seenBadges: {},
     bestWave: 0,
@@ -2980,6 +2982,19 @@ const HEROES = [
 const HERO_BY_ID = {}; for (const h of HEROES) HERO_BY_ID[h.id] = h;
 function heroLvl(id){ return (META.s.heroes.lvl && META.s.heroes.lvl[id]) || 1; }
 function heroLvlCost(id){ return 80 * heroLvl(id); }
+
+// Hero gear — equippable permanent loadout (one per slot), bought with Gems, applied each run.
+// Mirrors FM's hero gear slots (Head/Chest/Boots/Ring); ours: Weapon / Armor / Trinket.
+const GEAR = [
+  { id:'sword',  name:'Keen Sword',   slot:'weapon',  cost:120, desc:'+10% tower damage', apply:r=>r.dmgMult*=1.10 },
+  { id:'bow',    name:'Long Bow',     slot:'weapon',  cost:120, desc:'+12% tower range',  apply:r=>r.rangeMult*=1.12 },
+  { id:'plate',  name:'Iron Plate',   slot:'armor',   cost:120, desc:'+30 max wall HP',   apply:r=>{ wallMax+=30; wallHP+=30; } },
+  { id:'drum',   name:'Rally Drum',   slot:'armor',   cost:120, desc:'+10% fire rate',    apply:r=>r.rateMult*=1.10 },
+  { id:'coin',   name:'Lucky Coin',   slot:'trinket', cost:150, desc:'+20% kill gold',    apply:r=>r.goldMult*=1.20 },
+  { id:'rune',   name:'Crit Rune',    slot:'trinket', cost:150, desc:'+12% crit chance',  apply:r=>r.critChance+=0.12 },
+];
+const GEAR_BY_ID = {}; for (const gx of GEAR) GEAR_BY_ID[gx.id] = gx;
+const GEAR_SLOTS = ['weapon','armor','trinket'];
 
 // tag every catalog item with its slot on the ORIGINAL objects (store previews,
 // equip state, and buying all read it.slot — previously only the copies had it,
@@ -3289,8 +3304,31 @@ function drawBadges(){
   });
   drawMenuToast();
 }
+function drawGear(){
+  uiHits = []; menuBg(); menuHeader('GEAR');
+  chunkyText('Equip one item per slot — applies every run', W/2, 104, 11, '#dfe6ff', null, '500');
+  let y = 122;
+  for (const slot of GEAR_SLOTS){
+    chunkyText(slot.toUpperCase(), 18, y, 13, '#ffd95e', null, '700', 'left');
+    GEAR.filter(g=>g.slot===slot).forEach((g,i)=>{
+      const x = 12 + i*228, cw = 222, ch = 64;
+      const owned = META.s.gear.owned.includes(g.id), eq = META.s.gear.equip[slot]===g.id;
+      orr(x, y+8, cw, ch, 12, eq?'rgba(255,217,94,0.16)':'rgba(255,255,255,0.10)', eq?'#ffd95e':(owned?'#7ed05f':'#cfd6e2'), eq?3.5:2.5);
+      chunkyText(g.name, x+12, y+30, 14, '#fff', '#10131f', '700', 'left');
+      chunkyText(g.desc, x+12, y+48, 11, '#cfe0f5', null, '500', 'left');
+      const bw = 72, bx = x+cw-bw-10, by = y+8+ch/2-14;
+      if (eq) chunkyText('ON', bx+bw/2, by+15, 13, '#ffd95e', null, '700');
+      else if (owned){ chunkyBtn(bx, by, bw, 28, '#5cc04c', '#41973a', '#2e6326', 'EQUIP', 12); hit(bx, by, bw, 28, ()=>{ META.s.gear.equip[slot]=g.id; META.save(); sfx.place(); }); }
+      else { chunkyBtn(bx, by, bw, 28, '#ffce5a', '#dba32c', '#9c6f12', g.cost+'◆', 12); hit(bx, by, bw, 28, ()=>{ if (spendGems(g.cost)){ META.s.gear.owned.push(g.id); META.s.gear.equip[slot]=g.id; META.save(); toast(g.name+' equipped!'); sfx.fanfare(); } else toast('Need '+g.cost+' gems'); }); }
+    });
+    y += 84;
+  }
+  drawMenuToast();
+}
 function drawHeroes(){
   uiHits = []; menuBg(); menuHeader('HEROES');
+  chunkyBtn(W-104, 50, 92, 34, '#7fc4ff', '#3b80d2', '#2a5a9e', 'GEAR', 15);
+  hit(W-104, 50, 92, 34, ()=>{ mode='gear'; });
   chunkyText('Choose your champion — each grants a run-long boon', W/2, 104, 11, '#dfe6ff', null, '500');
   let y = 124;
   for (const h of HEROES){

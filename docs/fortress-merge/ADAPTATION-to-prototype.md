@@ -90,9 +90,12 @@ Every adaptation is tagged by how directly it derives from the Fortress Merge te
 
 * 🔵 **Merge clarity (UX)** — `drawMergeHints`: connected same-type/tier towers pulse-outline in the tower's colour with a **"2/3" badge** (a lingering pair = one away, since 3 auto-merges); and while placing a piece, the cells that *would* merge glow gold with a **MERGE!** label. Directly teaches the 3-connected → 1 mergecore rule.
 
+* 🔵 **Merge feel** — on merge the two consumed towers stream particles into the survivor, a golden burst pops, and a "3 → TIER N!" floater + scaled shake fire. (Pairs with the merge-clarity hints.)
+* 🟢 **Hero gear** — equippable loadout (`GEAR`, 3 slots Weapon/Armor/Trinket, 2 options each) bought with Gems, applied each run in `reset`; a **Gear** screen reachable from a GEAR button on the Heroes screen. Mirrors FM's hero gear slots (our items/effects).
+
 # What to adapt next (mapped to the blueprint)
 
-1. **Hero depth cont.** — gear/blueprints + revive-cost loop.
+1. **Hero revive-cost loop** — needs an in-run hero *unit* that can fall and be revived for a cost; the prototype's champions are passive boons today, so this is a larger mechanic (would tie a champion to an in-run presence with HP). Deferred — flagged for discussion.
 
 # How to run / test
 
