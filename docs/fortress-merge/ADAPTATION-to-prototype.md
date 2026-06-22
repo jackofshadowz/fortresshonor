@@ -80,9 +80,11 @@ Every adaptation is tagged by how directly it derives from the Fortress Merge te
 
 * 🔵 **In-run gold shop (Quartermaster)** — a build-phase overlay (`drawShop`, `shopOpen` flag, SHOP button top-left) to spend in-run gold: **Repair Wall** (+40 HP), **Reinforce Wall** (+25 max), **Supply Drop** (a Tier-2 tower piece — `placeSelected` now honors `piece.tier`). A fresh in-run gold sink + strategy layer.
 
+* 🔵 **Meta store expansion + gem acquisition** — 3 new keep-upgrades (Treasury/Bulwark/War Horn, wired in `reset`); a 4th store tab **GEMS** with a free daily claim + IAP-style demo bundles (`GEM_PACKS`, `buyGems` — clean-room mock, no real payment); an in-run **Mint Gems** option (100 gold → 3 gems) in the Quartermaster. Homepage now has **STORE / HEROES / KINGDOM** buttons.
+
 # What to adapt next (mapped to the blueprint)
 
-1. **Meta store expansion** — new keep-upgrades (wired in `reset`) + cosmetics + an **IAP-style Gems tab** (demo bundles + a free/earned gem source) answering "how do I buy gems". *(in progress)*
+1. **Store art polish** — make item icons larger + more distinct (per-upgrade glyphs, bigger prestige/cosmetic previews, nicer terrain swatches). *(requested)*
 2. **Hero depth** — gear/blueprints + per-hero levels + the revive-cost loop.
 
 # How to run / test

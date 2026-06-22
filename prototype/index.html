@@ -301,8 +301,10 @@ function reset(){
   gold = CONFIG.economy.startGold + (META.s.mods.coffers ? 20 : 0);
   RUN = freshRun(); perkChoices = [];
   (HERO_BY_ID[META.s.heroes.sel] || HEROES[0]).apply(RUN);   // selected champion's run-long boon
+  if (META.s.mods.treasury) RUN.goldMult *= 1.2;            // expanded keep-upgrades
+  if (META.s.mods.warhorn)  RUN.rateMult *= 1.12;
   wave = 1;
-  wallMax = CONFIG.economy.wallBase + (META.s.mods.gate ? 25 : 0); wallHP = wallMax;
+  wallMax = CONFIG.economy.wallBase + (META.s.mods.gate ? 25 : 0) + (META.s.mods.bulwark ? 40 : 0); wallHP = wallMax;
   runKills = 0;
   enemies = []; projectiles = []; eprojs = []; particles = []; floaters = [];
   villagers = [makeVillager(), makeVillager(), makeVillager(), makeVillager(), makePrincess()];
@@ -1802,6 +1804,7 @@ const SHOP_ITEMS = [
   { id:'repair',    name:'Repair Wall',    desc:'restore +40 wall HP',  cost:30, buy:()=>{ wallHP = Math.min(wallMax, wallHP+40); } },
   { id:'reinforce', name:'Reinforce Wall', desc:'+25 max wall HP',       cost:55, buy:()=>{ wallMax += 25; wallHP += 25; } },
   { id:'supply',    name:'Supply Drop',    desc:'a Tier-2 tower piece',  cost:50, buy:()=>{ let i = hand.indexOf(null); if (i<0) i = selected!=null?selected:0; hand[i] = { shape:[[0,0]], type: TYPE_KEYS[(Math.random()*TYPE_KEYS.length)|0], rarity:0, tier:2 }; } },
+  { id:'mint',      name:'Mint Gems',      desc:'convert 100 gold → 3 gems', cost:100, buy:()=>{ META.s.gems += 3; META.save(); } },
 ];
 function buyShop(it){
   if (gold >= it.cost){ gold -= it.cost; it.buy(); sfx.coin(); floaters.push({ x:W/2, y:300, text:it.name+'!', t:0, dur:1.0, size:18, color:'#ffd95e' }); }
@@ -2830,7 +2833,7 @@ const META = (function(){
     mods: {},
     village: { granary:0, warehouse:0 },   // City/Meta: leveled idle upgrades
     heroes: { owned:['commander'], sel:'commander' },   // Hero spine: roster + selection
-    lastSeen: 0,
+    lastSeen: 0, lastFreeGem: 0,
     badges: {}, seenBadges: {},
     bestWave: 0,
     stats: { runs:0, kills:0, bossKills:0, fullClears:0, gemsEarned:0 },
@@ -2880,12 +2883,33 @@ const SKIN_CAT = {
     { id:'terrain_ember',   name:'Emberfall',   cost:130, wash:'rgba(255,120,40,0.17)' },
   ],
 };
+// Gem acquisition — a free daily claim + IAP-style bundles. DEMO ONLY: "purchases"
+// grant gems instantly with no real payment (clean-room monetization mock for the course).
+const GEM_PACKS = [
+  { id:'free',  name:'Daily Reward',  gems:25,   price:'FREE'  },
+  { id:'small', name:'Pouch of Gems', gems:100,  price:'$0.99' },
+  { id:'med',   name:'Sack of Gems',  gems:550,  price:'$4.99', best:'+10%' },
+  { id:'large', name:'Chest of Gems', gems:1200, price:'$9.99', best:'+20%' },
+];
+const FREE_GEM_COOLDOWN = 8 * 3.6e6;   // 8h
+function freeGemReady(){ return (Date.now() - (META.s.lastFreeGem || 0)) >= FREE_GEM_COOLDOWN; }
+function buyGems(pack){
+  if (pack.id === 'free'){
+    if (!freeGemReady()){ toast('Daily reward not ready yet'); return; }
+    META.s.lastFreeGem = Date.now();
+  }
+  META.s.gems += pack.gems; META.save();
+  toast((pack.id==='free' ? '+' : 'DEMO +') + pack.gems + ' gems'); sfx.coin();
+}
 const MOD_CAT = [
   { id:'coffers',  name:'Royal Coffers',    desc:'+20 starting gold each run', cost:100 },
   { id:'gate',     name:'Reinforced Gate',  desc:'+25 max wall HP',            cost:150 },
   { id:'fletcher', name:'Master Fletcher',  desc:'+12% tower damage',          cost:220 },
   { id:'quarter',  name:'Quartermaster',    desc:'Rerolls cost 10 (was 15)',   cost:120 },
   { id:'squire',   name:'Squire Training',  desc:'Start with a Lv.2 hero',     cost:180 },
+  { id:'treasury', name:'Treasury',         desc:'+20% gold from kills',       cost:200 },
+  { id:'bulwark',  name:'Bulwark',          desc:'+40 max wall HP',            cost:180 },
+  { id:'warhorn',  name:'War Horn',         desc:'+12% tower fire rate',       cost:240 },
 ];
 // Prestige: pure flex. Spend Gems, gain permanent Honor rank. One-time trophies.
 const PRESTIGE_CAT = [
@@ -3127,14 +3151,31 @@ function drawStoreRow(it, yy, owned, ownLabel){
     hit(W-120, yy+12, 100, 32, ()=>buyItem(it));
   }
 }
+function drawGemTab(){
+  chunkyText('Top up your Gems', W/2, 150, 12, '#9fe8ff', null, '600');
+  let yy = 166;
+  for (const pack of GEM_PACKS){
+    const isFree = pack.id === 'free', ready = isFree ? freeGemReady() : true;
+    orr(12, yy, W-24, 62, 12, 'rgba(255,255,255,0.12)', isFree ? '#7ed05f' : 'rgba(255,255,255,0.3)', isFree ? 3 : 2);
+    // big gem cluster icon
+    gemIcon(40, yy+24, 8); gemIcon(30, yy+40, 6); gemIcon(50, yy+40, 6);
+    chunkyText(pack.gems + ' Gems', 72, yy+24, 17, '#fff', null, '600', 'left');
+    chunkyText(pack.name + (pack.best ? '   ('+pack.best+' value)' : ''), 72, yy+45, 11, '#cfe0f5', null, '500', 'left');
+    const ok = isFree ? ready : true, label = isFree ? (ready ? 'CLAIM' : 'SOON') : pack.price;
+    chunkyBtn(W-128, yy+15, 108, 32, ok?'#ffce5a':'#b0ada6', ok?'#dba32c':'#8d8a83', ok?'#9c6f12':'#6e6b64', label, 15);
+    if (ok) hit(W-128, yy+15, 108, 32, ()=>buyGems(pack));
+    yy += 70;
+  }
+  chunkyText('Demo only — IAP bundles grant gems instantly, no real payment', W/2, yy+8, 10, '#aab4d0', null, '500');
+}
 function drawStore(){
   uiHits = []; menuBg(); menuHeader('ROYAL STORE');
   // tabs
-  const tabW = 148;
-  [['cos','COSMETICS',12],['mod','UPGRADES',166],['pre','PRESTIGE',320]].forEach(([id,label,tx])=>{
+  const tabW = 110;
+  [['cos','COSMETICS',12],['mod','UPGRADES',126],['pre','PRESTIGE',240],['gem','GEMS',354]].forEach(([id,label,tx])=>{
     const on = storeTab===id;
     orr(tx, 100, tabW, 34, 10, on?'#ffd95e':'rgba(43,40,70,0.7)', on?'#a8761c':'rgba(255,255,255,0.3)', 2.5);
-    chunkyText(label, tx+tabW/2, 118, 13, on?'#5a3a0a':'#fff', null, '600');
+    chunkyText(label, tx+tabW/2, 118, 12, on?'#5a3a0a':'#fff', null, '600');
     hit(tx, 100, tabW, 34, ()=>{ storeTab=id; });
   });
   if (storeTab === 'cos'){
@@ -3148,6 +3189,8 @@ function drawStore(){
     chunkyText('Permanent upgrades — bought once, always active', W/2, 148, 11, '#dfe6ff', null, '500');
     let yy = 162;
     MOD_CAT.forEach(m=>{ drawStoreRow(m, yy, !!META.s.mods[m.id], 'ACTIVE'); yy += 64; });
+  } else if (storeTab === 'gem'){
+    drawGemTab();
   } else {
     chunkyText('Spend Gems to raise your Honor rank: '+honorRank(), W/2, 148, 11, '#ffd95e', null, '600');
     let yy = 162;
@@ -3272,10 +3315,12 @@ function drawTitleMenu(){
   chunkyText('tap anywhere to play', W/2, 638, 12, '#eaf2ff', 'rgba(20,40,70,0.5)', '600');
   const champ = HERO_BY_ID[META.s.heroes.sel] || HEROES[0];
   chunkyText('Champion: ' + champ.name + ' — ' + champ.desc, W/2, 582, 10, '#ffe6a8', null, '500');
-  chunkyBtn(W/2-168, 662, 164, 46, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 22);
-  hit(W/2-168, 662, 164, 46, ()=>{ mode='store'; storeTab='cos'; });
-  chunkyBtn(W/2+4, 662, 164, 46, '#9fd0ff', '#3b80d2', '#234a7e', 'KINGDOM', 21);
-  hit(W/2+4, 662, 164, 46, ()=>{ mode='kingdom'; });
+  chunkyBtn(W/2-168, 662, 104, 46, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 17);
+  hit(W/2-168, 662, 104, 46, ()=>{ mode='store'; storeTab='cos'; });
+  chunkyBtn(W/2-50, 662, 100, 46, '#7fc4ff', '#3b80d2', '#2a5a9e', 'HEROES', 16);
+  hit(W/2-50, 662, 100, 46, ()=>{ mode='heroes'; });
+  chunkyBtn(W/2+64, 662, 104, 46, '#9fd0ff', '#3b80d2', '#234a7e', 'KINGDOM', 16);
+  hit(W/2+64, 662, 104, 46, ()=>{ mode='kingdom'; });
   if (hasNewBadge()){ ocirc(W/2+164, 660, 8, '#ff5e4d', '#fff', 2.5); }
 }
 </script>
