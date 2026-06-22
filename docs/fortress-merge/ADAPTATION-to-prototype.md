@@ -55,14 +55,14 @@ Verified with `node --check` (syntax clean). No assets added; pure logic + canva
 * **Buff/status engine** ✅ — `applyBuff`/`hasBuff`/`tickBuffs` with tunables in `CONFIG.buffs`; Slow (speed), Stun (freeze), Burn/Poison (DoT) applied to enemies via `hitEnemy`'s `fx` arg. Adds perks Wildfire/Venom/Concussion + per-status visual overlays. Mirrors Fortress Merge's `BuffId` system. See [buff-status-system](okf/systems/buff-status-system.md).
 * **Rarity axis** ✅ — pieces spawn Common or Rare (16%); rarity carries through placement and merge (`tryMerge` takes the group max; an all-rare merge promotes to Epic), multiplying tower damage (`CONFIG.rarity.dmgMult`). Shown via a corner gem on the grid and a colored outline in the tray. Mirrors Fortress Merge's `Rarity` enum. See [enums](okf/data-model/enums.md).
 * **Second mode (Boss Rush)** ✅ — a title toggle (Siege ↔ Boss Rush); `runMode` drives `bossRushWave()` (golem+brute escorts plus 1–2 bosses each wave) vs the standard `buildWave`. Mirrors Fortress Merge's mode-as-thin-variant-over-one-combat-core. See [game-modes](okf/systems/game-modes.md).
+* **Analytics logger** ✅ — `ANALYTICS.log(ev, data)` writes to console + `localStorage('foh_events')`. Emits `run_start`, `wave_start`, `wave_clear`, `perk`, and `run_over` (with the wave reached — the equivalent of FM's `player_lost_at_level_wave`). Inspect via `JSON.parse(localStorage.foh_events)`. See [analytics-events](okf/references/analytics-events.md).
 
 # What to adapt next (mapped to the blueprint)
 
 Prioritized follow-ons from [the blueprint](okf/blueprint/index.md), in rough ROI order:
 
-1. **Analytics logger** — emit `wave_start/clear/fail` + `lost_at_wave` to localStorage/console for balancing. See [analytics-events](okf/references/analytics-events.md).
-2. **Perk synergy sets** — themed clusters (Fortress Merge's "Wardrum") for build identity. See [perk-system](okf/systems/perk-system.md).
-3. **Hero & city/meta spines** — larger separate tracks (collectible heroes w/ gear/revive; idle village + base meta). See [hero-system](okf/systems/hero-system.md).
+1. **Perk synergy sets** — themed clusters (Fortress Merge's "Wardrum") for build identity. See [perk-system](okf/systems/perk-system.md).
+2. **Hero & city/meta spines** — larger separate tracks (collectible heroes w/ gear/revive; idle village + base meta). See [hero-system](okf/systems/hero-system.md).
 
 # How to run / test
 

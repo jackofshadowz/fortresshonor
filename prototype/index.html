@@ -184,6 +184,7 @@ function rollPerks(){
 }
 function choosePerk(p){
   p.apply(RUN); RUN.perks.push(p.id);
+  ANALYTICS.log('perk', { id: p.id, rarity: p.rarity });
   floaters.push({ x:W/2, y:300, text:p.name+'!', t:0, dur:1.3, size:24, color:RARITY_COL[p.rarity] });
   sfx.merge();
   mode = 'build'; banner('WAVE ' + wave, '#ffd95e');
@@ -246,6 +247,19 @@ let bestWave = +(localStorage.getItem('foh_best') || 0);
 let shake = 0, time = 0;
 const ptr = { x:0, y:0, down:false };
 
+/* ---------- analytics (local telemetry; mirrors Fortress Merge's event funnel) ----------
+   Events go to console + localStorage('foh_events'). The key balance signal is 'run_over'
+   with the wave reached — the equivalent of FM's player_lost_at_level_wave. Inspect in the
+   browser console with: JSON.parse(localStorage.foh_events) */
+const ANALYTICS = {
+  buf: [],
+  log(ev, data){
+    const rec = Object.assign({ ev, t: Math.round(time*10)/10 }, data || {});
+    this.buf.push(rec); if (this.buf.length > 300) this.buf.shift();
+    try { localStorage.setItem('foh_events', JSON.stringify(this.buf)); } catch(e){}
+    if (typeof console !== 'undefined') console.log('[FoH]', ev, data || '');
+  }
+};
 function reset(){
   grid = Array(ROWS*COLS).fill(null);
   // scatter obstacles to build around — clear them for gold if they're in the way
@@ -269,6 +283,7 @@ function reset(){
   breached = false;
   selected = null; sellTarget = null; heroSel = false;
   mode = 'build';
+  ANALYTICS.log('run_start', { mode: runMode });
   banner('WAVE ' + wave, '#ffd95e');
 }
 
@@ -508,6 +523,7 @@ function startFight(){
   spawnQueue = buildWave(wave);
   waveTotal = spawnQueue.length;
   fightT = 0; mode = 'fight';
+  ANALYTICS.log('wave_start', { wave, mode: runMode, enemies: waveTotal });
   for (const t of towers()){ t.g.maxhp = 24 + 28*t.g.tier*t.g.tier; t.g.hp = t.g.maxhp; }
   selected = null; sellTarget = null; hoverCell = null; heroSel = false;
   banner('DEFEND!', '#ff7b5e');
@@ -515,6 +531,7 @@ function startFight(){
 function waveCleared(){
   const flawless = !breached && wallHP >= wallMax;
   metaOnWaveCleared(flawless);
+  ANALYTICS.log('wave_clear', { wave, flawless });
   const bonus = Math.round((CONFIG.economy.waveBonusBase + CONFIG.economy.waveBonusPerWave*wave) * RUN.waveBonusMult);
   gold += bonus;
   floaters.push({ x:W/2, y:300, text:'+'+bonus+' gold', t:0, dur:1.4, size:24, color:'#ffd95e' });
@@ -2796,6 +2813,7 @@ function metaOnWaveCleared(flawless){
   checkBadges(); META.save();
 }
 function metaOnGameOver(){
+  ANALYTICS.log('run_over', { wave: wave-1, mode: runMode, kills: runKills });
   const earned = Math.max(0, (wave-1)*10 + runKills);   // Gems are the spendable reward
   META.s.gems += earned; META.s.stats.gemsEarned += earned;
   META.s.stats.runs++;
