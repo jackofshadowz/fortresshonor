@@ -86,9 +86,12 @@ Every adaptation is tagged by how directly it derives from the Fortress Merge te
 
 * 🔵 **Homepage tidy** — moved the Granary/Warehouse buy buttons + city-income rate + champion line off the cluttered title (they overlapped the island/castle) into the **Kingdom** hub. Homepage is now: wallet, rank, "earned while away" (only if >0), the island/castle/knight centerpiece, MODE toggle, and STORE/HEROES/KINGDOM. Village upgrade loop now lives in Kingdom.
 
+* 🟢 **Hero depth — levels** — each hero's boon now scales with a meta level (`META.s.heroes.lvl`, `apply(RUN, lvl)`, `eff(lvl)` for display); Heroes screen shows level + a **LVL UP** button (Gems, scaling cost); Kingdom champion row shows the leveled effect. (Gear/blueprints + revive-cost loop still pending — observed in FM.)
+
 # What to adapt next (mapped to the blueprint)
 
-1. **Hero depth** — gear/blueprints + per-hero levels + the revive-cost loop.
+1. **Merge clarity (UX)** — make the 3-connected → 1 merge legible (highlight matching clusters, "2/3" hint, placement preview). *(requested)*
+2. **Hero depth cont.** — gear/blueprints + revive-cost loop.
 
 # How to run / test
 

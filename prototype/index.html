@@ -300,7 +300,7 @@ function reset(){
   // store upgrades ("mods") apply at the start of every run
   gold = CONFIG.economy.startGold + (META.s.mods.coffers ? 20 : 0);
   RUN = freshRun(); perkChoices = [];
-  (HERO_BY_ID[META.s.heroes.sel] || HEROES[0]).apply(RUN);   // selected champion's run-long boon
+  { const h = HERO_BY_ID[META.s.heroes.sel] || HEROES[0]; h.apply(RUN, heroLvl(h.id)); }   // champion boon (scales with level)
   if (META.s.mods.treasury) RUN.goldMult *= 1.2;            // expanded keep-upgrades
   if (META.s.mods.warhorn)  RUN.rateMult *= 1.12;
   wave = 1;
@@ -2832,7 +2832,7 @@ const META = (function(){
     equip: { hero:'hero_blue', tower:'tower_mixed', banner:'banner_red', terrain:'terrain_verdant' },
     mods: {},
     village: { granary:0, warehouse:0 },   // City/Meta: leveled idle upgrades
-    heroes: { owned:['commander'], sel:'commander' },   // Hero spine: roster + selection
+    heroes: { owned:['commander'], sel:'commander', lvl:{ commander:1 } },   // Hero spine: roster + levels
     lastSeen: 0, lastFreeGem: 0,
     badges: {}, seenBadges: {},
     bestWave: 0,
@@ -2922,14 +2922,17 @@ const PRESTIGE_CAT = [
 // Hero roster — collectible champions; the selected one grants a run-long boon (Hero spine).
 // Observed in FM: a multi-hero collection (Baker/Berserker/Paladin/Elf Archer/Undertaker/King…).
 // Our heroes/effects are a clean-room interpretation (shared knight art for now).
+// each hero's boon scales with its meta level (lvl); eff() reports the current value for the UI
 const HEROES = [
-  { id:'commander',  name:'Commander',      rarity:'Common',   cost:0,   desc:'+12% tower damage',          apply:r=>r.dmgMult*=1.12 },
-  { id:'markswoman', name:'Markswoman',     rarity:'Uncommon', cost:150, desc:'+15% range, +10% fire rate', apply:r=>{ r.rangeMult*=1.15; r.rateMult*=1.10; } },
-  { id:'trader',     name:'Merchant Prince',rarity:'Uncommon', cost:250, desc:'+25% gold from kills',       apply:r=>r.goldMult*=1.25 },
-  { id:'pyromancer', name:'Pyromancer',     rarity:'Rare',     cost:400, desc:'tower hits set foes ablaze', apply:r=>r.burnDur=Math.max(r.burnDur,2) },
-  { id:'frostweaver',name:'Frostweaver',    rarity:'Rare',     cost:400, desc:'tower hits slow foes',       apply:r=>r.slowBonus+=0.5 },
+  { id:'commander',  name:'Commander',      rarity:'Common',   cost:0,   eff:l=>'+'+(12*l)+'% tower damage',            apply:(r,l)=>r.dmgMult*=1+0.12*l },
+  { id:'markswoman', name:'Markswoman',     rarity:'Uncommon', cost:150, eff:l=>'+'+(10*l)+'% range, +'+(7*l)+'% rate', apply:(r,l)=>{ r.rangeMult*=1+0.10*l; r.rateMult*=1+0.07*l; } },
+  { id:'trader',     name:'Merchant Prince',rarity:'Uncommon', cost:250, eff:l=>'+'+(18*l)+'% gold from kills',         apply:(r,l)=>r.goldMult*=1+0.18*l },
+  { id:'pyromancer', name:'Pyromancer',     rarity:'Rare',     cost:400, eff:l=>'tower hits burn ('+(1.5+0.7*l).toFixed(1)+'s)', apply:(r,l)=>r.burnDur=Math.max(r.burnDur,1.5+0.7*l) },
+  { id:'frostweaver',name:'Frostweaver',    rarity:'Rare',     cost:400, eff:l=>'tower hits slow (+'+(0.35*l).toFixed(2)+'s)',  apply:(r,l)=>r.slowBonus+=0.35*l },
 ];
 const HERO_BY_ID = {}; for (const h of HEROES) HERO_BY_ID[h.id] = h;
+function heroLvl(id){ return (META.s.heroes.lvl && META.s.heroes.lvl[id]) || 1; }
+function heroLvlCost(id){ return 80 * heroLvl(id); }
 
 // tag every catalog item with its slot on the ORIGINAL objects (store previews,
 // equip state, and buying all read it.slot — previously only the copies had it,
@@ -3249,17 +3252,20 @@ function drawHeroes(){
     orr(14, y, W-28, 74, 12, sel ? 'rgba(255,217,94,0.16)' : 'rgba(255,255,255,0.10)', sel ? '#ffd95e' : col, sel ? 3.5 : 2.5);
     ocirc(52, y+37, 22, owned ? col : '#5a6488', '#2a3050', 3);
     chunkyText(owned ? h.name[0] : '?', 52, y+38, 22, '#fff', '#101626');
-    chunkyText(h.name, 88, y+24, 17, '#fff', '#10131f', '700', 'left');
-    chunkyText(h.desc, 88, y+46, 12, '#cfe0f5', null, '500', 'left');
-    chunkyText(h.rarity.toUpperCase(), 88, y+63, 9, col, null, '600', 'left');
-    const bx = W-122, bw = 104, by = y+21, bh = 32;
-    if (sel){ chunkyText('SELECTED', bx+bw/2, by+bh/2+1, 13, '#ffd95e', null, '700'); }
-    else if (owned){
-      chunkyBtn(bx, by, bw, bh, '#5cc04c', '#41973a', '#2e6326', 'SELECT', 15);
-      hit(bx, by, bw, bh, ()=>{ META.s.heroes.sel = h.id; META.save(); sfx.place(); });
+    const lvl = heroLvl(h.id);
+    chunkyText(h.name + (owned ? '   Lv' + lvl : ''), 88, y+22, 16, '#fff', '#10131f', '700', 'left');
+    chunkyText(h.eff(owned ? lvl : 1), 88, y+44, 12, '#cfe0f5', null, '500', 'left');
+    chunkyText(h.rarity.toUpperCase(), 88, y+62, 9, col, null, '600', 'left');
+    const bx = W-122, bw = 104;
+    if (owned){
+      if (sel) chunkyText('SELECTED', bx+bw/2, y+18, 12, '#ffd95e', null, '700');
+      else { chunkyBtn(bx, y+8, bw, 26, '#5cc04c', '#41973a', '#2e6326', 'SELECT', 13); hit(bx, y+8, bw, 26, ()=>{ META.s.heroes.sel = h.id; META.save(); sfx.place(); }); }
+      const lc = heroLvlCost(h.id);
+      chunkyBtn(bx, y+40, bw, 26, '#7fc4ff', '#3b80d2', '#234a7e', 'LVL UP '+lc+'◆', 12);
+      hit(bx, y+40, bw, 26, ()=>{ if (spendGems(lc)){ META.s.heroes.lvl[h.id] = lvl+1; META.save(); toast(h.name+' Lv'+(lvl+1)+'!'); sfx.merge(); } else toast('Need '+lc+' gems'); });
     } else {
-      chunkyBtn(bx, by, bw, bh, '#ffce5a', '#dba32c', '#9c6f12', h.cost+'◆', 15);
-      hit(bx, by, bw, bh, ()=>{ if (spendGems(h.cost)){ META.s.heroes.owned.push(h.id); META.s.heroes.sel = h.id; META.save(); toast(h.name+' recruited!'); sfx.fanfare(); } else toast('Need '+h.cost+' gems'); });
+      chunkyBtn(bx, y+22, bw, 32, '#ffce5a', '#dba32c', '#9c6f12', h.cost+'◆', 15);
+      hit(bx, y+22, bw, 32, ()=>{ if (spendGems(h.cost)){ META.s.heroes.owned.push(h.id); META.s.heroes.sel = h.id; META.s.heroes.lvl[h.id] = 1; META.save(); toast(h.name+' recruited!'); sfx.fanfare(); } else toast('Need '+h.cost+' gems'); });
     }
     y += 82;
   }
@@ -3290,7 +3296,7 @@ function drawKingdom(){
   const prestigeOwned = META.s.owned.filter(id=>CATALOG_BY_ID[id] && CATALOG_BY_ID[id].slot==='prestige').length;
   const badgesGot = BADGES.filter(b=>META.s.badges[b.id]).length;
   const rows = [
-    ['Champion', champ.name + ' — ' + champ.desc],
+    ['Champion', champ.name + ' Lv' + heroLvl(champ.id) + ' — ' + champ.eff(heroLvl(champ.id))],
     ['City income', idleRate() + ' gems/hr  (cap ' + idleCapH() + 'h)'],
     ['Village', 'Granary Lv' + META.s.village.granary + '  ·  Warehouse Lv' + META.s.village.warehouse],
     ['Keep upgrades', modsOwned + ' / ' + MOD_CAT.length + ' active'],
