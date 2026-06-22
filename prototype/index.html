@@ -100,10 +100,101 @@ const TYPES = {
             dmg:4.5, rate:1.3, splash:0, slow:1.2, proj:'bolt' },
 };
 const TYPE_KEYS = Object.keys(TYPES);
-const TIER_DMG   = [1, 2.6, 7, 18, 45];
-const TIER_RANGE = [240, 330, 430, 560, 720];
-const MAX_TIER = 5;
-const SELL_VALUE = [3, 9, 24, 60, 150];
+
+/* ---------- CONFIG: the balance surface ----------
+   Adapted from Fortress Merge's remote-config model (see docs/fortress-merge/).
+   Gameplay numbers live here as DATA, separated from logic. In a shipped game this
+   object would be fetched/overridden from a server for A/B tuning; here it's a local
+   table you can edit to rebalance the whole game without touching code. */
+const CONFIG = {
+  economy: { startGold:30, wallBase:100, rerollCost:15,
+             waveBonusBase:25, waveBonusPerWave:8, waveWallRegen:12 },
+  tiers:   { dmg:[1, 2.6, 7, 18, 45], range:[240, 330, 430, 560, 720],
+             sell:[3, 9, 24, 60, 150], max:5 },
+  wave:    { baseCount:7, perWave:2.7, gapBase:1.4, gapPerWave:0.07, gapMin:0.35,
+             hpLin:0.42, hpQuad:0.032, bossEvery:5 },
+  enemies: {
+    grunt:  { hp:15,  spd:38, dps:5,  r:18, gold:2,  col:'#7ec850' },
+    runner: { hp:9,   spd:82, dps:4,  r:13, gold:2,  col:'#ff7ba6' },
+    brute:  { hp:62,  spd:23, dps:13, r:21, gold:7,  col:'#9db86a' },
+    raider: { hp:28,  spd:48, dps:8,  r:18, gold:4,  col:'#c9a2e8' },
+    sapper: { hp:34,  spd:30, dps:0,  r:17, gold:6,  col:'#ff9c6a' },
+    archer: { hp:18,  spd:34, dps:0,  r:16, gold:4,  col:'#e86a5a' },
+    bombardier: { hp:55, spd:26, dps:0, r:19, gold:9, col:'#b48355' },
+    golem:  { hp:170, spd:14, dps:20, r:24, gold:16, col:'#8a7a64' },
+    boss:   { hp:260, spd:15, dps:32, r:30, gold:34, col:'#8a7ae0' },
+  },
+};
+const TIER_DMG = CONFIG.tiers.dmg, TIER_RANGE = CONFIG.tiers.range, SELL_VALUE = CONFIG.tiers.sell;
+const MAX_TIER = CONFIG.tiers.max;
+
+/* ---------- roguelite perks ----------
+   Adapted from Fortress Merge's CPEffect draft layer (see docs/fortress-merge/).
+   Each perk is a small, stackable run-modifier with a uniform apply(). Drafted
+   1-of-3 between waves. Magnitudes live here as DATA — the combat/economy systems
+   just read RUN.*  (the data-driven-balance lesson from the teardown). */
+let RUN = null;
+function freshRun(){
+  return { dmgMult:1, rateMult:1, rangeMult:1, splashBonus:0, slowBonus:0,
+           goldMult:1, goldOnMerge:0, waveBonusMult:1, wallPerKill:0,
+           critChance:0, freeReroll:false, perks:[] };
+}
+const PERKS = [
+  // Common
+  { id:'sharpedge', name:'Sharpened Edges', rarity:'Common',  desc:'+15% tower damage',      apply:r=>r.dmgMult*=1.15 },
+  { id:'quickhands',name:'Quick Hands',     rarity:'Common',  desc:'+12% fire rate',         apply:r=>r.rateMult*=1.12 },
+  { id:'eagleeye',  name:'Eagle Eye',       rarity:'Common',  desc:'+12% tower range',       apply:r=>r.rangeMult*=1.12 },
+  { id:'merchant',  name:'Merchant',        rarity:'Common',  desc:'+30% gold from kills',   apply:r=>r.goldMult*=1.3 },
+  // Uncommon
+  { id:'mortar',    name:'Mortar Rounds',   rarity:'Uncommon',desc:'+22 splash to every tower', apply:r=>r.splashBonus+=22 },
+  { id:'frostbite', name:'Frostbite',       rarity:'Uncommon',desc:'every hit slows enemies',   apply:r=>r.slowBonus+=0.6 },
+  { id:'alchemy',   name:'Alchemy',         rarity:'Uncommon',desc:'+6 gold on every merge',    apply:r=>r.goldOnMerge+=6 },
+  { id:'masons',    name:'Master Masons',   rarity:'Uncommon',desc:'+30 wall, fully repaired',  apply:r=>{ wallMax+=30; wallHP=wallMax; } },
+  // Rare
+  { id:'keenaim',   name:'Keen Aim',        rarity:'Rare',    desc:'+18% crit chance (2× dmg)', apply:r=>r.critChance+=0.18 },
+  { id:'warchest',  name:'War Chest',       rarity:'Rare',    desc:'+60% wave-clear gold',      apply:r=>r.waveBonusMult*=1.6 },
+  { id:'bloodstone',name:'Bloodstone',      rarity:'Rare',    desc:'repair wall +1 per kill',   apply:r=>r.wallPerKill+=1 },
+  { id:'overwhelm', name:'Overwhelm',       rarity:'Rare',    desc:'+25% damage & +10% rate',   apply:r=>{ r.dmgMult*=1.25; r.rateMult*=1.10; } },
+  { id:'quarry',    name:'Free Quarry',     rarity:'Rare',    desc:'rerolls are free this run', apply:r=>r.freeReroll=true },
+];
+const RARITY_W   = { Common:5, Uncommon:3, Rare:1 };
+const RARITY_COL = { Common:'#9fb3c8', Uncommon:'#5cc04c', Rare:'#c9a2e8' };
+let perkChoices = [], perkBtns = [];
+function rollPerks(){
+  const used = new Set(), pick = [];
+  while (pick.length < 3){
+    const bag = [];
+    for (const p of PERKS){ if (used.has(p.id)) continue; for (let i=0;i<RARITY_W[p.rarity];i++) bag.push(p); }
+    if (!bag.length) break;
+    const p = bag[(Math.random()*bag.length)|0];
+    used.add(p.id); pick.push(p);
+  }
+  return pick;
+}
+function choosePerk(p){
+  p.apply(RUN); RUN.perks.push(p.id);
+  floaters.push({ x:W/2, y:300, text:p.name+'!', t:0, dur:1.3, size:24, color:RARITY_COL[p.rarity] });
+  sfx.merge();
+  mode = 'build'; banner('WAVE ' + wave, '#ffd95e');
+}
+function drawPerkDraft(){
+  ctx.fillStyle = 'rgba(20,28,46,0.64)'; ctx.fillRect(0,0,W,H);
+  chunkyText('CHOOSE A BLESSING', W/2, 152, 30, '#ffd95e', '#5a4a12');
+  chunkyText('Wave ' + (wave-1) + ' cleared — pick one', W/2, 184, 13, '#dfe6ff', null, '500');
+  perkBtns = [];
+  const cw = 364, ch = 94, gap = 16, x = (W-cw)/2; let y = 222;
+  for (const p of perkChoices){
+    const col = RARITY_COL[p.rarity];
+    orr(x, y, cw, ch, 16, '#2b3550', col, 4);
+    orr(x+12, y+12, 70, ch-24, 12, '#1f273c', col, 3);
+    chunkyText(p.rarity[0], x+47, y+ch/2+1, 30, col, '#101626');
+    chunkyText(p.name, x+98, y+33, 19, '#ffffff', '#10131f', '700', 'left');
+    chunkyText(p.desc, x+98, y+60, 14, '#cfe0f5', null, '500', 'left');
+    chunkyText(p.rarity.toUpperCase(), x+98, y+80, 10, col, null, '600', 'left');
+    perkBtns.push({ x, y, w:cw, h:ch, perk:p });
+    y += ch + gap;
+  }
+}
 
 /* ---------- piece shapes ---------- */
 const SHAPES = [
@@ -152,11 +243,16 @@ function reset(){
     grid[k] = { obstacle: Math.random()<0.75 ? 'tree' : 'rock' };
   }
   hand = [randPiece(), randPiece(), randPiece()];
-  gold = 30; wave = 1; wallMax = 100; wallHP = 100;
+  // store upgrades ("mods") apply at the start of every run
+  gold = CONFIG.economy.startGold + (META.s.mods.coffers ? 20 : 0);
+  RUN = freshRun(); perkChoices = [];
+  wave = 1;
+  wallMax = CONFIG.economy.wallBase + (META.s.mods.gate ? 25 : 0); wallHP = wallMax;
+  runKills = 0;
   enemies = []; projectiles = []; eprojs = []; particles = []; floaters = [];
   villagers = [makeVillager(), makeVillager(), makeVillager(), makeVillager(), makePrincess()];
   critters = [makeCritter('chicken'), makeCritter('chicken'), makeCritter('pig')];
-  hero = { x:(FIELD_L+FIELD_R)/2, y:GY+26, lvl:1, cd:0, slashT:0, sortie:false };
+  hero = { x:(FIELD_L+FIELD_R)/2, y:GY+26, lvl:(META.s.mods.squire ? 2 : 1), cd:0, slashT:0, sortie:false };
   breached = false;
   selected = null; sellTarget = null; heroSel = false;
   mode = 'build';
@@ -324,6 +420,10 @@ function tryMerge(c, r){
   }
   grid[idx(c,r)] = { type:g.type, tier:g.tier+1, pop:0.001 };
   floaters.push({ x:cellX(c)+CELL/2, y:cellY(r)+10, text:'LEVEL UP!', t:0, dur:0.9, size:20, color:'#ffd95e' });
+  if (RUN && RUN.goldOnMerge){
+    gold += RUN.goldOnMerge;
+    floaters.push({ x:cellX(c)+CELL/2, y:cellY(r)+26, text:'+'+RUN.goldOnMerge, t:0, dur:0.8, size:14, color:'#ffd95e' });
+  }
   sfx.merge(); shake = Math.max(shake, 5);
   tryMerge(c, r); // cascade
 }
@@ -342,9 +442,10 @@ function placeSelected(anchor){
 /* ---------- waves ---------- */
 function buildWave(w){
   const q = [];
-  const hpS = 1 + 0.42*(w-1) + 0.032*(w-1)*(w-1);
-  const count = 7 + Math.floor(w*2.7);
-  const gap = Math.max(0.35, 1.4 - w*0.07);
+  const wc = CONFIG.wave;
+  const hpS = 1 + wc.hpLin*(w-1) + wc.hpQuad*(w-1)*(w-1);
+  const count = wc.baseCount + Math.floor(w*wc.perWave);
+  const gap = Math.max(wc.gapMin, wc.gapBase - w*wc.gapPerWave);
   let t = 0.8;
   for (let i=0;i<count;i++){
     let kind = 'grunt';
@@ -359,21 +460,11 @@ function buildWave(w){
     q.push(makeEnemy(kind, hpS, t));
     t += gap * (0.7 + Math.random()*0.6);
   }
-  if (w % 5 === 0) q.push(makeEnemy('boss', hpS, t + 1.2));
+  if (w % CONFIG.wave.bossEvery === 0) q.push(makeEnemy('boss', hpS, t + 1.2));
   return q;
 }
 function makeEnemy(kind, hpS, at){
-  const base = {
-    grunt:  { hp:15,  spd:38, dps:5,  r:18, gold:2,  col:'#7ec850' },
-    runner: { hp:9,   spd:82, dps:4,  r:13, gold:2,  col:'#ff7ba6' },
-    brute:  { hp:62,  spd:23, dps:13, r:21, gold:7,  col:'#9db86a' },
-    raider: { hp:28,  spd:48, dps:8,  r:18, gold:4,  col:'#c9a2e8' },
-    sapper: { hp:34,  spd:30, dps:0,  r:17, gold:6,  col:'#ff9c6a' },
-    archer: { hp:18,  spd:34, dps:0,  r:16, gold:4,  col:'#e86a5a' },
-    bombardier: { hp:55, spd:26, dps:0, r:19, gold:9, col:'#b48355' },
-    golem:  { hp:170, spd:14, dps:20, r:24, gold:16, col:'#8a7a64' },
-    boss:   { hp:260, spd:15, dps:32, r:30, gold:34, col:'#8a7ae0' },
-  }[kind];
+  const base = CONFIG.enemies[kind];
   // emerge from the treeline at the island's top — never out on the water
   const sy = FIELD_TOP + 34 + Math.random()*52;
   const hw = islandHalfW(sy, 34);
@@ -393,10 +484,12 @@ function startFight(){
   banner('DEFEND!', '#ff7b5e');
 }
 function waveCleared(){
-  const bonus = 25 + 8*wave;
+  const flawless = !breached && wallHP >= wallMax;
+  metaOnWaveCleared(flawless);
+  const bonus = Math.round((CONFIG.economy.waveBonusBase + CONFIG.economy.waveBonusPerWave*wave) * RUN.waveBonusMult);
   gold += bonus;
   floaters.push({ x:W/2, y:300, text:'+'+bonus+' gold', t:0, dur:1.4, size:24, color:'#ffd95e' });
-  wallHP = Math.min(wallMax, wallHP + 12);
+  wallHP = Math.min(wallMax, wallHP + CONFIG.economy.waveWallRegen);
   if (breached){
     breached = false;
     wallHP = Math.max(wallHP, wallMax*0.5);
@@ -554,17 +647,20 @@ function updateFight(dt){
     g.cd = (g.cd||0) - dt;
     if (g.cd > 0) continue;
     const def = TYPES[g.type];
-    const range = TIER_RANGE[g.tier-1];
+    const range = TIER_RANGE[g.tier-1] * RUN.rangeMult;
     let best = null, bd = 1e9;
     for (const e of enemies){
       const d = Math.hypot(e.x-t.x, e.y-t.y);
       if (d < range && e.y < bd){ bd = e.y; best = e; } // prioritize closest to wall
     }
     if (best){
-      g.cd = 1/def.rate;
+      g.cd = 1/(def.rate * RUN.rateMult);
       g.recoil = 0.12;
+      let dmg = def.dmg * TIER_DMG[g.tier-1] * metaDmgMult() * RUN.dmgMult;
+      const crit = RUN.critChance > 0 && Math.random() < RUN.critChance;
+      if (crit) dmg *= 2;
       projectiles.push({ x:t.x, y:t.y-18, tgt:best, tx:best.x, ty:best.y,
-        dmg: def.dmg * TIER_DMG[g.tier-1], splash:def.splash, slow:def.slow,
+        dmg, crit, splash:def.splash + RUN.splashBonus, slow:def.slow + RUN.slowBonus,
         kind:def.proj, spd: def.proj==='ball' ? 330 : 480 });
       if (def.proj!=='arrow' || Math.random()<0.4) sfx.shoot();
     }
@@ -575,6 +671,7 @@ function updateFight(dt){
     const dx = p.tx-p.x, dy = p.ty-p.y, d = Math.hypot(dx,dy);
     if (d < 14){
       p.dead = true;
+      if (p.crit) floaters.push({ x:p.tx, y:p.ty-16, text:'CRIT!', t:0, dur:0.6, size:14, color:'#ffd95e' });
       if (p.splash){
         sfx.boom(); shake = Math.max(shake, 4);
         addFx('explosion', p.tx, p.ty, 0.65);
@@ -608,8 +705,11 @@ function updateFight(dt){
 
   enemies = enemies.filter(e => {
     if (e.hp > 0) return true;
-    gold += e.gold;
-    floaters.push({ x:e.x, y:e.y-10, text:'+'+e.gold, t:0, dur:0.8, size:15, color:'#ffd95e' });
+    const gain = Math.round(e.gold * RUN.goldMult);
+    gold += gain;
+    if (RUN.wallPerKill && !breached) wallHP = Math.min(wallMax, wallHP + RUN.wallPerKill);
+    metaOnKill(e);
+    floaters.push({ x:e.x, y:e.y-10, text:'+'+gain, t:0, dur:0.8, size:15, color:'#ffd95e' });
     addFx('dead', e.x, e.y + e.r*0.6, Math.max(0.45, e.r/30*0.6));
     puff(e.x, e.y, e.col); sfx.die();
     return false;
@@ -618,6 +718,7 @@ function updateFight(dt){
   // the city only falls when every building is razed
   if (breached && towers().length === 0){
     mode = 'over'; sfx.defeat(); shake = 12;
+    metaOnGameOver();
     return;
   }
   if (!spawnQueue.length && !enemies.length) waveCleared();
@@ -851,6 +952,10 @@ function drawWall(){
   // guard towers bookending the wall
   img('tower_b', wl+11, WALL_Y+42, 0.3);
   img('tower_b', wr-11, WALL_Y+42, 0.3);
+  // equipped banner pennants flying over the gate towers
+  const bc = bannerColor();
+  flag(wl+11, WALL_Y+24, 17, bc.color, bc.ink);
+  flag(wr-11, WALL_Y+24, 17, bc.color, bc.ink);
   // lancer guards flanking the gate on the courtyard side
   const lf = Math.floor(time*5)%6;
   spr('lancer_down', 320, 320, lf, 0, gx-32, WALL_Y+50, 0.17, false, 0.74);
@@ -1600,9 +1705,9 @@ function drawTray(){
     rotBtnRect = { x:rx-17, y:ry-17, w:34, h:34 };
   }
   // reroll
-  const rb = BTN.reroll, canRR = gold >= 15;
-  if (canRR) chunkyBtn(rb.x, rb.y, rb.w, rb.h, '#52b3f0', '#2f7fb5', '#1d5a8a', 'REROLL  −15', 15);
-  else chunkyBtn(rb.x, rb.y, rb.w, rb.h, '#b0ada6', '#8d8a83', '#6e6b64', 'REROLL  −15', 15);
+  const rb = BTN.reroll, rc = rerollCost(), canRR = gold >= rc;
+  if (canRR) chunkyBtn(rb.x, rb.y, rb.w, rb.h, '#52b3f0', '#2f7fb5', '#1d5a8a', 'REROLL  −'+rc, 15);
+  else chunkyBtn(rb.x, rb.y, rb.w, rb.h, '#b0ada6', '#8d8a83', '#6e6b64', 'REROLL  −'+rc, 15);
   // fight
   const fb = BTN.fight;
   const pulse = 1 + Math.sin(time*4)*0.02;
@@ -1875,13 +1980,26 @@ function drawTitle(){
   ctx.globalAlpha = 0.75 + Math.sin(time*3)*0.25;
   chunkyText('— tap to begin —', W/2, 784, 20, '#ff9c3f', '#fff', '600');
   ctx.globalAlpha = 1;
+  drawTitleMenu();
 }
 function drawOver(){
-  ctx.fillStyle = 'rgba(25,15,40,0.72)'; ctx.fillRect(0,0,W,H);
-  chunkyText('The City Has Fallen', W/2, 295, 42, '#ff5e6e', '#3a1020');
-  chunkyText('You held for ' + (wave-1) + ' wave' + (wave-1===1?'':'s'), W/2, 360, 21, '#fff', null, '600');
-  chunkyText('Best: ' + bestWave, W/2, 396, 19, '#ffd95e', null, '600');
-  chunkyBtn(W/2-105, 450, 210, 56, '#ff9c3f', '#d9742a', '#9c4f12', 'TRY AGAIN', 23);
+  uiHits = [];
+  ctx.fillStyle = 'rgba(25,15,40,0.78)'; ctx.fillRect(0,0,W,H);
+  chunkyText('The City Has Fallen', W/2, 244, 40, '#ff5e6e', '#3a1020');
+  chunkyText('You held for ' + (wave-1) + ' wave' + (wave-1===1?'':'s'), W/2, 304, 21, '#fff', null, '600');
+  chunkyText('Best: wave ' + bestWave + '   •   ' + honorRank(), W/2, 338, 16, '#ffd95e', null, '600');
+  // run rewards earned this run
+  orr(W/2-150, 366, 300, 62, 14, 'rgba(43,40,70,0.82)', 'rgba(255,255,255,0.25)', 2.5);
+  chunkyText('REWARDS', W/2, 383, 12, '#cfd6e2', null, '600');
+  gemIcon(W/2-72, 408, 9);  chunkyText('+'+lastEarn.gems, W/2-56, 409, 18, '#9fe8ff', null, '600', 'left');
+  honorIcon(W/2+28, 408, 9); chunkyText('+'+lastEarn.honor, W/2+44, 409, 18, '#ffd95e', null, '600', 'left');
+  drawWallet(W/2-95, 448);
+  chunkyBtn(W/2-105, 492, 210, 54, '#ff9c3f', '#d9742a', '#9c4f12', 'TRY AGAIN', 23);
+  hit(W/2-105, 492, 210, 54, ()=>reset());
+  chunkyBtn(W/2-160, 560, 150, 46, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 20);
+  hit(W/2-160, 560, 150, 46, ()=>{ mode='store'; storeTab='cos'; });
+  chunkyBtn(W/2+10, 560, 150, 46, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BADGES', 18);
+  hit(W/2+10, 560, 150, 46, ()=>{ mode='badges'; });
 }
 
 /* ============================================================
@@ -1912,8 +2030,13 @@ cv.addEventListener('pointerdown', ev => {
   ptr.x = p.x; ptr.y = p.y; ptr.down = true;
   downPos = p; downSlot = null;
 
-  if (mode === 'title'){ reset(); return; }
-  if (mode === 'over'){ if (inRect(p, {x:W/2-105,y:450,w:210,h:56})) reset(); return; }
+  if (mode === 'title'){ if (handleMenuTap(p)) return; reset(); return; }
+  if (mode === 'store' || mode === 'badges'){ handleMenuTap(p); return; }
+  if (mode === 'over'){ handleMenuTap(p); return; }
+  if (mode === 'perk'){
+    for (const b of perkBtns){ if (inRect(p, b)){ choosePerk(b.perk); return; } }
+    return;
+  }
   if (inRect(p, {x:W-44, y:11, w:36, h:36})){ muted = !muted; return; }
   if (mode === 'fight' && inRect(p, SORTIE_BTN)){
     hero.sortie = !hero.sortie;
@@ -1987,11 +2110,12 @@ cv.addEventListener('pointerdown', ev => {
   }
   // reroll
   if (inRect(p, BTN.reroll)){
-    if (gold >= 15){
-      gold -= 15; hand = [randPiece(), randPiece(), randPiece()];
+    const rc = RUN.freeReroll ? 0 : rerollCost();
+    if (gold >= rc){
+      gold -= rc; hand = [randPiece(), randPiece(), randPiece()];
       selected = null; sfx.reroll();
     } else {
-      floaters.push({ x:BTN.reroll.x+BTN.reroll.w/2, y:BTN.reroll.y-8, text:'need 15g', t:0, dur:0.8, size:14, color:'#ff8d7e' });
+      floaters.push({ x:BTN.reroll.x+BTN.reroll.w/2, y:BTN.reroll.y-8, text:'need '+rc+'g', t:0, dur:0.8, size:14, color:'#ff8d7e' });
     }
     return;
   }
@@ -2065,19 +2189,26 @@ function frame(now){
     requestAnimationFrame(frame);
     return;
   }
+  if (mode === 'store' || mode === 'badges'){
+    (mode === 'store' ? drawStore : drawBadges)();
+    ctx.restore();
+    requestAnimationFrame(frame);
+    return;
+  }
 
   if (mode === 'fight') updateFight(dt);
   updateVillagers(dt);
   updateHero(dt);
   if (mode === 'clear'){
     clearT += dt;
-    if (clearT > 1.4){ mode = 'build'; banner('WAVE ' + wave, '#ffd95e'); }
+    if (clearT > 1.1){ perkChoices = rollPerks(); mode = 'perk'; }
   }
 
   drawSea();
   drawClouds();
   drawGulls();
   drawIsland();
+  metaTerrainWash();
   drawGrid();
   drawCorpses();
   drawWall();
@@ -2095,6 +2226,7 @@ function frame(now){
     drawTrayPiece(hand[selected], ptr.x, ptr.y - 30, 70, false);
   }
   drawHUD();
+  if (mode === 'perk') drawPerkDraft();
   drawFloaters(dt);
   if (mode === 'over') drawOver();
 
@@ -2234,21 +2366,28 @@ function drawTree(x, y, s, seed){
 const BCOL = { archer:'b', cannon:'r', frost:'p' };
 function drawBuilding(x, y, type, tier, recoil, noBadge){
   const cx = x+CELL/2, baseY = y+CELL-2;
-  // distinct silhouettes per line: house → guild hall → tower → castle
-  const BSPRITE = {
-    archer: ['house1_b','archery_b','tower_b','castle_b','castle_b'],
-    cannon: ['house2_r','barracks_r','tower_r','castle_r','castle_r'],
-    frost:  ['house3_p','monastery_p','tower_p','castle_p','castle_p'],
-  }[type];
-  const BSCALE = [0.42, 0.30, 0.38, 0.26, 0.34];
-  ctx.save(); ctx.translate(0, recoil ? recoil*8 : 0);
-  if (tier===5){
-    aura(cx, baseY-34, 46, TYPES[type].trim);
-    img(BSPRITE[4], cx, baseY, 0.34);
-    star(cx, baseY-92, 7, '#ffd95e', '#a8761c');
+  const skin = metaEquip('tower');
+  let sprite, scale, glow = false;
+  if (skin && skin.suffix){
+    // equipped colour theme: uniform house → tower → castle in one livery
+    const suf = skin.suffix;
+    sprite = ['house_'+suf,'tower_'+suf,'tower_'+suf,'castle_'+suf,'castle_'+suf][tier-1];
+    scale  = [0.42, 0.34, 0.40, 0.28, 0.34][tier-1];
+    glow   = !!skin.glow;
   } else {
-    img(BSPRITE[tier-1], cx, baseY, BSCALE[tier-1] * (BSPRITE[tier-1]==='monastery_p' ? 0.92 : 1));
+    // default "Trinity": distinct silhouettes per line — house → guild hall → tower → castle
+    const BSPRITE = {
+      archer: ['house1_b','archery_b','tower_b','castle_b','castle_b'],
+      cannon: ['house2_r','barracks_r','tower_r','castle_r','castle_r'],
+      frost:  ['house3_p','monastery_p','tower_p','castle_p','castle_p'],
+    }[type];
+    sprite = tier===5 ? BSPRITE[4] : BSPRITE[tier-1];
+    scale  = tier===5 ? 0.34 : [0.42,0.30,0.38,0.26,0.34][tier-1] * (BSPRITE[tier-1]==='monastery_p' ? 0.92 : 1);
   }
+  ctx.save(); ctx.translate(0, recoil ? recoil*8 : 0);
+  if (tier===5 || glow) aura(cx, baseY-34, 46, glow ? '#ffe08a' : TYPES[type].trim);
+  img(sprite, cx, baseY, scale);
+  if (tier===5) star(cx, baseY-92, 7, '#ffd95e', '#a8761c');
   ctx.restore();
   if (!noBadge) badge(cx-17, baseY-8, tier);
 }
@@ -2384,14 +2523,15 @@ function drawVillagers(){
 }
 function drawChibiKnight(x, y, s){
   const f = Math.floor(time*7)%6;
-  spr('warrior_b', 192, 192, f, 0, x, y+30, 0.6*s, false, 0.76);
+  spr(heroSprite(), 192, 192, f, 0, x, y+30, 0.6*s, false, 0.76);
 }
 function drawHero(){
   if (!hero || mode === 'title') return;
+  const hspr = heroSprite();
   knights.forEach((k, i) => {
     const row = k.slashT > 0 ? 2 : (k.mv ? 1 : 0);
     const f = k.slashT > 0 ? (5 - Math.floor(k.slashT/0.16*5)) % 6 : Math.floor(time*8 + i*2)%6;
-    spr('warrior_b', 192, 192, f, row, k.x, k.y+8, 0.42, k.face < 0, 0.76);
+    spr(hspr, 192, 192, f, row, k.x, k.y+8, 0.42, k.face < 0, 0.76);
   });
   badge(hero.x-14, hero.y+4, hero.lvl);
   if (heroSel && mode === 'build') orr(hero.x-20, hero.y-38, 40, 50, 10, null, '#ffd95e', 3);
@@ -2457,6 +2597,310 @@ function drawTrayPiece(piece, sx, sy, size, dim){
     orr(bx+1, by+1, cs-2, cs-2, 7, '#9ed468', '#6aa844', 2.5);
     img({archer:'house1_b', cannon:'house2_r', frost:'house3_p'}[piece.type], mx, by+cs-3, 0.19);
   }
+}
+
+/* ============================================================
+   META PROGRESSION — Honor & Gems, Store, Badges
+   Persistent across runs in localStorage 'foh_save'.
+   Honor: soft currency, earned every run.
+   Gems:  premium currency, earned from badge unlocks.
+   ============================================================ */
+const META = (function(){
+  const DEFAULT = {
+    honor: 0, gems: 0,
+    owned: ['hero_blue','tower_mixed','banner_red','terrain_verdant'],
+    equip: { hero:'hero_blue', tower:'tower_mixed', banner:'banner_red', terrain:'terrain_verdant' },
+    mods: {},
+    badges: {}, seenBadges: {},
+    bestWave: 0,
+    stats: { runs:0, kills:0, bossKills:0, fullClears:0, gemsEarned:0 },
+  };
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem('foh_save')); } catch(e){ s = null; }
+  if (!s || typeof s !== 'object'){
+    s = JSON.parse(JSON.stringify(DEFAULT));
+    const oldBest = +(localStorage.getItem('foh_best') || 0);
+    if (oldBest) s.bestWave = oldBest;
+  } else {
+    for (const k in DEFAULT) if (s[k] === undefined) s[k] = JSON.parse(JSON.stringify(DEFAULT[k]));
+    for (const k in DEFAULT.stats) if (s.stats[k] === undefined) s.stats[k] = 0;
+  }
+  function save(){ try { localStorage.setItem('foh_save', JSON.stringify(s)); } catch(e){} }
+  return { s, save };
+})();
+// keep the legacy bestWave display in sync with the save blob
+bestWave = Math.max(bestWave, META.s.bestWave); META.s.bestWave = bestWave;
+
+/* ---------- catalogue ----------
+   Gems are the spendable currency (earned from runs + badges-adjacent grind).
+   Honor is an un-spendable prestige RANK; you raise it by spending Gems on
+   Prestige items, and by earning badges. ---------- */
+const SKIN_CAT = {
+  hero: [
+    { id:'hero_blue',  name:'Azure Knight',   cost:0 },
+    { id:'hero_red',   name:'Crimson Knight', cost:120, sprite:'warrior_r' },
+  ],
+  tower: [
+    { id:'tower_mixed',   name:'Trinity',        cost:0 },
+    { id:'tower_azure',   name:'Azure Order',    cost:90,  suffix:'b' },
+    { id:'tower_crimson', name:'Crimson Legion', cost:90,  suffix:'r' },
+    { id:'tower_violet',  name:'Violet Coven',   cost:140, suffix:'p' },
+    { id:'tower_gold',    name:'Golden Crown',   cost:220, suffix:'b', glow:true },
+  ],
+  banner: [
+    { id:'banner_red',   name:'Scarlet',     cost:0,  color:'#ff5e6e', ink:'#9c2433' },
+    { id:'banner_blue',  name:'Royal Blue',  cost:50, color:'#52b3f0', ink:'#1d5a8a' },
+    { id:'banner_green', name:'Emerald',     cost:50, color:'#7ed05f', ink:'#3f8a2e' },
+    { id:'banner_gold',  name:'Gold Pennant',cost:90, color:'#ffd95e', ink:'#a8761c' },
+  ],
+  terrain: [
+    { id:'terrain_verdant', name:'Verdant',     cost:0 },
+    { id:'terrain_dusk',    name:'Dusk',        cost:80,  wash:'rgba(120,70,160,0.18)' },
+    { id:'terrain_snow',    name:'Winterhold',  cost:80,  wash:'rgba(200,225,255,0.30)' },
+    { id:'terrain_ember',   name:'Emberfall',   cost:130, wash:'rgba(255,120,40,0.17)' },
+  ],
+};
+const MOD_CAT = [
+  { id:'coffers',  name:'Royal Coffers',    desc:'+20 starting gold each run', cost:100 },
+  { id:'gate',     name:'Reinforced Gate',  desc:'+25 max wall HP',            cost:150 },
+  { id:'fletcher', name:'Master Fletcher',  desc:'+12% tower damage',          cost:220 },
+  { id:'quarter',  name:'Quartermaster',    desc:'Rerolls cost 10 (was 15)',   cost:120 },
+  { id:'squire',   name:'Squire Training',  desc:'Start with a Lv.2 hero',     cost:180 },
+];
+// Prestige: pure flex. Spend Gems, gain permanent Honor rank. One-time trophies.
+const PRESTIGE_CAT = [
+  { id:'p_statue',   name:'Bronze Statue',   desc:'A likeness in the square',  cost:120,  honor:50 },
+  { id:'p_fountain', name:'Marble Fountain', desc:'The courtyard glitters',    cost:280,  honor:120 },
+  { id:'p_garden',   name:'Royal Gardens',   desc:'Envy of every realm',       cost:600,  honor:280 },
+  { id:'p_cathedral',name:'Grand Cathedral', desc:'Spires touch the clouds',   cost:1200, honor:600 },
+  { id:'p_throne',   name:'Golden Throne',   desc:'Fit for a true sovereign',  cost:2500, honor:1400 },
+];
+const CATALOG_BY_ID = {};
+for (const k in SKIN_CAT) for (const it of SKIN_CAT[k]) CATALOG_BY_ID[it.id] = Object.assign({ slot:k }, it);
+for (const m of MOD_CAT) CATALOG_BY_ID[m.id] = Object.assign({ slot:'mod' }, m);
+for (const p of PRESTIGE_CAT) CATALOG_BY_ID[p.id] = Object.assign({ slot:'prestige' }, p);
+
+// Honor ranks — your title scales with prestige
+const RANKS = [[0,'Peasant'],[50,'Squire'],[150,'Knight'],[350,'Baron'],[700,'Earl'],[1300,'Duke'],[2600,'Sovereign']];
+function honorRank(){ let r='Peasant'; for (const t of RANKS) if (META.s.honor >= t[0]) r = t[1]; return r; }
+
+const BADGES = [
+  { id:'first_blood', name:'First Blood',  desc:'Defeat a foe',        honor:10,  test:s=>s.stats.kills>=1 },
+  { id:'centurion',   name:'Centurion',    desc:'100 foes felled',     honor:25,  test:s=>s.stats.kills>=100 },
+  { id:'slayer',      name:'Slayer',       desc:'500 foes felled',     honor:60,  test:s=>s.stats.kills>=500 },
+  { id:'giantslayer', name:'Giant-Slayer', desc:'Fell a boss',         honor:30,  test:s=>s.stats.bossKills>=1 },
+  { id:'veteran',     name:'Veteran',      desc:'Reach wave 5',        honor:25,  test:s=>s.bestWave>=5 },
+  { id:'warlord',     name:'Warlord',      desc:'Reach wave 10',       honor:50,  test:s=>s.bestWave>=10 },
+  { id:'legend',      name:'Legend',       desc:'Reach wave 15',       honor:100, test:s=>s.bestWave>=15 },
+  { id:'flawless',    name:'Flawless',     desc:'Clear at full wall',  honor:30,  test:s=>s.stats.fullClears>=1 },
+  { id:'collector',   name:'Collector',    desc:'Own 6 cosmetics',     honor:40,  test:s=>s.owned.filter(id=>{ const c=CATALOG_BY_ID[id]; return c && c.slot!=='prestige'; }).length>=6 },
+  { id:'tycoon',      name:'Tycoon',       desc:'Earn 1000 Gems',      honor:50,  test:s=>s.stats.gemsEarned>=1000 },
+];
+
+/* ---------- equipped-loadout accessors (used by the render layer) ---------- */
+function metaEquip(slot){ return CATALOG_BY_ID[META.s.equip[slot]]; }
+function heroSprite(){ const h = metaEquip('hero'); return (h && h.sprite) || 'warrior_b'; }
+function bannerColor(){ const b = metaEquip('banner'); return b ? { color:b.color, ink:b.ink } : { color:'#ff5e6e', ink:'#9c2433' }; }
+function rerollCost(){ return META.s.mods.quarter ? 10 : CONFIG.economy.rerollCost; }
+function metaDmgMult(){ return META.s.mods.fletcher ? 1.12 : 1; }
+function metaTerrainWash(){ const t = metaEquip('terrain'); if (t && t.wash){ ctx.fillStyle = t.wash; ctx.fillRect(0,0,W,H); } }
+
+/* ---------- run economy & badges ---------- */
+let runKills = 0;
+let lastEarn = { honor:0, gems:0 };
+function metaOnKill(e){
+  runKills++; META.s.stats.kills++;
+  if (e.kind === 'boss') META.s.stats.bossKills++;
+}
+function metaOnWaveCleared(flawless){
+  if (flawless) META.s.stats.fullClears++;
+  if (wave-1 > META.s.bestWave) META.s.bestWave = wave-1;
+  checkBadges(); META.save();
+}
+function metaOnGameOver(){
+  const earned = Math.max(0, (wave-1)*10 + runKills);   // Gems are the spendable reward
+  META.s.gems += earned; META.s.stats.gemsEarned += earned;
+  META.s.stats.runs++;
+  if (wave-1 > META.s.bestWave) META.s.bestWave = wave-1;
+  const beforeHonor = META.s.honor;
+  checkBadges();
+  lastEarn = { gems: earned, honor: META.s.honor - beforeHonor };
+  META.save();
+}
+function checkBadges(){
+  let newly = [];
+  for (const b of BADGES){
+    if (!META.s.badges[b.id] && b.test(META.s)){
+      META.s.badges[b.id] = true; META.s.honor += b.honor; newly.push(b);  // badges raise your rank
+    }
+  }
+  if (newly.length){
+    banner('BADGE EARNED!', '#ffd95e');
+    floaters.push({ x:W/2, y:300, text:newly[0].name+'  +'+newly[0].honor+' Honor', t:0, dur:1.6, size:18, color:'#ffd95e' });
+    sfx.fanfare();
+  }
+  return newly;
+}
+function hasNewBadge(){ return BADGES.some(b => META.s.badges[b.id] && !META.s.seenBadges[b.id]); }
+
+/* ---------- store transactions ---------- */
+let menuToast = null;
+function toast(t){ menuToast = { text:t, until: time + 1.4 }; }
+function spendGems(cost){ if (META.s.gems < cost) return false; META.s.gems -= cost; return true; }
+function buyItem(it){
+  if (it.slot === 'mod'){
+    if (META.s.mods[it.id]) return;
+    if (spendGems(it.cost)){ META.s.mods[it.id] = true; META.save(); toast(it.name+' unlocked!'); sfx.merge(); checkBadges(); }
+    else { toast('Not enough gems'); sfx.thud(); }
+    return;
+  }
+  if (it.slot === 'prestige'){
+    if (META.s.owned.includes(it.id)) return;
+    if (spendGems(it.cost)){ META.s.owned.push(it.id); META.s.honor += it.honor; META.save(); toast('+'+it.honor+' Honor — '+honorRank()+'!'); sfx.fanfare(); checkBadges(); }
+    else { toast('Not enough gems'); sfx.thud(); }
+    return;
+  }
+  if (it.cost === 0 || META.s.owned.includes(it.id)){
+    META.s.equip[it.slot] = it.id; META.save(); sfx.place(); return;
+  }
+  if (spendGems(it.cost)){
+    META.s.owned.push(it.id); META.s.equip[it.slot] = it.id; META.save();
+    toast(it.name+' equipped!'); sfx.merge(); checkBadges();
+  } else { toast('Not enough gems'); sfx.thud(); }
+}
+
+/* ============================================================
+   META UI — wallet, store, badges (immediate-mode, like the HUD)
+   ============================================================ */
+let uiHits = [], storeTab = 'cos';
+function hit(x,y,w,h,fn){ uiHits.push({ x,y,w,h,fn }); }
+function handleMenuTap(p){ for (const h of uiHits){ if (inRect(p,h)){ h.fn(); return true; } } return false; }
+function honorIcon(x,y,r){ star(x,y,r,'#ffd95e','#a8761c'); glint(x-r*0.3,y-r*0.3,r*0.22); }
+function gemIcon(x,y,r){
+  opoly([[x,y-r],[x+r*0.85,y-r*0.25],[x,y+r],[x-r*0.85,y-r*0.25]], '#7fe0ff', '#2a8fc0', 2);
+  opoly([[x,y-r],[x+r*0.85,y-r*0.25],[x,y]], 'rgba(255,255,255,0.55)', null);
+}
+function drawWallet(x, y){
+  // Gems — the spendable currency (left, primary)
+  pillBg(x, y, 86, 30); gemIcon(x+17, y+15, 9);
+  chunkyText(META.s.gems, x+31, y+16, 14, '#9fe8ff', null, '600', 'left');
+  // Honor — prestige rank (right)
+  pillBg(x+94, y, 96, 30); honorIcon(x+110, y+15, 9);
+  chunkyText(META.s.honor, x+124, y+16, 14, '#ffd95e', null, '600', 'left');
+}
+function menuBg(){
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#3a4d8a'); g.addColorStop(0.5,'#5a6fae'); g.addColorStop(1,'#7a8fc8');
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  for (let i=0;i<20;i++){
+    const x=(i*167.3)%W, y=(i*97.7)%H;
+    ctx.globalAlpha=(0.15+0.5*Math.abs(Math.sin(time*1.2+i)))*0.4;
+    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(x,y,(i%3)*0.4+1,0,7); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+}
+function menuHeader(title){
+  chunkyText(title, W/2, 36, 28, '#ffd95e', '#5a3a0a');
+  drawWallet(W/2-95, 58);
+  chunkyBtn(12, 50, 88, 36, '#52b3f0', '#2f7fb5', '#1d5a8a', '‹ BACK', 16);
+  hit(12, 50, 88, 36, ()=>{ mode='title'; });
+}
+function drawMenuToast(){
+  if (menuToast && time < menuToast.until){
+    orr(W/2-120, 700, 240, 38, 13, 'rgba(43,40,70,0.92)', '#ffd95e', 2.5);
+    chunkyText(menuToast.text, W/2, 719, 14, '#fff', null, '600');
+  }
+}
+function chipPreview(it, cx, cy){
+  if (it.slot === 'hero'){ spr(it.sprite||'warrior_b', 192,192, Math.floor(time*6)%6, 0, cx, cy+12, 0.15, false, 0.76); }
+  else if (it.slot === 'tower'){ img('tower_'+(it.suffix||'b'), cx, cy+14, 0.15); if (it.glow) star(cx, cy-12, 5, '#ffe08a', '#a8761c'); }
+  else if (it.slot === 'banner'){ flag(cx, cy+13, 16, it.color, it.ink); }
+  else { orr(cx-15,cy-7,30,22,5,'#8bd05e','#5fa83c',2); if (it.wash){ ctx.fillStyle=it.wash; rr(cx-15,cy-7,30,22,5); ctx.fill(); } }
+}
+function drawChip(it, x, y, w, h){
+  const owned = it.cost===0 || META.s.owned.includes(it.id);
+  const equipped = META.s.equip[it.slot] === it.id;
+  orr(x, y, w, h, 10, 'rgba(255,255,255,0.14)', equipped?'#ffd95e':(owned?'#7ed05f':'#cfd6e2'), equipped?3.5:2.5);
+  chipPreview(it, x+w/2, y+20);
+  chunkyText(it.name, x+w/2, y+h-20, 9.5, '#fff', null, '600');
+  if (equipped) chunkyText('EQUIPPED', x+w/2, y+h-8, 8, '#ffd95e', null, '600');
+  else if (owned) chunkyText('TAP TO USE', x+w/2, y+h-8, 8, '#7ed05f', null, '600');
+  else {
+    gemIcon(x+w/2-13, y+h-8, 5);
+    chunkyText(it.cost, x+w/2+1, y+h-8, 9, '#9fe8ff', null, '600', 'left');
+  }
+  hit(x, y, w, h, ()=>buyItem(it));
+}
+function drawStoreRow(it, yy, owned, ownLabel){
+  const afford = META.s.gems >= it.cost;
+  orr(12, yy, W-24, 56, 12, 'rgba(255,255,255,0.12)', owned?'#7ed05f':'rgba(255,255,255,0.3)', owned?3:2);
+  chunkyText(it.name, 26, yy+20, 15, '#fff', null, '600', 'left');
+  chunkyText(it.desc, 26, yy+39, 11, '#dfe6ff', null, '500', 'left');
+  if (it.honor) chunkyText('+'+it.honor+' Honor', W-150, yy+39, 10, '#ffd95e', null, '600', 'left');
+  if (owned) chunkyText(ownLabel, W-58, yy+30, 14, '#7ed05f', null, '600');
+  else {
+    chunkyBtn(W-120, yy+12, 100, 32, afford?'#ffce5a':'#b0ada6', afford?'#dba32c':'#8d8a83', afford?'#9c6f12':'#6e6b64', 'BUY '+it.cost, 14);
+    hit(W-120, yy+12, 100, 32, ()=>buyItem(it));
+  }
+}
+function drawStore(){
+  uiHits = []; menuBg(); menuHeader('ROYAL STORE');
+  // tabs
+  const tabW = 148;
+  [['cos','COSMETICS',12],['mod','UPGRADES',166],['pre','PRESTIGE',320]].forEach(([id,label,tx])=>{
+    const on = storeTab===id;
+    orr(tx, 100, tabW, 34, 10, on?'#ffd95e':'rgba(43,40,70,0.7)', on?'#a8761c':'rgba(255,255,255,0.3)', 2.5);
+    chunkyText(label, tx+tabW/2, 118, 13, on?'#5a3a0a':'#fff', null, '600');
+    hit(tx, 100, tabW, 34, ()=>{ storeTab=id; });
+  });
+  if (storeTab === 'cos'){
+    let yy = 150;
+    [['hero','Hero'],['tower','Towers'],['banner','Banners'],['terrain','Terrain']].forEach(([slot,label])=>{
+      chunkyText(label, 18, yy, 15, '#fff', null, '600', 'left');
+      SKIN_CAT[slot].forEach((it,i)=>{ drawChip(it, 12+i*92, yy+8, 88, 58); });
+      yy += 86;
+    });
+  } else if (storeTab === 'mod'){
+    chunkyText('Permanent upgrades — bought once, always active', W/2, 148, 11, '#dfe6ff', null, '500');
+    let yy = 162;
+    MOD_CAT.forEach(m=>{ drawStoreRow(m, yy, !!META.s.mods[m.id], 'ACTIVE'); yy += 64; });
+  } else {
+    chunkyText('Spend Gems to raise your Honor rank: '+honorRank(), W/2, 148, 11, '#ffd95e', null, '600');
+    let yy = 162;
+    PRESTIGE_CAT.forEach(p=>{ drawStoreRow(p, yy, META.s.owned.includes(p.id), 'OWNED'); yy += 64; });
+  }
+  drawMenuToast();
+}
+function drawBadges(){
+  uiHits = []; menuBg(); menuHeader('BADGES');
+  let changed = false;
+  for (const b of BADGES) if (META.s.badges[b.id] && !META.s.seenBadges[b.id]){ META.s.seenBadges[b.id]=true; changed=true; }
+  if (changed) META.save();
+  const got = BADGES.filter(b=>META.s.badges[b.id]).length;
+  chunkyText(got+' / '+BADGES.length+' earned', W/2, 116, 14, '#fff', null, '600');
+  const cols=3, cw=148, ch=104, gx=14, gy=140, gap=8;
+  BADGES.forEach((b,i)=>{
+    const x=gx+(i%cols)*(cw+gap), y=gy+Math.floor(i/cols)*(ch+gap), have=!!META.s.badges[b.id];
+    orr(x, y, cw, ch, 12, 'rgba(255,255,255,0.12)', have?'#ffd95e':'rgba(255,255,255,0.22)', have?3:2);
+    ocirc(x+cw/2, y+30, 18, have?'#ffd95e':'#5a6488', have?'#a8761c':'#3a4060', 3);
+    if (have) star(x+cw/2, y+30, 10, '#fff', '#a8761c');
+    else chunkyText('?', x+cw/2, y+31, 18, '#aab4d0', null, '700');
+    chunkyText(b.name, x+cw/2, y+58, 11, have?'#fff':'#aab4d0', null, '600');
+    chunkyText(b.desc, x+cw/2, y+73, 8.5, have?'#dfe6ff':'#8a93b8', null, '500');
+    honorIcon(x+cw/2-16, y+91, 5);
+    chunkyText('+'+b.honor+' Honor', x+cw/2-6, y+92, 9, '#ffd95e', null, '600', 'left');
+  });
+  drawMenuToast();
+}
+function drawTitleMenu(){
+  uiHits = [];
+  drawWallet(W/2-95, 10);
+  chunkyText('Rank: ' + honorRank(), W/2, 54, 13, '#ffd95e', '#5a3a0a', '600');
+  chunkyBtn(W/2-168, 662, 160, 46, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 22);
+  hit(W/2-168, 662, 160, 46, ()=>{ mode='store'; storeTab='cos'; });
+  chunkyBtn(W/2+8, 662, 160, 46, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BADGES', 20);
+  hit(W/2+8, 662, 160, 46, ()=>{ mode='badges'; });
+  if (hasNewBadge()){ ocirc(W/2+160, 660, 8, '#ff5e4d', '#fff', 2.5); }
 }
 </script>
 </body>
