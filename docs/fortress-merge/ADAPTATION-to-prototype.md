@@ -78,9 +78,11 @@ Every adaptation is tagged by how directly it derives from the Fortress Merge te
 * 🔵 **Building identification (UX)** — every tower now shows a **role emblem** (`typeGlyph`: bow=archer, cannonball=cannon, snowflake=frost) in-game and on tray pieces, and the selected-building panel shows its **name + role + damage**. Fixes "which building is which" — works even when a tower skin makes all three share a sprite.
 * 🔵 **Store art (bugfix + icons)** — store cosmetics showed a green placeholder for every item because `it.slot` was only set on the `CATALOG_BY_ID` copies, not the originals the store iterates — so `chipPreview` always hit the terrain branch (and equip/buy detection broke). Fixed by tagging `slot` on the original catalog objects; previews now render real hero sprites / tower images / banner flags / terrain swatches. Added icons to the Upgrades (chevron) and Prestige (`drawDeco`) rows too.
 
+* 🔵 **In-run gold shop (Quartermaster)** — a build-phase overlay (`drawShop`, `shopOpen` flag, SHOP button top-left) to spend in-run gold: **Repair Wall** (+40 HP), **Reinforce Wall** (+25 max), **Supply Drop** (a Tier-2 tower piece — `placeSelected` now honors `piece.tier`). A fresh in-run gold sink + strategy layer.
+
 # What to adapt next (mapped to the blueprint)
 
-1. **In-run gold shop** + **meta store expansion** — both requested.
+1. **Meta store expansion** — new keep-upgrades (wired in `reset`) + cosmetics + an **IAP-style Gems tab** (demo bundles + a free/earned gem source) answering "how do I buy gems". *(in progress)*
 2. **Hero depth** — gear/blueprints + per-hero levels + the revive-cost loop.
 
 # How to run / test

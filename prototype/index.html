@@ -311,7 +311,7 @@ function reset(){
   breached = false;
   selected = null; sellTarget = null; heroSel = false;
   mode = 'build';
-  idleEarned = 0;
+  idleEarned = 0; shopOpen = false;
   ANALYTICS.log('run_start', { mode: runMode });
   banner('WAVE ' + wave, '#ffd95e');
 }
@@ -491,7 +491,7 @@ function placeSelected(anchor){
   const piece = hand[selected];
   if (!piece || !canPlace(piece, anchor)) return false;
   const cells = shapeCells(piece, anchor);
-  for (const [c,r] of cells) grid[idx(c,r)] = { type:piece.type, tier:1, pop:0.001, rarity:piece.rarity||0 };
+  for (const [c,r] of cells) grid[idx(c,r)] = { type:piece.type, tier:piece.tier||1, pop:0.001, rarity:piece.rarity||0 };
   hand[selected] = null;
   selected = null; dragging = false; hoverCell = null;
   sfx.place();
@@ -554,7 +554,7 @@ function startFight(){
   fightT = 0; mode = 'fight';
   ANALYTICS.log('wave_start', { wave, mode: runMode, enemies: waveTotal });
   for (const t of towers()){ t.g.maxhp = 24 + 28*t.g.tier*t.g.tier; t.g.hp = t.g.maxhp; }
-  selected = null; sellTarget = null; hoverCell = null; heroSel = false;
+  selected = null; sellTarget = null; hoverCell = null; heroSel = false; shopOpen = false;
   banner('DEFEND!', '#ff7b5e');
 }
 function waveCleared(){
@@ -1796,6 +1796,37 @@ const BTN = {
   fight:  { x:312, y:TRAY_Y+50, w:152, h:44 },
   slots: [0,1,2].map(i => ({ x:16 + i*96, y:TRAY_Y+4, w:90, h:88 })),
 };
+/* ---------- in-run gold shop (build-phase Quartermaster) ---------- */
+let shopOpen = false, shopBtnRect = null, shopBtns = [];
+const SHOP_ITEMS = [
+  { id:'repair',    name:'Repair Wall',    desc:'restore +40 wall HP',  cost:30, buy:()=>{ wallHP = Math.min(wallMax, wallHP+40); } },
+  { id:'reinforce', name:'Reinforce Wall', desc:'+25 max wall HP',       cost:55, buy:()=>{ wallMax += 25; wallHP += 25; } },
+  { id:'supply',    name:'Supply Drop',    desc:'a Tier-2 tower piece',  cost:50, buy:()=>{ let i = hand.indexOf(null); if (i<0) i = selected!=null?selected:0; hand[i] = { shape:[[0,0]], type: TYPE_KEYS[(Math.random()*TYPE_KEYS.length)|0], rarity:0, tier:2 }; } },
+];
+function buyShop(it){
+  if (gold >= it.cost){ gold -= it.cost; it.buy(); sfx.coin(); floaters.push({ x:W/2, y:300, text:it.name+'!', t:0, dur:1.0, size:18, color:'#ffd95e' }); }
+  else floaters.push({ x:W/2, y:300, text:'Need '+it.cost+'g', t:0, dur:0.9, size:16, color:'#ff8d7e' });
+}
+function drawShop(){
+  ctx.fillStyle = 'rgba(20,28,46,0.62)'; ctx.fillRect(0,0,W,H);
+  chunkyText('QUARTERMASTER', W/2, 150, 26, '#ffd95e', '#5a4a12');
+  chunkyText('Spend gold to bolster your defense', W/2, 180, 12, '#dfe6ff', null, '500');
+  shopBtns = [];
+  const cw = 360, ch = 78, gap = 14, x = (W-cw)/2; let y = 210;
+  for (const it of SHOP_ITEMS){
+    const ok = gold >= it.cost;
+    orr(x, y, cw, ch, 14, '#2b3550', ok ? '#ffd95e' : 'rgba(255,255,255,0.25)', ok ? 3.5 : 2.5);
+    chunkyText(it.name, x+18, y+30, 18, '#fff', '#10131f', '700', 'left');
+    chunkyText(it.desc, x+18, y+56, 13, '#cfe0f5', null, '500', 'left');
+    const bw = 96, bx = x+cw-bw-14, byy = y+ch/2-17;
+    chunkyBtn(bx, byy, bw, 34, ok ? '#ffce5a' : '#b0ada6', ok ? '#dba32c' : '#8d8a83', ok ? '#9c6f12' : '#6e6b64', it.cost+'g', 16);
+    shopBtns.push({ x:bx, y:byy, w:bw, h:34, it });
+    y += ch + gap;
+  }
+  const cb = { x:W/2-60, y:y+10, w:120, h:42 };
+  chunkyBtn(cb.x, cb.y, cb.w, cb.h, '#52b3f0', '#2f7fb5', '#1d5a8a', 'CLOSE', 18);
+  shopBtns.push({ x:cb.x, y:cb.y, w:cb.w, h:cb.h, close:true });
+}
 function drawTray(){
   // sandy dock
   orr(6, TRAY_Y-6, W-12, 104, 18, '#f2dca2', '#c9a25f', 4);
@@ -1832,6 +1863,9 @@ function drawTray(){
   ctx.save(); ctx.translate(fb.x+fb.w/2, fb.y+fb.h/2); ctx.scale(pulse, pulse);
   chunkyBtn(-fb.w/2, -fb.h/2, fb.w, fb.h, '#ff9c3f', '#d9742a', '#9c4f12', 'FIGHT!', 22);
   ctx.restore();
+  // in-run shop button (top-left during build)
+  shopBtnRect = { x:12, y:52, w:96, h:32 };
+  chunkyBtn(12, 52, 96, 32, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'SHOP', 16);
 }
 const SORTIE_BTN = { x:10, y:TRAY_Y+24, w:112, h:46 };
 function drawFightHUD(){
@@ -2197,6 +2231,13 @@ cv.addEventListener('pointerdown', ev => {
   }
   if (mode !== 'build') return;
 
+  // in-run shop overlay (Quartermaster)
+  if (shopOpen){
+    for (const b of shopBtns){ if (inRect(p, b)){ if (b.close) shopOpen = false; else buyShop(b.it); return; } }
+    shopOpen = false; return;   // tap outside closes
+  }
+  if (shopBtnRect && inRect(p, shopBtnRect)){ shopOpen = true; sfx.place(); return; }
+
   // hero / sell / upgrade / clear buttons
   if (sellBtnRect){
     if (sellBtnRect.hero && inRect(p, sellBtnRect)){
@@ -2378,6 +2419,7 @@ function frame(now){
   }
   drawHUD();
   if (mode === 'perk') drawPerkDraft();
+  if (mode === 'build' && shopOpen) drawShop();
   drawFloaters(dt);
   if (mode === 'over') drawOver();
 
