@@ -67,15 +67,13 @@ Every adaptation is tagged by how directly it derives from the Fortress Merge te
 * 🟢 **Perk synergy sets** — `SETS` (Warband/Fortune/Elements), escalating bonuses via `checkSetBonus`; cards show set tags. Observed: FM's "Wardrum" synergy cluster. See [perk-system](okf/systems/perk-system.md).
 * 🟡 **Idle "AFK village" income** — the city produces Gems in real time while closed (`claimIdle`, claimed on load + tab-return, capped), scaling with owned prestige buildings (`IDLE.yield`). **Observed:** FM's AFK Village *exists* (`AfkVillageTouchManager`, `AfkVillageSettings.villageUpgrade`, ~40 `AFKVillageUnitPrefab`). **Inferred:** the actual idle-income logic/rate is server/native-side and was not directly read — this gems-per-hour model is our interpretation of "AFK village." See [hero-system](okf/systems/hero-system.md) (meta systems).
 * 🟡 **Village-upgrade loop** — two leveled, Gems-bought upgrades on the title (`buyVillage`): **Granary** (+idle rate) and **Warehouse** (+idle cap), stored in `META.s.village`. Closes the idle loop (idle gems → upgrade → more idle). **Observed:** FM's `AfkVillageSettings.villageUpgrade` / `VillageUpgradeData` (a village-upgrade list exists). **Inferred:** the specific upgrades and their effects are our design.
+* 🟢 **Visible city growth** — owned `PRESTIGE_CAT` decorations (statue/fountain/gardens/cathedral/throne) render on the title keep via `drawDeco` + `DECO_SLOTS`, so spending Gems on prestige visibly builds your city. Observed feature: the prestige decorations already exist as data; the chunky art is our rendering.
 
-**The in-run combat track is complete** (perks, config, buffs, rarity, 2nd mode, analytics, synergy). **City/Meta spine: idle income + village-upgrade loop done.**
+**The in-run combat track is complete** (perks, config, buffs, rarity, 2nd mode, analytics, synergy). **The City/Meta spine is complete** (idle income → village upgrades → visible city growth — a full loop: idle gems fund prestige/village, which raise idle and grow the keep).
 
 # What to adapt next (mapped to the blueprint)
 
-City/Meta spine continued, then the Hero spine:
-
-1. **Visible city growth** 🟢 — render owned `PRESTIGE_CAT` decorations (statue→throne) on the title keep so building the city is tangible. Observed feature (the decorations already exist as data).
-2. **Hero spine** — turn the knight into collectible heroes (cards, gear/blueprints, revive-cost loop). See [hero-system](okf/systems/hero-system.md).
+1. **Hero spine** — turn the knight into collectible heroes (cards, gear/blueprints, revive-cost loop). The last big track. See [hero-system](okf/systems/hero-system.md).
 
 # How to run / test
 

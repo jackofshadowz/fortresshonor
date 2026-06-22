@@ -2027,6 +2027,33 @@ function drawDreamIsland(cx, iy){
   drawTree(cx+122, iy+4, 1.05, 5);
   drawTree(cx+88, iy+18, 0.8, 8);
 }
+/* a prestige decoration rendered on the title keep — your owned PRESTIGE_CAT grows the city */
+function drawDeco(id, x, y, s){
+  s = s || 1;
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  if (id === 'p_statue'){
+    orr(-7, -2, 14, 8, 2, '#c9ced4', '#8a9098', 2);
+    orr(-5, -16, 10, 14, 3, '#b8bec6', '#8a9098', 2);
+    ocirc(0, -22, 5, '#cdd3da', '#8a9098', 2); glint(-2, -24, 1.4);
+  } else if (id === 'p_fountain'){
+    orr(-11, -3, 22, 8, 4, '#9cc6e8', '#3b80d2', 2.5);
+    orr(-3, -14, 6, 11, 2, '#bfe0f5', '#3b80d2', 2);
+    for (let k=-1;k<=1;k++) ocirc(k*5, -17-Math.abs(k)*2, 1.8, '#dff3ff', null);
+  } else if (id === 'p_garden'){
+    blob(-6, -4, 9, 6, 1); ctx.fillStyle='#6fbe52'; ctx.fill(); ctx.strokeStyle='#4f9638'; ctx.lineWidth=2; ctx.stroke();
+    blob(7, -3, 7, 5, 2); ctx.fillStyle='#7ed05f'; ctx.fill(); ctx.stroke();
+    star(-6, -6, 2.4, '#ff8fb0', null); star(6, -5, 2.2, '#ffd95e', null);
+  } else if (id === 'p_cathedral'){
+    opoly([[-9,-2],[-9,-22],[0,-40],[9,-22],[9,-2]], '#dfe6f0', '#9aa6bb', 2.5);
+    orr(-3, -16, 6, 9, 2, '#88a6d8', '#5d7bb0', 1.5);
+    star(0, -44, 2.6, '#ffd95e', '#a8761c');
+  } else if (id === 'p_throne'){
+    orr(-8, -4, 16, 7, 2, '#e0b23c', '#9c6f12', 2);
+    orr(-8, -20, 16, 16, 3, '#ffd95e', '#9c6f12', 2.5);
+    star(0, -22, 3, '#fff3b0', '#a8761c');
+  }
+  ctx.restore();
+}
 function drawTitle(){
   // dreamy twilight sky
   const g = ctx.createLinearGradient(0, 0, 0, H);
@@ -2073,6 +2100,9 @@ function drawTitle(){
   // hero shot: floating island fortress + knight at the gate
   const iy = 545 + Math.sin(time*1.2)*4;
   drawDreamIsland(W/2, iy);
+  // owned prestige decorations grow the city (back-to-front for layering)
+  const DECO_SLOTS = { p_cathedral:[92,-16], p_statue:[-66,-2], p_fountain:[70,2], p_garden:[-104,8], p_throne:[26,12] };
+  for (const id in DECO_SLOTS) if (META.s.owned.includes(id)){ const sl = DECO_SLOTS[id]; drawDeco(id, W/2+sl[0], iy+sl[1], 1); }
   drawChibiKnight(W/2, iy+13, 1.1);
   // drifting fireflies
   for (let k=0;k<9;k++){
