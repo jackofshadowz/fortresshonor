@@ -124,6 +124,12 @@ const CONFIG = {
     golem:  { hp:170, spd:14, dps:20, r:24, gold:16, col:'#8a7a64' },
     boss:   { hp:260, spd:15, dps:32, r:30, gold:34, col:'#8a7ae0' },
   },
+  buffs: {                                  // status-effect tuning (BuffId-style)
+    slow:   { speedMult:0.55, col:'#96cdff' },
+    stun:   { dur:0.8,        col:'#ffe06a' },
+    burn:   { dps:9,          col:'#ff7b3f' },
+    poison: { dps:6,          col:'#9be25a' },
+  },
 };
 const TIER_DMG = CONFIG.tiers.dmg, TIER_RANGE = CONFIG.tiers.range, SELL_VALUE = CONFIG.tiers.sell;
 const MAX_TIER = CONFIG.tiers.max;
@@ -137,7 +143,7 @@ let RUN = null;
 function freshRun(){
   return { dmgMult:1, rateMult:1, rangeMult:1, splashBonus:0, slowBonus:0,
            goldMult:1, goldOnMerge:0, waveBonusMult:1, wallPerKill:0,
-           critChance:0, freeReroll:false, perks:[] };
+           critChance:0, freeReroll:false, burnDur:0, poisonDur:0, stunChance:0, perks:[] };
 }
 const PERKS = [
   // Common
@@ -150,11 +156,14 @@ const PERKS = [
   { id:'frostbite', name:'Frostbite',       rarity:'Uncommon',desc:'every hit slows enemies',   apply:r=>r.slowBonus+=0.6 },
   { id:'alchemy',   name:'Alchemy',         rarity:'Uncommon',desc:'+6 gold on every merge',    apply:r=>r.goldOnMerge+=6 },
   { id:'masons',    name:'Master Masons',   rarity:'Uncommon',desc:'+30 wall, fully repaired',  apply:r=>{ wallMax+=30; wallHP=wallMax; } },
+  { id:'wildfire',  name:'Wildfire',        rarity:'Uncommon',desc:'hits set enemies ablaze',    apply:r=>r.burnDur=Math.max(r.burnDur,2.5) },
+  { id:'venom',     name:'Venom Tips',      rarity:'Uncommon',desc:'hits poison enemies',        apply:r=>r.poisonDur=Math.max(r.poisonDur,3) },
   // Rare
   { id:'keenaim',   name:'Keen Aim',        rarity:'Rare',    desc:'+18% crit chance (2× dmg)', apply:r=>r.critChance+=0.18 },
   { id:'warchest',  name:'War Chest',       rarity:'Rare',    desc:'+60% wave-clear gold',      apply:r=>r.waveBonusMult*=1.6 },
   { id:'bloodstone',name:'Bloodstone',      rarity:'Rare',    desc:'repair wall +1 per kill',   apply:r=>r.wallPerKill+=1 },
   { id:'overwhelm', name:'Overwhelm',       rarity:'Rare',    desc:'+25% damage & +10% rate',   apply:r=>{ r.dmgMult*=1.25; r.rateMult*=1.10; } },
+  { id:'concuss',   name:'Concussion',      rarity:'Rare',    desc:'25% chance to stun on hit', apply:r=>r.stunChance+=0.25 },
   { id:'quarry',    name:'Free Quarry',     rarity:'Rare',    desc:'rerolls are free this run', apply:r=>r.freeReroll=true },
 ];
 const RARITY_W   = { Common:5, Uncommon:3, Rare:1 };
@@ -473,7 +482,7 @@ function makeEnemy(kind, hpS, at){
     y: sy,
     hp: base.hp*hpS, maxhp: base.hp*hpS, spd: base.spd, dps: base.dps,
     r: base.r, gold: base.gold, col: base.col,
-    slow: 0, wob: Math.random()*7, hitT: 0, spawnT: 0.4, face: 1, atk: false };
+    buffs: {}, wob: Math.random()*7, hitT: 0, spawnT: 0.4, face: 1, atk: false };
 }
 function startFight(){
   spawnQueue = buildWave(wave);
@@ -539,10 +548,12 @@ function updateFight(dt){
   const gateX = (FIELD_L+FIELD_R)/2;
   for (const e of enemies){
     e.hitT = Math.max(0, e.hitT - dt);
-    e.slow = Math.max(0, e.slow - dt);
     e.spawnT = Math.max(0, (e.spawnT||0) - dt);
-    const sp = e.spd * (e.slow>0 ? 0.55 : 1) * dt;
+    tickBuffs(e, dt);
     e.atk = false;
+    if (e.hp <= 0) continue;                 // finished off by a damage-over-time tick
+    if (hasBuff(e, 'stun')) continue;        // stunned — no movement, no attack this frame
+    const sp = e.spd * (hasBuff(e,'slow') ? CONFIG.buffs.slow.speedMult : 1) * dt;
     const px0 = e.x;
     if (e.kind === 'archer'){
       // stands off and rains arrows on the wall (or the city, once it's open)
@@ -661,6 +672,7 @@ function updateFight(dt){
       if (crit) dmg *= 2;
       projectiles.push({ x:t.x, y:t.y-18, tgt:best, tx:best.x, ty:best.y,
         dmg, crit, splash:def.splash + RUN.splashBonus, slow:def.slow + RUN.slowBonus,
+        burn:RUN.burnDur, poison:RUN.poisonDur, stunChance:RUN.stunChance,
         kind:def.proj, spd: def.proj==='ball' ? 330 : 480 });
       if (def.proj!=='arrow' || Math.random()<0.4) sfx.shoot();
     }
@@ -675,9 +687,9 @@ function updateFight(dt){
       if (p.splash){
         sfx.boom(); shake = Math.max(shake, 4);
         addFx('explosion', p.tx, p.ty, 0.65);
-        for (const e of enemies) if (Math.hypot(e.x-p.tx, e.y-p.ty) < p.splash) hitEnemy(e, p.dmg, 0);
+        for (const e of enemies) if (Math.hypot(e.x-p.tx, e.y-p.ty) < p.splash) hitEnemy(e, p.dmg, p.slow, p);
       } else {
-        if (p.tgt && p.tgt.hp > 0) hitEnemy(p.tgt, p.dmg, p.slow);
+        if (p.tgt && p.tgt.hp > 0) hitEnemy(p.tgt, p.dmg, p.slow, p);
       }
     } else {
       p.x += dx/d * p.spd * dt; p.y += dy/d * p.spd * dt;
@@ -723,9 +735,35 @@ function updateFight(dt){
   }
   if (!spawnQueue.length && !enemies.length) waveCleared();
 }
-function hitEnemy(e, dmg, slow){
+/* ---------- status-effect engine (adapted from Fortress Merge's BuffId system) ----------
+   One shared engine; towers apply buffs to enemies via hitEnemy's fx arg. Tunables in
+   CONFIG.buffs. Slow reduces speed, Stun freezes, Burn/Poison deal damage-over-time. */
+function applyBuff(e, id, dur){
+  if (!e.buffs) e.buffs = {};
+  const b = e.buffs[id] || (e.buffs[id] = { t:0 });
+  b.t = Math.max(b.t, dur);
+}
+function hasBuff(e, id){ return !!(e.buffs && e.buffs[id] && e.buffs[id].t > 0); }
+function tickBuffs(e, dt){
+  if (!e.buffs) return;
+  for (const id in e.buffs){
+    const b = e.buffs[id];
+    b.t -= dt;
+    if (b.t <= 0){ delete e.buffs[id]; continue; }
+    if (id === 'burn' || id === 'poison'){
+      e.hp -= CONFIG.buffs[id].dps * dt;
+      if (Math.random() < dt*3) puff(e.x, e.y - e.r*0.5, CONFIG.buffs[id].col);
+    }
+  }
+}
+function hitEnemy(e, dmg, slow, fx){
   e.hp -= dmg; e.hitT = 0.1;
-  if (slow) e.slow = Math.max(e.slow, slow);
+  if (slow) applyBuff(e, 'slow', slow);
+  if (fx){
+    if (fx.burn)   applyBuff(e, 'burn', fx.burn);
+    if (fx.poison) applyBuff(e, 'poison', fx.poison);
+    if (fx.stunChance && Math.random() < fx.stunChance) applyBuff(e, 'stun', CONFIG.buffs.stun.dur);
+  }
 }
 
 /* ---------- particles & floaters ---------- */
@@ -1553,12 +1591,26 @@ function drawEnemy(e){
   ((typeof ENEMY_DRAW !== 'undefined' && ENEMY_DRAW[e.kind]) || drawDarkKnight)(r, step, e);
   ctx.restore();
 
-  // frost coating
-  if (e.slow > 0){
+  // status-effect overlays
+  if (hasBuff(e,'slow')){
     ctx.fillStyle = 'rgba(150,205,255,0.35)';
     ctx.beginPath(); ctx.ellipse(e.x, y-r*0.2, r*1.05, r*1.2, 0, 0, 7); ctx.fill();
     crystal(e.x-r*0.7, y-r*0.9, 5, false);
     crystal(e.x+r*0.7, y-r*0.5, 4, false);
+  }
+  if (hasBuff(e,'poison')){
+    ctx.fillStyle = 'rgba(120,215,70,0.32)';
+    ctx.beginPath(); ctx.ellipse(e.x, y-r*0.2, r*0.95, r*1.1, 0, 0, 7); ctx.fill();
+  }
+  if (hasBuff(e,'burn')){
+    for (let i=0;i<3;i++){
+      const fx2 = e.x+(i-1)*r*0.5, fy = y - r*0.6 - (Math.sin(time*12+i*2+e.wob)*0.5+0.5)*r*0.55;
+      ocirc(fx2, fy, 2.6, '#ff7b3f', null); ocirc(fx2, fy-2, 1.5, '#ffd95e', null);
+    }
+  }
+  if (hasBuff(e,'stun')){
+    for (let i=0;i<3;i++){ const a = time*6 + i*2.1;
+      ocirc(e.x + Math.cos(a)*r*0.8, y - r*1.35 + Math.sin(a)*3, 2.2, '#ffe06a', null); }
   }
   // chunky hp bar
   if (e.hp < e.maxhp){
