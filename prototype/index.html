@@ -261,7 +261,7 @@ function randPiece(){
 }
 
 /* ---------- game state ---------- */
-let mode = 'title';            // title | build | fight | clear | perk | over | store | badges | heroes
+let mode = 'title';            // title | build | fight | clear | perk | over | store | badges | heroes | kingdom
 let runMode = 'normal';        // 'normal' (Siege) | 'boss' (Boss Rush) — chosen on the title
 let grid, hand, gold, wave, wallHP, wallMax;
 let selected = null;           // index into hand
@@ -2179,7 +2179,7 @@ cv.addEventListener('pointerdown', ev => {
   downPos = p; downSlot = null;
 
   if (mode === 'title'){ if (handleMenuTap(p)) return; reset(); return; }
-  if (mode === 'store' || mode === 'badges' || mode === 'heroes'){ handleMenuTap(p); return; }
+  if (mode === 'store' || mode === 'badges' || mode === 'heroes' || mode === 'kingdom'){ handleMenuTap(p); return; }
   if (mode === 'over'){ handleMenuTap(p); return; }
   if (mode === 'perk'){
     for (const b of perkBtns){ if (inRect(p, b)){ choosePerk(b.perk); return; } }
@@ -2337,8 +2337,8 @@ function frame(now){
     requestAnimationFrame(frame);
     return;
   }
-  if (mode === 'store' || mode === 'badges' || mode === 'heroes'){
-    (mode === 'store' ? drawStore : mode === 'badges' ? drawBadges : drawHeroes)();
+  if (mode === 'store' || mode === 'badges' || mode === 'heroes' || mode === 'kingdom'){
+    (mode === 'store' ? drawStore : mode === 'badges' ? drawBadges : mode === 'heroes' ? drawHeroes : drawKingdom)();
     ctx.restore();
     requestAnimationFrame(frame);
     return;
@@ -3122,6 +3122,54 @@ function drawHeroes(){
   }
   drawMenuToast();
 }
+/* the Kingdom notebook — one consolidated overview of all meta progress */
+function drawKingdom(){
+  uiHits = []; menuBg(); menuHeader('KINGDOM');
+  // --- city view panel ---
+  const px = 14, py = 98, pw = W-28, ph = 176;
+  orr(px, py, pw, ph, 14, 'rgba(30,40,70,0.5)', 'rgba(255,255,255,0.18)', 2.5);
+  ctx.save(); rr(px, py, pw, ph, 14); ctx.clip();
+  const cx = W/2, gy = py + ph - 26;
+  blob(cx, gy, 150, 28, 2.2); ctx.fillStyle = '#8bd05e'; ctx.fill(); ctx.strokeStyle = '#5fa83c'; ctx.lineWidth = 4; ctx.stroke();
+  orr(cx-22, gy-46, 44, 46, 6, '#e8dcc0', '#8a7a5a', 3);
+  orr(cx-11, gy-66, 22, 26, 4, '#d8c8a0', '#8a7a5a', 3);
+  opoly([[cx-13,gy-64],[cx,gy-82],[cx+13,gy-64]], '#5ab9bb', '#2a5a9e', 2.5);
+  orr(cx-3, gy-22, 6, 22, 2, '#8a5a3c', '#5a3a22', 2);
+  const SLOTS = { p_cathedral:[92,-10], p_statue:[-66,-2], p_fountain:[70,0], p_garden:[-104,6], p_throne:[30,8] };
+  for (const id in SLOTS) if (META.s.owned.includes(id)){ const s = SLOTS[id]; drawDeco(id, cx+s[0], gy+s[1], 0.9); }
+  drawChibiKnight(cx, gy+4, 0.85);
+  ctx.restore();
+  chunkyText('Your Keep', px+12, py+17, 12, '#fff', '#10131f', '700', 'left');
+  chunkyText(honorRank(), W-px-12, py+17, 12, '#ffd95e', null, '600', 'right');
+  // --- info rows ---
+  const champ = HERO_BY_ID[META.s.heroes.sel] || HEROES[0];
+  const modsOwned = MOD_CAT.filter(m=>META.s.mods[m.id]).length;
+  const prestigeOwned = META.s.owned.filter(id=>CATALOG_BY_ID[id] && CATALOG_BY_ID[id].slot==='prestige').length;
+  const badgesGot = BADGES.filter(b=>META.s.badges[b.id]).length;
+  const rows = [
+    ['Champion', champ.name + ' — ' + champ.desc],
+    ['City income', idleRate() + ' gems/hr  (cap ' + idleCapH() + 'h)'],
+    ['Village', 'Granary Lv' + META.s.village.granary + '  ·  Warehouse Lv' + META.s.village.warehouse],
+    ['Keep upgrades', modsOwned + ' / ' + MOD_CAT.length + ' active'],
+    ['Decorations', prestigeOwned + ' / ' + PRESTIGE_CAT.length + ' built'],
+    ['Badges', badgesGot + ' / ' + BADGES.length + ' earned'],
+    ['Best wave', String(META.s.bestWave)],
+    ['Runs · Kills', META.s.stats.runs + ' · ' + META.s.stats.kills],
+  ];
+  let y = 288;
+  for (const row of rows){
+    orr(14, y, W-28, 30, 8, 'rgba(255,255,255,0.08)', null);
+    chunkyText(row[0], 26, y+16, 12, '#aab4d0', null, '600', 'left');
+    chunkyText(row[1], W-26, y+16, 12, '#fff', null, '600', 'right');
+    y += 35;
+  }
+  // --- links to detail screens ---
+  const by = y + 8;
+  chunkyBtn(W/2-168, by, 104, 44, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 17);  hit(W/2-168, by, 104, 44, ()=>{ mode='store'; storeTab='cos'; });
+  chunkyBtn(W/2-50,  by, 100, 44, '#7fc4ff', '#3b80d2', '#2a5a9e', 'HEROES', 16); hit(W/2-50, by, 100, 44, ()=>{ mode='heroes'; });
+  chunkyBtn(W/2+64,  by, 104, 44, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BADGES', 16); hit(W/2+64, by, 104, 44, ()=>{ mode='badges'; });
+  drawMenuToast();
+}
 function drawTitleMenu(){
   uiHits = [];
   drawWallet(W/2-95, 10);
@@ -3144,12 +3192,10 @@ function drawTitleMenu(){
   chunkyText('tap anywhere to play', W/2, 638, 12, '#eaf2ff', 'rgba(20,40,70,0.5)', '600');
   const champ = HERO_BY_ID[META.s.heroes.sel] || HEROES[0];
   chunkyText('Champion: ' + champ.name + ' — ' + champ.desc, W/2, 582, 10, '#ffe6a8', null, '500');
-  chunkyBtn(W/2-168, 662, 104, 46, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 17);
-  hit(W/2-168, 662, 104, 46, ()=>{ mode='store'; storeTab='cos'; });
-  chunkyBtn(W/2-50, 662, 100, 46, '#7fc4ff', '#3b80d2', '#2a5a9e', 'HEROES', 16);
-  hit(W/2-50, 662, 100, 46, ()=>{ mode='heroes'; });
-  chunkyBtn(W/2+64, 662, 104, 46, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BADGES', 16);
-  hit(W/2+64, 662, 104, 46, ()=>{ mode='badges'; });
+  chunkyBtn(W/2-168, 662, 164, 46, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 22);
+  hit(W/2-168, 662, 164, 46, ()=>{ mode='store'; storeTab='cos'; });
+  chunkyBtn(W/2+4, 662, 164, 46, '#9fd0ff', '#3b80d2', '#234a7e', 'KINGDOM', 21);
+  hit(W/2+4, 662, 164, 46, ()=>{ mode='kingdom'; });
   if (hasNewBadge()){ ocirc(W/2+164, 660, 8, '#ff5e4d', '#fff', 2.5); }
 }
 </script>

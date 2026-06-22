@@ -73,10 +73,12 @@ Every adaptation is tagged by how directly it derives from the Fortress Merge te
 
 **The in-run combat track is complete** (perks, config, buffs, rarity, 2nd mode, analytics, synergy). **The City/Meta spine is complete** (idle income → village upgrades → visible city growth). **Hero spine started** (roster + selection).
 
+* 🔵 **Kingdom notebook** — a consolidated overview screen (`drawKingdom`): a city-view panel (keep + owned decorations + champion), then rows for champion/idle income/village/keep-upgrades/decorations/badges/best-wave/stats, plus links to Store/Heroes/Badges. Reached from a **KINGDOM** button on the title (alongside a prominent **STORE** button). Our IA enrichment — FM has per-system screens, not a single dashboard.
+
 # What to adapt next (mapped to the blueprint)
 
-1. **Kingdom notebook** 🔵 — a consolidated overview screen (city view, champion, currencies/rank, idle income, owned upgrades, badges summary, run stats) linking to Store/Heroes/Badges. The "one place to see everything" dashboard. *(Our IA addition; FM has per-system screens.)*
-2. **Hero depth** — gear/blueprints + per-hero levels + the revive-cost loop, deepening the roster. See [hero-system](okf/systems/hero-system.md).
+1. **Hero depth** — gear/blueprints + per-hero levels + the revive-cost loop, deepening the roster. See [hero-system](okf/systems/hero-system.md).
+2. **Store expansion or in-run shop** — see open question with the user (existing meta Store vs a new mid-run gold shop).
 
 # How to run / test
 
