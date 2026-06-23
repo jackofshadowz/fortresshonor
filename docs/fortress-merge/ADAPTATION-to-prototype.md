@@ -97,6 +97,8 @@ Every adaptation is tagged by how directly it derives from the Fortress Merge te
 
 **HERO SPINE COMPLETE** (roster → levels → gear → revive). All three adaptation tracks (in-run combat, City/Meta, Hero) are now done; the rest is polish/iteration.
 
+* 🔵 **Store glow-up** — items rebuilt as premium product cards: gradient showcase panels behind bigger art, rarity/value-colored frames + glow on premium, animated shine sweep, premium corner gem. **Gems tab** redesigned as a real IAP store (gem piles sized by pack, BEST VALUE/POPULAR/STARTER ribbons, glowing featured packs, a **Starter Pack** bundle = gems + Crimson Knight). Upgrade/prestige rows are gradient cards with glowing icons. Helpers: `gradPanel`/`cardShine`/`ribbon`/`gemPile`/`hexA`.
+
 # What to adapt next
 
 Open / iteration ideas (no committed direction):
