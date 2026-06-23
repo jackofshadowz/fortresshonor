@@ -3231,14 +3231,31 @@ function drawMenuToast(){
   }
 }
 function chipPreview(it, cx, cy){
-  if (it.slot === 'hero'){ spr(it.sprite||'warrior_b', 192,192, Math.floor(time*6)%6, 0, cx, cy+19, 0.27, false, 0.76); }
-  else if (it.slot === 'tower'){ img('tower_'+(it.suffix||'b'), cx, cy+21, 0.27); if (it.glow) star(cx, cy-16, 7, '#ffe08a', '#a8761c'); }
-  else if (it.slot === 'banner'){ flag(cx, cy+20, 27, it.color, it.ink); }
-  else {
-    orr(cx-24, cy-13, 48, 33, 8, '#8bd05e', '#5fa83c', 2.5);
-    ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.beginPath(); ctx.ellipse(cx-8, cy-4, 13, 5, -0.2, 0, 7); ctx.fill();
-    ctx.fillStyle = '#7ec24e'; for (const d of [[-14,9],[3,12],[14,4]]){ ctx.beginPath(); ctx.arc(cx+d[0], cy+d[1], 2, 0, 7); ctx.fill(); }
-    if (it.wash){ ctx.fillStyle = it.wash; rr(cx-24, cy-13, 48, 33, 8); ctx.fill(); }
+  if (it.slot === 'hero'){
+    ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(cx, cy+27, 18, 5.5, 0, 0, 7); ctx.fill();
+    spr(it.sprite||'warrior_b', 192,192, Math.floor(time*6)%6, 0, cx, cy+29, 0.37, false, 0.78);
+  } else if (it.slot === 'tower'){
+    ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(cx, cy+27, 20, 5.5, 0, 0, 7); ctx.fill();
+    img('tower_'+(it.suffix||'b'), cx, cy+29, 0.37); if (it.glow) star(cx, cy-22, 8, '#ffe08a', '#a8761c');
+  } else if (it.slot === 'banner'){
+    // ornate draped banner on a pole
+    ctx.strokeStyle = '#6e4a22'; ctx.lineWidth = 3.5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(cx-16, cy-24); ctx.lineTo(cx-16, cy+28); ctx.stroke();
+    ocirc(cx-16, cy-25, 4, '#ffd95e', '#9c6f12', 1.8);
+    const bx = cx-13, by = cy-22, bw = 33, bh = 42;
+    opoly([[bx,by],[bx+bw,by],[bx+bw,by+bh],[bx+bw/2,by+bh-12],[bx,by+bh]], it.color, it.ink, 3);
+    ctx.save(); ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(bx+bw,by); ctx.lineTo(bx+bw,by+bh); ctx.lineTo(bx+bw/2,by+bh-12); ctx.lineTo(bx,by+bh); ctx.closePath(); ctx.clip();
+    ctx.fillStyle = 'rgba(255,255,255,0.20)'; ctx.fillRect(bx, by, bw*0.36, bh);
+    ctx.fillStyle = 'rgba(0,0,0,0.14)'; ctx.fillRect(bx+bw*0.72, by, bw*0.3, bh); ctx.restore();
+    star(bx+bw/2, by+bh*0.42, 7, '#fff', it.ink);
+  } else {
+    // real Tiny Swords grass tiles (the in-game terrain), tinted by the biome wash
+    ctx.save(); rr(cx-30, cy-22, 60, 50, 10); ctx.clip();
+    for (let gx=0; gx<2; gx++) for (let gy=0; gy<2; gy++) tileDraw(1, 1, cx-30 + gx*30, cy-22 + gy*30, 31);
+    drawTree(cx+13, cy+10, 0.55, 3); drawTree(cx-14, cy+14, 0.42, 7);
+    if (it.wash){ ctx.fillStyle = it.wash; ctx.fillRect(cx-30, cy-22, 60, 50); }
+    ctx.restore();
+    orr(cx-30, cy-22, 60, 50, 10, null, '#4f9638', 2.5);
   }
 }
 function drawChip(it, x, y, w, h){
@@ -3339,8 +3356,8 @@ function drawStore(){
     let yy = 150;
     [['hero','Hero'],['tower','Towers'],['banner','Banners'],['terrain','Terrain']].forEach(([slot,label])=>{
       chunkyText(label, 18, yy, 15, '#fff', null, '600', 'left');
-      SKIN_CAT[slot].forEach((it,i)=>{ drawChip(it, 12+i*92, yy+8, 88, 80); });
-      yy += 100;
+      SKIN_CAT[slot].forEach((it,i)=>{ drawChip(it, 12+i*92, yy+8, 88, 96); });
+      yy += 128;
     });
   } else if (storeTab === 'mod'){
     chunkyText('Permanent upgrades — bought once, always active', W/2, 148, 11, '#dfe6ff', null, '500');
