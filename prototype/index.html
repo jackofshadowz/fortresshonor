@@ -3292,10 +3292,11 @@ function drawChip(it, x, y, w, h){
   const tier = it.cost===0 ? 0 : (it.cost<=80 ? 1 : it.cost<=140 ? 2 : 3);
   const tint = ['#9fb3c8','#7fc4ff','#c9a2e8','#ffce5a'][tier];
   const frame = equipped ? '#ffd95e' : owned ? '#7ed05f' : tint;
-  if (!owned && tier>=3){ ctx.save(); ctx.shadowColor = tint; ctx.shadowBlur = 13; ninePatch('ui_panel', x, y, w, h, 20); ctx.restore(); }
-  ninePatch('ui_panel', x, y, w, h, 20);   // carved wooden plaque (Tiny Swords UI)
-  // dark art slot with rarity-tinted edge so any art reads on the wood
-  const sx = x+9, sy = y+9, sw = w-18, sh = h-38;
+  ctx.save(); ctx.shadowColor = frame; ctx.shadowBlur = (!owned && tier>=3) ? 13 : (equipped ? 9 : 4);
+  gradPanel(x, y, w, h, 12, 'rgba(50,62,100,0.97)', 'rgba(26,32,54,0.97)', frame, (equipped||tier>=3) ? 3.5 : 2.5);
+  ctx.restore();
+  // dark art slot with rarity-tinted edge
+  const sx = x+8, sy = y+8, sw = w-16, sh = h-38;
   orr(sx, sy, sw, sh, 8, 'rgba(18,24,40,0.8)', hexA(tint, equipped?1:0.85), equipped?3:2);
   ctx.save(); rr(sx, sy, sw, sh, 8); ctx.clip();
   const sg = ctx.createLinearGradient(0, sy, 0, sy+sh); sg.addColorStop(0, hexA(tint,0.30)); sg.addColorStop(1, 'rgba(0,0,0,0.22)');
@@ -3304,10 +3305,10 @@ function drawChip(it, x, y, w, h){
   ctx.restore();
   if (!owned && tier>=2) cardShine(sx, sy, sw, sh, 8, it.id.length*0.3);
   if (tier>=3) ocirc(x+w-13, y+13, 7, tint, '#1c2030', 2);
-  chunkyText(it.name, x+w/2, y+h-19, 9.5, '#fff', '#3a2412', '700');
-  if (equipped) chunkyText('✓ EQUIPPED', x+w/2, y+h-7, 8, '#2e6b16', null, '700');
-  else if (owned) chunkyText('TAP TO USE', x+w/2, y+h-7, 8, '#2e6326', null, '700');
-  else { gemIcon(x+w/2-14, y+h-7, 5); chunkyText(it.cost, x+w/2+2, y+h-7, 10, '#1d5a8a', null, '700', 'left'); }
+  chunkyText(it.name, x+w/2, y+h-19, 9.5, '#fff', '#10131f', '700');
+  if (equipped) chunkyText('✓ EQUIPPED', x+w/2, y+h-7, 8, '#ffd95e', null, '700');
+  else if (owned) chunkyText('TAP TO USE', x+w/2, y+h-7, 8, '#7ee860', null, '700');
+  else { gemIcon(x+w/2-14, y+h-7, 5); chunkyText(it.cost, x+w/2+2, y+h-7, 10, '#9fe8ff', null, '700', 'left'); }
   hit(x, y, w, h, ()=>buyItem(it));
 }
 // distinct icon per keep-upgrade so the Upgrades tab reads at a glance
@@ -3355,15 +3356,17 @@ function drawGemTab(){
   for (const pack of GEM_PACKS){
     const isFree = pack.id==='free', ready = isFree ? freeGemReady() : true;
     const h = 80, hot = (pack.id==='large' || pack.id==='starter');
-    if (hot){ ctx.save(); ctx.shadowColor='#ffd95e'; ctx.shadowBlur=16; ninePatch('ui_panel', 12, yy, W-24, h, 22); ctx.restore(); }
-    ninePatch('ui_panel', 12, yy, W-24, h, 22);   // carved wooden plaque
+    const frame = isFree ? '#7ed05f' : hot ? '#ffd95e' : pack.id==='med' ? '#c9a2e8' : '#5cb0f0';
+    ctx.save(); ctx.shadowColor = frame; ctx.shadowBlur = hot ? 15 : 6;
+    gradPanel(12, yy, W-24, h, 14, 'rgba(50,62,100,0.97)', 'rgba(26,32,54,0.97)', frame, hot ? 3.5 : 3);
+    ctx.restore();
     if (hot) cardShine(20, yy+6, W-40, h-12, 8, pack.gems*0.001);
     // gem showcase slot
-    orr(24, yy+12, 64, h-24, 10, 'rgba(18,24,40,0.7)', '#2a8fc0', 2);
+    ctx.save(); ctx.shadowColor='#2a8fc0'; ctx.shadowBlur=8; orr(24, yy+12, 64, h-24, 10, 'rgba(14,20,36,0.85)', '#3fb6e0', 2.5); ctx.restore();
     gemPile(56, yy+h/2, pack.gems);
-    chunkyText(pack.gems + ' GEMS', 102, yy+28, 19, '#fff', '#3a2412', '700', 'left');
-    chunkyText(pack.name, 102, yy+49, 11, '#5a3a18', null, '600', 'left');
-    if (pack.best) chunkyText(pack.best, 102, yy+64, 9.5, '#9c5a12', null, '700', 'left');
+    chunkyText(pack.gems + ' GEMS', 102, yy+28, 19, '#fff', '#10131f', '700', 'left');
+    chunkyText(pack.name, 102, yy+49, 11, '#cfe0f5', null, '600', 'left');
+    if (pack.best) chunkyText(pack.best, 102, yy+64, 9.5, '#ffd95e', null, '700', 'left');
     if (pack.id==='starter') uiRibbon(W-118, yy+8, 96, 'STARTER', 'yellow');
     else if (pack.id==='large') uiRibbon(W-118, yy+8, 96, 'BEST VALUE', 'yellow');
     else if (pack.id==='med') uiRibbon(W-110, yy+8, 88, 'POPULAR', 'blue');
