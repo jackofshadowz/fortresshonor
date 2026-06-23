@@ -3407,6 +3407,24 @@ function drawStore(){
   }
   drawMenuToast();
 }
+// themed vector badge icons
+function badgeIcon(id, cx, cy){
+  ctx.save(); ctx.lineCap='round'; ctx.lineJoin='round';
+  const sword=(rot)=>{ ctx.save(); ctx.translate(cx,cy); ctx.rotate(rot); opoly([[-2,-11],[2,-11],[2.5,5],[0,8],[-2.5,5]],'#e2e9f2','#8a98ad',1.6); orr(-6,4.5,12,3,1.4,'#d2a64c','#7a5a18',1.4); orr(-1.4,7,2.8,6,1.2,'#9a6a3c','#5a3a1e',1.2); ctx.restore(); };
+  const skull=()=>{ ocirc(cx,cy-2,9,'#eef1f5','#8a98ad',2); ctx.fillStyle='#2a3142'; ctx.beginPath(); ctx.arc(cx-3.5,cy-3,2.1,0,7); ctx.arc(cx+3.5,cy-3,2.1,0,7); ctx.fill(); orr(cx-5,cy+5,10,5,2,'#eef1f5','#8a98ad',1.5); ctx.strokeStyle='#8a98ad'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(cx-1.6,cy+5);ctx.lineTo(cx-1.6,cy+10);ctx.moveTo(cx+1.6,cy+5);ctx.lineTo(cx+1.6,cy+10);ctx.stroke(); };
+  const crown=()=>{ opoly([[cx-11,cy+6],[cx-11,cy-7],[cx-4,cy-1],[cx,cy-10],[cx+4,cy-1],[cx+11,cy-7],[cx+11,cy+6]],'#ffd95e','#9c6f12',2); for(const dx of [-7,0,7]) ocirc(cx+dx,cy-8,1.9,'#ff5e6e','#9c2433',1); };
+  if (id==='first_blood'){ sword(0); ctx.fillStyle='#e0414e'; ctx.beginPath(); ctx.arc(cx+7,cy+7,3,0,7); ctx.fill(); }
+  else if (id==='centurion'){ sword(-0.5); sword(0.5); }
+  else if (id==='slayer'){ skull(); }
+  else if (id==='giantslayer'){ skull(); opoly([[cx-8,cy-9],[cx-4,cy-14],[cx,cy-9],[cx+4,cy-14],[cx+8,cy-9]],'#ffd95e','#9c6f12',1.6); }
+  else if (id==='veteran'){ opoly([[cx-9,cy-9],[cx+9,cy-9],[cx+9,cy+1],[cx,cy+11],[cx-9,cy+1]],'#9fb6e0','#3b5ba8',2.2); star(cx,cy-1,4.5,'#fff','#3b5ba8'); }
+  else if (id==='warlord'){ ctx.fillStyle='#cfd6e2'; ctx.beginPath(); ctx.arc(cx,cy,9,Math.PI,0); ctx.lineTo(cx+9,cy+5); ctx.lineTo(cx-9,cy+5); ctx.closePath(); ctx.fill(); ctx.strokeStyle='#6a7488'; ctx.lineWidth=2; ctx.stroke(); ctx.fillStyle='#ff5e4d'; rr(cx-1.5,cy-13,3,9,1.2); ctx.fill(); }
+  else if (id==='legend'){ crown(); }
+  else if (id==='flawless'){ ctx.fillStyle='#ff6e8a'; ctx.beginPath(); ctx.moveTo(cx,cy+8); ctx.bezierCurveTo(cx-12,cy-2,cx-5,cy-12,cx,cy-5); ctx.bezierCurveTo(cx+5,cy-12,cx+12,cy-2,cx,cy+8); ctx.fill(); ctx.strokeStyle='#c2415e'; ctx.lineWidth=1.6; ctx.stroke(); glint(cx-3,cy-4,1.8); }
+  else if (id==='collector'){ gemIcon(cx,cy,11); }
+  else { ocirc(cx-5,cy+4,7,'#e0b23c','#9c6f12',2); ocirc(cx+5,cy+4,7,'#e0b23c','#9c6f12',2); ocirc(cx,cy-3,8,'#ffe487','#9c6f12',2); chunkyText('$',cx,cy-2,8,'#9c6f12',null,'700'); }
+  ctx.restore();
+}
 function drawBadges(){
   uiHits = []; menuBg(); menuHeader('BADGES');
   let changed = false;
@@ -3417,14 +3435,17 @@ function drawBadges(){
   const cols=3, cw=148, ch=104, gx=14, gy=140, gap=8;
   BADGES.forEach((b,i)=>{
     const x=gx+(i%cols)*(cw+gap), y=gy+Math.floor(i/cols)*(ch+gap), have=!!META.s.badges[b.id];
-    orr(x, y, cw, ch, 12, 'rgba(255,255,255,0.12)', have?'#ffd95e':'rgba(255,255,255,0.22)', have?3:2);
-    ocirc(x+cw/2, y+30, 18, have?'#ffd95e':'#5a6488', have?'#a8761c':'#3a4060', 3);
-    if (have) star(x+cw/2, y+30, 10, '#fff', '#a8761c');
-    else chunkyText('?', x+cw/2, y+31, 18, '#aab4d0', null, '700');
-    chunkyText(b.name, x+cw/2, y+58, 11, have?'#fff':'#aab4d0', null, '600');
-    chunkyText(b.desc, x+cw/2, y+73, 8.5, have?'#dfe6ff':'#8a93b8', null, '500');
-    honorIcon(x+cw/2-16, y+91, 5);
-    chunkyText('+'+b.honor+' Honor', x+cw/2-6, y+92, 9, '#ffd95e', null, '600', 'left');
+    const fr = have?'#ffd95e':'#5a6488';
+    ctx.save(); ctx.shadowColor=fr; ctx.shadowBlur=have?10:0;
+    gradPanel(x, y, cw, ch, 12, have?'rgba(78,64,28,0.62)':'rgba(46,56,90,0.95)', 'rgba(26,32,54,0.95)', fr, have?3:2);
+    ctx.restore();
+    ctx.save(); ctx.shadowColor=fr; ctx.shadowBlur=have?8:0; ocirc(x+cw/2, y+34, 22, 'rgba(14,20,36,0.9)', fr, 2.6); ctx.restore();
+    ctx.save(); if(!have) ctx.globalAlpha=0.38; badgeIcon(b.id, x+cw/2, y+34); ctx.globalAlpha=1; ctx.restore();
+    if (have) star(x+cw-16, y+16, 6.5, '#ffd95e', '#a8761c');
+    chunkyText(b.name, x+cw/2, y+64, 11, have?'#fff':'#aab4d0', '#10131f', '700');
+    chunkyText(b.desc, x+cw/2, y+78, 8.5, have?'#dfe6ff':'#8a93b8', null, '500');
+    honorIcon(x+cw/2-20, y+93, 5);
+    chunkyText('+'+b.honor, x+cw/2-10, y+94, 9.5, '#ffd95e', null, '700', 'left');
   });
   drawMenuToast();
 }
