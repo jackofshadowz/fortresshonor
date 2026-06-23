@@ -2522,8 +2522,36 @@ function I(name){
  'pawn_b','pawn_p','pawn_r','pawn_y','warrior_b','warrior_r','torch_r','torch_y','torch_p','tnt_r','tnt_y',
  'barrel_r','archer_r','archer_b','explosions','fire','arrow','dynamite','dead',
  'archery_b','barracks_r','monastery_p','house1_b','house2_r','house3_p','lancer_down',
- 'princess','golem'].forEach(I);
+ 'princess','golem',
+ 'ui_panel','ui_ribbon_y','ui_ribbon_b','ui_btn_b','ui_btn_r','ui_banner'].forEach(I);
 function assetsReady(){ return imgLoaded >= imgCount; }
+/* Tiny Swords UI sprites — 9-slice panel/button (192px, 64px corners) + 3-slice ribbon (192x64) */
+function ninePatch(name, dx, dy, dw, dh, db){
+  const im = I(name); if (!im.complete || !im.naturalWidth){ orr(dx,dy,dw,dh,12,'rgba(40,52,84,0.95)','rgba(255,255,255,0.25)',2.5); return; }
+  const iw = im.naturalWidth, ih = im.naturalHeight, sb = iw/3; db = db || 20;
+  db = Math.min(db, dw/2, dh/2);
+  const sx2 = iw-sb, sy2 = ih-sb, ex = dx+dw-db, ey = dy+dh-db, mw = dw-2*db, mh = dh-2*db, sm = iw-2*sb;
+  ctx.drawImage(im, 0,0,sb,sb, dx,dy,db,db);    ctx.drawImage(im, sx2,0,sb,sb, ex,dy,db,db);
+  ctx.drawImage(im, 0,sy2,sb,sb, dx,ey,db,db);  ctx.drawImage(im, sx2,sy2,sb,sb, ex,ey,db,db);
+  if (mw>0){ ctx.drawImage(im, sb,0,sm,sb, dx+db,dy,mw,db); ctx.drawImage(im, sb,sy2,sm,sb, dx+db,ey,mw,db); }
+  if (mh>0){ ctx.drawImage(im, 0,sb,sb,ih-2*sb, dx,dy+db,db,mh); ctx.drawImage(im, sx2,sb,sb,ih-2*sb, ex,dy+db,db,mh); }
+  if (mw>0&&mh>0) ctx.drawImage(im, sb,sb,sm,ih-2*sb, dx+db,dy+db,mw,mh);
+}
+function threeSlice(name, dx, dy, dw, dh, db){
+  const im = I(name); if (!im.complete || !im.naturalWidth) return;
+  const iw = im.naturalWidth, ih = im.naturalHeight, sb = iw/3; db = Math.min(db||18, dw/2);
+  ctx.drawImage(im, 0,0,sb,ih, dx,dy,db,dh);
+  ctx.drawImage(im, iw-sb,0,sb,ih, dx+dw-db,dy,db,dh);
+  ctx.drawImage(im, sb,0,iw-2*sb,ih, dx+db,dy,dw-2*db,dh);
+}
+function spriteBtn(x, y, w, h, kind, label, px){
+  ninePatch(kind==='red'?'ui_btn_r':'ui_btn_b', x, y, w, h, 22);
+  if (label) chunkyText(label, x+w/2, y+h/2-1, px||15, '#fff', 'rgba(20,30,55,0.55)', '700');
+}
+function uiRibbon(x, y, w, text, col){
+  threeSlice(col==='blue'?'ui_ribbon_b':'ui_ribbon_y', x, y, w, 22, 11);
+  chunkyText(text, x+w/2, y+11, 9, col==='blue'?'#eaf4ff':'#5a3a0a', null, '700');
+}
 function sprIm(im, fw, fh, col, row, dx, dy, s, flip, ay){
   ctx.save(); ctx.translate(dx, dy);
   if (flip) ctx.scale(-1, 1);
@@ -3221,8 +3249,8 @@ function menuBg(){
 function menuHeader(title){
   chunkyText(title, W/2, 36, 28, '#ffd95e', '#5a3a0a');
   drawWallet(W/2-95, 58);
-  chunkyBtn(12, 50, 88, 36, '#52b3f0', '#2f7fb5', '#1d5a8a', '‹ BACK', 16);
-  hit(12, 50, 88, 36, ()=>{ mode='title'; });
+  spriteBtn(12, 48, 90, 40, 'blue', '‹ BACK', 15);
+  hit(12, 48, 90, 40, ()=>{ mode='title'; });
 }
 function drawMenuToast(){
   if (menuToast && time < menuToast.until){
@@ -3264,20 +3292,22 @@ function drawChip(it, x, y, w, h){
   const tier = it.cost===0 ? 0 : (it.cost<=80 ? 1 : it.cost<=140 ? 2 : 3);
   const tint = ['#9fb3c8','#7fc4ff','#c9a2e8','#ffce5a'][tier];
   const frame = equipped ? '#ffd95e' : owned ? '#7ed05f' : tint;
-  if (!owned && tier>=3){ ctx.save(); ctx.shadowColor = tint; ctx.shadowBlur = 13; ctx.fillStyle = hexA(tint,0.25); rr(x+2,y+2,w-4,h-4,11); ctx.fill(); ctx.restore(); }
-  gradPanel(x, y, w, h, 12, 'rgba(44,56,90,0.96)', 'rgba(22,28,48,0.96)', frame, (equipped||tier>=3) ? 3.5 : 2.5);
-  // art showcase
-  ctx.save(); rr(x+4, y+4, w-8, h-28, 9); ctx.clip();
-  const sg = ctx.createLinearGradient(0, y, 0, y+h-24); sg.addColorStop(0, hexA(tint,0.32)); sg.addColorStop(1, 'rgba(0,0,0,0.18)');
-  ctx.fillStyle = sg; ctx.fillRect(x+4, y+4, w-8, h-28);
-  chipPreview(it, x+w/2, y+(h-28)/2);
+  if (!owned && tier>=3){ ctx.save(); ctx.shadowColor = tint; ctx.shadowBlur = 13; ninePatch('ui_panel', x, y, w, h, 20); ctx.restore(); }
+  ninePatch('ui_panel', x, y, w, h, 20);   // carved wooden plaque (Tiny Swords UI)
+  // dark art slot with rarity-tinted edge so any art reads on the wood
+  const sx = x+9, sy = y+9, sw = w-18, sh = h-38;
+  orr(sx, sy, sw, sh, 8, 'rgba(18,24,40,0.8)', hexA(tint, equipped?1:0.85), equipped?3:2);
+  ctx.save(); rr(sx, sy, sw, sh, 8); ctx.clip();
+  const sg = ctx.createLinearGradient(0, sy, 0, sy+sh); sg.addColorStop(0, hexA(tint,0.30)); sg.addColorStop(1, 'rgba(0,0,0,0.22)');
+  ctx.fillStyle = sg; ctx.fillRect(sx, sy, sw, sh);
+  chipPreview(it, x+w/2, sy+sh/2);
   ctx.restore();
-  if (!owned && tier>=2) cardShine(x, y, w, h, 12, it.id.length*0.3);
-  if (tier>=3) ocirc(x+w-11, y+11, 6.5, tint, '#1c2030', 2);
-  chunkyText(it.name, x+w/2, y+h-16, 9.5, '#fff', '#10131f', '700');
-  if (equipped) chunkyText('✓ EQUIPPED', x+w/2, y+h-5, 8, '#ffd95e', null, '700');
-  else if (owned) chunkyText('TAP TO USE', x+w/2, y+h-5, 8, '#7ed05f', null, '600');
-  else { gemIcon(x+w/2-14, y+h-5, 5); chunkyText(it.cost, x+w/2+2, y+h-5, 10, '#9fe8ff', null, '700', 'left'); }
+  if (!owned && tier>=2) cardShine(sx, sy, sw, sh, 8, it.id.length*0.3);
+  if (tier>=3) ocirc(x+w-13, y+13, 7, tint, '#1c2030', 2);
+  chunkyText(it.name, x+w/2, y+h-19, 9.5, '#fff', '#3a2412', '700');
+  if (equipped) chunkyText('✓ EQUIPPED', x+w/2, y+h-7, 8, '#2e6b16', null, '700');
+  else if (owned) chunkyText('TAP TO USE', x+w/2, y+h-7, 8, '#2e6326', null, '700');
+  else { gemIcon(x+w/2-14, y+h-7, 5); chunkyText(it.cost, x+w/2+2, y+h-7, 10, '#1d5a8a', null, '700', 'left'); }
   hit(x, y, w, h, ()=>buyItem(it));
 }
 // distinct icon per keep-upgrade so the Upgrades tab reads at a glance
@@ -3299,48 +3329,46 @@ function modGlyph(id, cx, cy){
 }
 function drawStoreRow(it, yy, owned, ownLabel){
   const afford = META.s.gems >= it.cost;
-  const frame = owned ? '#7ed05f' : (it.slot==='prestige' ? '#ffce5a' : '#7fc4ff');
-  gradPanel(12, yy, W-24, 58, 12, 'rgba(44,56,90,0.95)', 'rgba(22,28,48,0.95)', frame, owned?3:2.5);
-  if (!owned && afford) cardShine(12, yy, W-24, 58, 12, it.id.length*0.4);
-  const icx = 46, icy = yy+29;
+  const accent = it.slot==='prestige' ? '#ffce5a' : '#7fc4ff';
+  ninePatch('ui_panel', 12, yy, W-24, 60, 20);   // carved wooden plaque
+  if (!owned && afford) cardShine(20, yy+6, W-40, 48, 8, it.id.length*0.4);
+  const icx = 48, icy = yy+30;
+  orr(icx-26, icy-26, 52, 52, 12, 'rgba(18,24,40,0.78)', accent, 2.5);
   if (it.slot === 'prestige'){
-    ctx.save(); ctx.shadowColor = frame; ctx.shadowBlur = owned?0:8; ocirc(icx, icy, 25, 'rgba(20,30,60,0.6)', frame, 2.5); ctx.restore();
-    ctx.save(); ctx.beginPath(); ctx.arc(icx, icy, 24, 0, 7); ctx.clip(); drawDeco(it.id, icx, icy+16, 1.2); ctx.restore();
-  } else {
-    ctx.save(); ctx.shadowColor = '#ffce5a'; ctx.shadowBlur = owned?0:8; ocirc(icx, icy, 24, '#ffce5a', '#9c6f12', 2.5); ctx.restore();
-    modGlyph(it.id, icx, icy);
-  }
-  chunkyText(it.name, 84, yy+21, 15, '#fff', '#10131f', '700', 'left');
-  chunkyText(it.desc, 84, yy+40, 11, '#dfe6ff', null, '500', 'left');
-  if (it.honor) chunkyText('+'+it.honor+' Honor', W-150, yy+41, 10, '#ffd95e', null, '600', 'left');
-  if (owned) chunkyText('✓ '+ownLabel, W-62, yy+31, 13, '#7ed05f', null, '700');
+    ctx.save(); ctx.beginPath(); rr(icx-25, icy-25, 50, 50, 11); ctx.clip(); drawDeco(it.id, icx, icy+17, 1.25); ctx.restore();
+  } else { modGlyph(it.id, icx, icy); }
+  chunkyText(it.name, 84, yy+22, 15, '#fff', '#3a2412', '700', 'left');
+  chunkyText(it.desc, 84, yy+41, 11, '#f2e6cf', '#3a2412', '500', 'left');
+  if (it.honor) chunkyText('+'+it.honor+' Honor', W-150, yy+42, 10, '#ffd95e', '#5a3a0a', '700', 'left');
+  if (owned) chunkyText('✓ '+ownLabel, W-62, yy+32, 13, '#2e6b16', null, '700');
   else {
-    chunkyBtn(W-120, yy+13, 100, 32, afford?'#ffce5a':'#b0ada6', afford?'#dba32c':'#8d8a83', afford?'#9c6f12':'#6e6b64', 'BUY '+it.cost, 14);
-    hit(W-120, yy+13, 100, 32, ()=>buyItem(it));
+    spriteBtn(W-122, yy+14, 102, 34, afford?'blue':'red', 'BUY '+it.cost, 14);
+    hit(W-122, yy+14, 102, 34, ()=>buyItem(it));
   }
 }
 function drawGemTab(){
   let yy = 144;
   for (const pack of GEM_PACKS){
     const isFree = pack.id==='free', ready = isFree ? freeGemReady() : true;
-    const h = 78, hot = (pack.id==='large' || pack.id==='starter'), pop = pack.id==='med';
-    const frame = isFree ? '#7ed05f' : hot ? '#ffd95e' : pop ? '#c9a2e8' : 'rgba(255,255,255,0.32)';
-    if (hot){ ctx.save(); ctx.shadowColor='#ffd95e'; ctx.shadowBlur=14; ctx.fillStyle='rgba(255,217,94,0.16)'; rr(14, yy+2, W-28, h-4, 13); ctx.fill(); ctx.restore(); }
-    gradPanel(12, yy, W-24, h, 14, 'rgba(46,58,92,0.97)', 'rgba(24,30,52,0.97)', frame, hot?3.5:2.5);
-    if (hot) cardShine(12, yy, W-24, h, 14, pack.gems*0.001);
+    const h = 80, hot = (pack.id==='large' || pack.id==='starter');
+    if (hot){ ctx.save(); ctx.shadowColor='#ffd95e'; ctx.shadowBlur=16; ninePatch('ui_panel', 12, yy, W-24, h, 22); ctx.restore(); }
+    ninePatch('ui_panel', 12, yy, W-24, h, 22);   // carved wooden plaque
+    if (hot) cardShine(20, yy+6, W-40, h-12, 8, pack.gems*0.001);
+    // gem showcase slot
+    orr(24, yy+12, 64, h-24, 10, 'rgba(18,24,40,0.7)', '#2a8fc0', 2);
     gemPile(56, yy+h/2, pack.gems);
-    chunkyText(pack.gems + ' GEMS', 104, yy+28, 19, '#fff', '#10131f', '700', 'left');
-    chunkyText(pack.name, 104, yy+50, 11, '#cfe0f5', null, '500', 'left');
-    if (pack.best) chunkyText(pack.best, 104, yy+65, 9.5, '#ffd95e', null, '700', 'left');
-    if (pack.id==='starter') ribbon(W-150, yy+9, 'STARTER', '#ff9c3f');
-    else if (pack.id==='large') ribbon(W-146, yy+9, 'BEST VALUE', '#ffd95e');
-    else if (pop) ribbon(W-128, yy+9, 'POPULAR', '#c9a2e8');
+    chunkyText(pack.gems + ' GEMS', 102, yy+28, 19, '#fff', '#3a2412', '700', 'left');
+    chunkyText(pack.name, 102, yy+49, 11, '#5a3a18', null, '600', 'left');
+    if (pack.best) chunkyText(pack.best, 102, yy+64, 9.5, '#9c5a12', null, '700', 'left');
+    if (pack.id==='starter') uiRibbon(W-118, yy+8, 96, 'STARTER', 'yellow');
+    else if (pack.id==='large') uiRibbon(W-118, yy+8, 96, 'BEST VALUE', 'yellow');
+    else if (pack.id==='med') uiRibbon(W-110, yy+8, 88, 'POPULAR', 'blue');
     const ok = isFree ? ready : true, label = isFree ? (ready ? 'CLAIM' : 'SOON') : pack.price;
-    chunkyBtn(W-126, yy+h-42, 106, 34, ok?'#5cc04c':'#b0ada6', ok?'#41973a':'#8d8a83', ok?'#2e6326':'#6e6b64', label, 15);
-    if (ok) hit(W-126, yy+h-42, 106, 34, ()=>buyGems(pack));
+    spriteBtn(W-126, yy+h-44, 106, 36, ok?'blue':'red', label, 15);
+    if (ok) hit(W-126, yy+h-44, 106, 36, ()=>buyGems(pack));
     yy += h+12;
   }
-  chunkyText('Demo only — bundles grant gems instantly, no real payment', W/2, yy+6, 10, '#aab4d0', null, '500');
+  chunkyText('Demo only — bundles grant gems instantly, no real payment', W/2, yy+6, 10, '#dfe6ff', null, '500');
 }
 function drawStore(){
   uiHits = []; menuBg(); menuHeader('ROYAL STORE');
