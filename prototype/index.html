@@ -3428,24 +3428,59 @@ function drawBadges(){
   });
   drawMenuToast();
 }
+// hand-drawn vector gear icons (on-style with the chunky outline look)
+function gearIcon(id, cx, cy){
+  ctx.save(); ctx.lineCap='round'; ctx.lineJoin='round';
+  if (id==='sword'){
+    opoly([[cx-2.5,cy-13],[cx+2.5,cy-13],[cx+3.5,cy+3],[cx,cy+8],[cx-3.5,cy+3]], '#e2e9f2', '#8a98ad', 2);
+    ctx.strokeStyle='rgba(255,255,255,0.6)'; ctx.lineWidth=1.2; ctx.beginPath(); ctx.moveTo(cx,cy-11); ctx.lineTo(cx,cy+3); ctx.stroke();
+    orr(cx-8,cy+3,16,4,1.6,'#d2a64c','#7a5a18',1.8);
+    orr(cx-1.8,cy+7,3.6,9,1.6,'#9a6a3c','#5a3a1e',1.6);
+    ocirc(cx,cy+17,2.6,'#ffd95e','#9c6f12',1.6);
+  } else if (id==='bow'){
+    ctx.strokeStyle='#9a6a3c'; ctx.lineWidth=3.2; ctx.beginPath(); ctx.arc(cx+4,cy,13,Math.PI*0.62,Math.PI*1.38); ctx.stroke();
+    ctx.strokeStyle='#e8e0cf'; ctx.lineWidth=1.3; ctx.beginPath(); ctx.moveTo(cx+4+Math.cos(Math.PI*0.62)*13, cy+Math.sin(Math.PI*0.62)*13); ctx.lineTo(cx+4+Math.cos(Math.PI*1.38)*13, cy+Math.sin(Math.PI*1.38)*13); ctx.stroke();
+    ctx.strokeStyle='#7a4a1a'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(cx-9,cy); ctx.lineTo(cx+10,cy); ctx.stroke();
+    opoly([[cx+13,cy],[cx+7,cy-3.5],[cx+7,cy+3.5]], '#cfd6e2', '#8a98ad', 1.2);
+  } else if (id==='plate'){
+    opoly([[cx-10,cy-10],[cx+10,cy-10],[cx+10,cy+2],[cx,cy+12],[cx-10,cy+2]], '#b2bccc', '#6a7488', 2.5);
+    opoly([[cx-10,cy-10],[cx,cy-10],[cx,cy+9],[cx-10,cy+1]], 'rgba(255,255,255,0.22)', null);
+    ctx.strokeStyle='#6a7488'; ctx.lineWidth=1.4; ctx.beginPath(); ctx.moveTo(cx,cy-10); ctx.lineTo(cx,cy+11); ctx.moveTo(cx-10,cy-2); ctx.lineTo(cx+10,cy-2); ctx.stroke();
+  } else if (id==='drum'){
+    orr(cx-10,cy-7,20,14,5,'#c0894a','#7a5320',2.4);
+    ctx.fillStyle='#ead9b0'; ctx.beginPath(); ctx.ellipse(cx,cy-7,10,3.6,0,0,7); ctx.fill(); ctx.strokeStyle='#7a5320'; ctx.lineWidth=1.6; ctx.stroke();
+    ctx.strokeStyle='#7a5320'; ctx.lineWidth=1.3; ctx.beginPath(); ctx.moveTo(cx-9,cy-3); ctx.lineTo(cx+9,cy+4); ctx.moveTo(cx+9,cy-3); ctx.lineTo(cx-9,cy+4); ctx.stroke();
+  } else if (id==='coin'){
+    ocirc(cx-4,cy+3,8,'#e0b23c','#9c6f12',2.2); ocirc(cx+4,cy-2,8.5,'#ffe487','#9c6f12',2.2);
+    chunkyText('$', cx+4, cy-1, 9, '#9c6f12', null, '700');
+  } else {
+    opoly([[cx,cy-12],[cx+11,cy-3],[cx+7,cy+11],[cx-7,cy+11],[cx-11,cy-3]], '#7fa8ff', '#3b5ba8', 2.2);
+    ctx.strokeStyle='#dfe9ff'; ctx.lineWidth=1.7; ctx.beginPath(); ctx.moveTo(cx,cy-6); ctx.lineTo(cx,cy+6); ctx.moveTo(cx-4.5,cy-1); ctx.lineTo(cx+4.5,cy+3); ctx.stroke();
+    glint(cx-3,cy-4,1.8);
+  }
+  ctx.restore();
+}
 function drawGear(){
   uiHits = []; menuBg(); menuHeader('GEAR');
   chunkyText('Equip one item per slot — applies every run', W/2, 104, 11, '#dfe6ff', null, '500');
-  let y = 122;
+  let y = 124;
   for (const slot of GEAR_SLOTS){
-    chunkyText(slot.toUpperCase(), 18, y, 13, '#ffd95e', null, '700', 'left');
+    chunkyText(slot.toUpperCase(), 18, y, 13, '#ffd95e', '#5a3a0a', '700', 'left');
     GEAR.filter(g=>g.slot===slot).forEach((g,i)=>{
-      const x = 12 + i*228, cw = 222, ch = 64;
+      const x = 12 + i*228, cw = 222, ch = 76;
       const owned = META.s.gear.owned.includes(g.id), eq = META.s.gear.equip[slot]===g.id;
-      orr(x, y+8, cw, ch, 12, eq?'rgba(255,217,94,0.16)':'rgba(255,255,255,0.10)', eq?'#ffd95e':(owned?'#7ed05f':'#cfd6e2'), eq?3.5:2.5);
-      chunkyText(g.name, x+12, y+30, 14, '#fff', '#10131f', '700', 'left');
-      chunkyText(g.desc, x+12, y+48, 11, '#cfe0f5', null, '500', 'left');
-      const bw = 72, bx = x+cw-bw-10, by = y+8+ch/2-14;
-      if (eq) chunkyText('ON', bx+bw/2, by+15, 13, '#ffd95e', null, '700');
-      else if (owned){ chunkyBtn(bx, by, bw, 28, '#5cc04c', '#41973a', '#2e6326', 'EQUIP', 12); hit(bx, by, bw, 28, ()=>{ META.s.gear.equip[slot]=g.id; META.save(); sfx.place(); }); }
-      else { chunkyBtn(bx, by, bw, 28, '#ffce5a', '#dba32c', '#9c6f12', g.cost+'◆', 12); hit(bx, by, bw, 28, ()=>{ if (spendGems(g.cost)){ META.s.gear.owned.push(g.id); META.s.gear.equip[slot]=g.id; META.save(); toast(g.name+' equipped!'); sfx.fanfare(); } else toast('Need '+g.cost+' gems'); }); }
+      const fr = eq?'#ffd95e':owned?'#7ed05f':'#7fc4ff';
+      ctx.save(); ctx.shadowColor=fr; ctx.shadowBlur=eq?10:5; gradPanel(x, y+8, cw, ch, 13, 'rgba(50,62,100,0.97)', 'rgba(26,32,54,0.97)', fr, eq?3.5:2.8); ctx.restore();
+      const mx = x+34, my = y+8+34;
+      ctx.save(); ctx.shadowColor=fr; ctx.shadowBlur=7; ocirc(mx, my, 23, 'rgba(14,20,36,0.92)', fr, 2.6); ctx.restore();
+      gearIcon(g.id, mx, my);
+      chunkyText(g.name, x+62, y+27, 13, '#fff', '#10131f', '700', 'left');
+      chunkyText(g.desc, x+62, y+44, 10, '#cfe0f5', null, '600', 'left');
+      if (eq){ chunkyText('✓ EQUIPPED', x+cw/2+18, y+8+ch-13, 11, '#ffd95e', null, '700'); }
+      else if (owned){ chunkyBtn(x+60, y+8+ch-26, 96, 20, '#5cc04c', '#41973a', '#2e6326', 'EQUIP', 11); hit(x+60, y+8+ch-26, 96, 20, ()=>{ META.s.gear.equip[slot]=g.id; META.save(); sfx.place(); }); }
+      else { chunkyBtn(x+60, y+8+ch-26, 96, 20, '#ffce5a', '#dba32c', '#9c6f12', g.cost+'◆', 11); hit(x+60, y+8+ch-26, 96, 20, ()=>{ if (spendGems(g.cost)){ META.s.gear.owned.push(g.id); META.s.gear.equip[slot]=g.id; META.save(); toast(g.name+' equipped!'); sfx.fanfare(); } else toast('Need '+g.cost+' gems'); }); }
     });
-    y += 84;
+    y += 98;
   }
   drawMenuToast();
 }
@@ -3493,18 +3528,22 @@ function drawHeroes(){
 function drawKingdom(){
   uiHits = []; menuBg(); menuHeader('KINGDOM');
   // --- city view panel ---
-  const px = 14, py = 98, pw = W-28, ph = 176;
+  const px = 14, py = 98, pw = W-28, ph = 188;
   orr(px, py, pw, ph, 14, 'rgba(30,40,70,0.5)', 'rgba(255,255,255,0.18)', 2.5);
   ctx.save(); rr(px, py, pw, ph, 14); ctx.clip();
-  const cx = W/2, gy = py + ph - 26;
-  blob(cx, gy, 150, 28, 2.2); ctx.fillStyle = '#8bd05e'; ctx.fill(); ctx.strokeStyle = '#5fa83c'; ctx.lineWidth = 4; ctx.stroke();
-  orr(cx-22, gy-46, 44, 46, 6, '#e8dcc0', '#8a7a5a', 3);
-  orr(cx-11, gy-66, 22, 26, 4, '#d8c8a0', '#8a7a5a', 3);
-  opoly([[cx-13,gy-64],[cx,gy-82],[cx+13,gy-64]], '#5ab9bb', '#2a5a9e', 2.5);
-  orr(cx-3, gy-22, 6, 22, 2, '#8a5a3c', '#5a3a22', 2);
-  const SLOTS = { p_cathedral:[92,-10], p_statue:[-66,-2], p_fountain:[70,0], p_garden:[-104,6], p_throne:[30,8] };
-  for (const id in SLOTS) if (META.s.owned.includes(id)){ const s = SLOTS[id]; drawDeco(id, cx+s[0], gy+s[1], 0.9); }
-  drawChibiKnight(cx, gy+4, 0.85);
+  // real sky + floating island + castle (same art as the title hero shot)
+  const skg = ctx.createLinearGradient(0, py, 0, py+ph);
+  skg.addColorStop(0,'#5a8fd8'); skg.addColorStop(0.55,'#9fb6e2'); skg.addColorStop(1,'#e7c8de');
+  ctx.fillStyle = skg; ctx.fillRect(px, py, pw, ph);
+  for (let i=0;i<9;i++){ const sx=px+18+((i*97)%(pw-36)), sy=py+12+((i*53)%72); ctx.globalAlpha=0.45+0.4*Math.abs(Math.sin(time*1.4+i)); ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(sx,sy,1.3,0,7); ctx.fill(); }
+  ctx.globalAlpha=1;
+  ctx.save();
+  ctx.translate(W/2, py + ph*0.44 + Math.sin(time*1.2)*3); ctx.scale(0.64, 0.64);
+  drawDreamIsland(0, 0);
+  const SLOTS = { p_cathedral:[112,-16], p_statue:[-88,-4], p_fountain:[88,0], p_garden:[-130,8], p_throne:[42,12] };
+  for (const id in SLOTS) if (META.s.owned.includes(id)){ const s = SLOTS[id]; drawDeco(id, s[0], s[1], 1.2); }
+  drawChibiKnight(0, 16, 1.5);
+  ctx.restore();
   ctx.restore();
   chunkyText('Your Keep', px+12, py+17, 12, '#fff', '#10131f', '700', 'left');
   chunkyText(honorRank(), W-px-12, py+17, 12, '#ffd95e', null, '600', 'right');
