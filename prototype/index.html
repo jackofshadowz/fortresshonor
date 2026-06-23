@@ -2172,6 +2172,14 @@ function drawDreamIsland(cx, iy){
 /* a prestige decoration rendered on the title keep — your owned PRESTIGE_CAT grows the city */
 function drawDeco(id, x, y, s){
   s = s || 1;
+  if (PRE_SPR[id]){   // real grand-building art for the prestige wonders
+    const im = I(PRE_SPR[id]);
+    if (im.complete && im.naturalWidth){
+      const base = 52 * s, sc = base / Math.max(im.naturalWidth, im.naturalHeight);
+      ctx.drawImage(im, x - im.naturalWidth*sc/2, y - im.naturalHeight*sc*0.86, im.naturalWidth*sc, im.naturalHeight*sc);
+      return;
+    }
+  }
   ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
   if (id === 'p_statue'){
     orr(-7, -2, 14, 8, 2, '#c9ced4', '#8a9098', 2);
@@ -2566,7 +2574,10 @@ function I(name){
  'princess','golem',
  'ui_panel','ui_ribbon_y','ui_ribbon_b','ui_btn_b','ui_btn_r','ui_banner',
  'ic_sword','ic_bow','ic_armor','ic_shield','ic_shield2','ic_helmet','ic_coin','ic_pouch','ic_goldbar','ic_gem','ic_reroll','ic_horn','ic_harp','ic_ring',
- 'ic_skull','ic_skullfire','ic_heart','ic_swords9'].forEach(I);
+ 'ic_skull','ic_skullfire','ic_heart','ic_swords9',
+ 'pre_pagoda','pre_temple','pre_keep','pre_cathedral','pre_palace'].forEach(I);
+// prestige wonders: real grand-building art (SevenKingdoms CC0)
+const PRE_SPR = { p_statue:'pre_pagoda', p_fountain:'pre_temple', p_garden:'pre_keep', p_cathedral:'pre_cathedral', p_throne:'pre_palace' };
 // real fantasy item icons (Shikashi CC0) for store upgrades + gear
 function realIcon(name, cx, cy, size){ if (!name) return false; const im = I(name); if (!im.complete || !im.naturalWidth) return false; ctx.drawImage(im, 0, 0, im.naturalWidth, im.naturalHeight, cx-size/2, cy-size/2, size, size); return true; }
 const MOD_ICON = { coffers:'ic_pouch', gate:'ic_shield', fletcher:'ic_bow', quarter:'ic_reroll', squire:'ic_helmet', treasury:'ic_goldbar', bulwark:'ic_shield2', warhorn:'ic_horn', wallarchers:'ic_bow' };
@@ -3074,11 +3085,11 @@ const MOD_CAT = [
 ];
 // Prestige: pure flex. Spend Gems, gain permanent Honor rank. One-time trophies.
 const PRESTIGE_CAT = [
-  { id:'p_statue',   name:'Bronze Statue',   desc:'A likeness in the square',  cost:120,  honor:50 },
-  { id:'p_fountain', name:'Marble Fountain', desc:'The courtyard glitters',    cost:280,  honor:120 },
-  { id:'p_garden',   name:'Royal Gardens',   desc:'Envy of every realm',       cost:600,  honor:280 },
-  { id:'p_cathedral',name:'Grand Cathedral', desc:'Spires touch the clouds',   cost:1200, honor:600 },
-  { id:'p_throne',   name:'Golden Throne',   desc:'Fit for a true sovereign',  cost:2500, honor:1400 },
+  { id:'p_statue',   name:'Royal Pagoda',    desc:'Tiered halls of red & gold', cost:120,  honor:50 },
+  { id:'p_fountain', name:'Marble Temple',   desc:'White columns gleam',        cost:280,  honor:120 },
+  { id:'p_garden',   name:'Royal Keep',      desc:'Walls fit for a king',       cost:600,  honor:280 },
+  { id:'p_cathedral',name:'Grand Cathedral', desc:'Domes touch the clouds',     cost:1200, honor:600 },
+  { id:'p_throne',   name:'Golden Palace',   desc:'A wonder of the realm',       cost:2500, honor:1400 },
 ];
 // Hero roster — collectible champions; the selected one grants a run-long boon (Hero spine).
 // Observed in FM: a multi-hero collection (Baker/Berserker/Paladin/Elf Archer/Undertaker/King…).
@@ -3398,7 +3409,7 @@ function drawStoreRow(it, yy, owned, ownLabel){
   const mx = 48, my = yy+h/2;
   ctx.save(); ctx.shadowColor = accent; ctx.shadowBlur = 8; ocirc(mx, my, 27, 'rgba(14,20,36,0.92)', accent, 3); ctx.restore();
   if (it.slot === 'prestige'){
-    ctx.save(); ctx.beginPath(); ctx.arc(mx, my, 25, 0, 7); ctx.clip(); ctx.translate(mx, my); ctx.scale(1.5, 1.5); drawDeco(it.id, 0, 13, 1); ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.arc(mx, my, 25, 0, 7); ctx.clip(); drawDeco(it.id, mx, my+15, 0.95); ctx.restore();
   } else if (!realIcon(MOD_ICON[it.id], mx, my, 38)){   // real fantasy icon, fallback to glyph
     ctx.save(); ctx.translate(mx, my); ctx.scale(1.5, 1.5); modGlyph(it.id, 0, 0); ctx.restore();
   }
