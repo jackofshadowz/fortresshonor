@@ -2512,6 +2512,7 @@ function I(name){
     imgCount++;
     const im = new Image();
     im.onload = () => imgLoaded++;
+    im.onerror = () => imgLoaded++;   // never let a missing asset brick the loader
     im.src = 'assets/' + name + '.png';
     IMGS[name] = im;
   }
@@ -2524,11 +2525,13 @@ function I(name){
  'archery_b','barracks_r','monastery_p','house1_b','house2_r','house3_p','lancer_down',
  'princess','golem',
  'ui_panel','ui_ribbon_y','ui_ribbon_b','ui_btn_b','ui_btn_r','ui_banner',
- 'ic_sword','ic_bow','ic_armor','ic_shield','ic_shield2','ic_helmet','ic_coin','ic_pouch','ic_goldbar','ic_gem','ic_reroll','ic_horn','ic_harp','ic_ring'].forEach(I);
+ 'ic_sword','ic_bow','ic_armor','ic_shield','ic_shield2','ic_helmet','ic_coin','ic_pouch','ic_goldbar','ic_gem','ic_reroll','ic_horn','ic_harp','ic_ring',
+ 'ic_skull','ic_skullfire','ic_heart','ic_swords9'].forEach(I);
 // real fantasy item icons (Shikashi CC0) for store upgrades + gear
-function realIcon(name, cx, cy, size){ const im = I(name); if (!im.complete || !im.naturalWidth) return false; ctx.drawImage(im, 0, 0, im.naturalWidth, im.naturalHeight, cx-size/2, cy-size/2, size, size); return true; }
+function realIcon(name, cx, cy, size){ if (!name) return false; const im = I(name); if (!im.complete || !im.naturalWidth) return false; ctx.drawImage(im, 0, 0, im.naturalWidth, im.naturalHeight, cx-size/2, cy-size/2, size, size); return true; }
 const MOD_ICON = { coffers:'ic_pouch', gate:'ic_shield', fletcher:'ic_bow', quarter:'ic_reroll', squire:'ic_helmet', treasury:'ic_goldbar', bulwark:'ic_shield2', warhorn:'ic_horn' };
 const GEAR_ICON = { sword:'ic_sword', bow:'ic_bow', plate:'ic_armor', drum:'ic_harp', coin:'ic_coin', rune:'ic_gem' };
+const BADGE_ICON = { first_blood:'ic_sword', centurion:'ic_swords9', slayer:'ic_skull', giantslayer:'ic_skullfire', veteran:'ic_shield', warlord:'ic_helmet', flawless:'ic_heart', collector:'ic_gem', tycoon:'ic_pouch' };
 function assetsReady(){ return imgLoaded >= imgCount; }
 /* Tiny Swords UI sprites — 9-slice panel/button (192px, 64px corners) + 3-slice ribbon (192x64) */
 function ninePatch(name, dx, dy, dw, dh, db){
@@ -3456,7 +3459,7 @@ function drawBadges(){
     gradPanel(x, y, cw, ch, 12, have?'rgba(78,64,28,0.62)':'rgba(46,56,90,0.95)', 'rgba(26,32,54,0.95)', fr, have?3:2);
     ctx.restore();
     ctx.save(); ctx.shadowColor=fr; ctx.shadowBlur=have?8:0; ocirc(x+cw/2, y+34, 22, 'rgba(14,20,36,0.9)', fr, 2.6); ctx.restore();
-    ctx.save(); if(!have) ctx.globalAlpha=0.38; badgeIcon(b.id, x+cw/2, y+34); ctx.globalAlpha=1; ctx.restore();
+    ctx.save(); if(!have){ ctx.globalAlpha=0.5; ctx.filter='grayscale(0.8) brightness(0.6)'; } if(!realIcon(BADGE_ICON[b.id], x+cw/2, y+34, 32)) badgeIcon(b.id, x+cw/2, y+34); ctx.filter='none'; ctx.globalAlpha=1; ctx.restore();
     if (have) star(x+cw-16, y+16, 6.5, '#ffd95e', '#a8761c');
     chunkyText(b.name, x+cw/2, y+64, 11, have?'#fff':'#aab4d0', '#10131f', '700');
     chunkyText(b.desc, x+cw/2, y+78, 8.5, have?'#dfe6ff':'#8a93b8', null, '500');
@@ -3538,10 +3541,10 @@ function drawHeroes(){
     ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = owned ? 8 : 3; ocirc(mx, my, 28, 'rgba(14,20,36,0.92)', owned ? col : '#5a6488', 3); ctx.restore();
     ctx.save(); ctx.beginPath(); ctx.arc(mx, my, 26, 0, 7); ctx.clip();
     const mg = ctx.createLinearGradient(0, my-26, 0, my+26); mg.addColorStop(0, hexA(col,0.32)); mg.addColorStop(1, 'rgba(0,0,0,0.22)'); ctx.fillStyle = mg; ctx.fillRect(mx-26, my-26, 52, 52);
-    if (!owned) ctx.globalAlpha = 0.4;
-    spr(HSPR[h.id] || 'warrior_b', 192, 192, Math.floor(time*6)%6, 0, mx, my+22, 0.3, false, 0.78);
-    ctx.globalAlpha = 1; ctx.restore();
-    if (!owned) ocirc(mx, my, 8, 'rgba(16,18,28,0.85)', '#cfd6e2', 2.2);
+    if (!owned){ ctx.globalAlpha = 0.5; ctx.filter = 'grayscale(0.7) brightness(0.55)'; }
+    spr(HSPR[h.id] || 'warrior_b', 192, 192, Math.floor(time*6)%6, 0, mx, my+27, 0.46, false, 0.78);
+    ctx.filter = 'none'; ctx.globalAlpha = 1; ctx.restore();
+    if (!owned){ ocirc(mx+19, my+19, 9, 'rgba(16,18,28,0.92)', '#cfd6e2', 2); orr(mx+15.5, my+18.5, 7, 6, 1.6, '#cfd6e2', '#6a7488', 1.4); ctx.strokeStyle='#cfd6e2'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(mx+19, my+17.5, 2.6, Math.PI, 0); ctx.stroke(); }
     const lvl = heroLvl(h.id);
     chunkyText(h.name + (owned ? '   Lv' + lvl : ''), 88, y+22, 16, '#fff', '#10131f', '700', 'left');
     chunkyText(h.eff(owned ? lvl : 1), 88, y+44, 12, '#cfe0f5', null, '500', 'left');
