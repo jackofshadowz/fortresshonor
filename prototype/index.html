@@ -268,7 +268,7 @@ let selected = null;           // index into hand
 let dragging = false;
 let hoverCell = null;          // {c,r} anchor for selected piece
 let sellTarget = null;         // {c,r}
-let enemies = [], projectiles = [], eprojs = [], particles = [], floaters = [];
+let enemies = [], projectiles = [], eprojs = [], particles = [], floaters = [], guards = [];
 let spawnQueue = [], fightT = 0, clearT = 0, waveTotal = 0;
 let bestWave = +(localStorage.getItem('foh_best') || 0);
 let shake = 0, time = 0;
@@ -308,6 +308,9 @@ function reset(){
   wallMax = CONFIG.economy.wallBase + (META.s.mods.gate ? 25 : 0) + (META.s.mods.bulwark ? 40 : 0); wallHP = wallMax;
   runKills = 0;
   enemies = []; projectiles = []; eprojs = []; particles = []; floaters = [];
+  { const gateX = (FIELD_L+FIELD_R)/2; guards = [
+      { x: gateX-30, y: WALL_Y-3, cd:0, slashT:0, face:1, mv:0 },
+      { x: gateX+30, y: WALL_Y-3, cd:0, slashT:0, face:-1, mv:0 } ]; }
   villagers = [makeVillager(), makeVillager(), makeVillager(), makeVillager(), makePrincess()];
   critters = [makeCritter('chicken'), makeCritter('chicken'), makeCritter('pig')];
   hero = { x:(FIELD_L+FIELD_R)/2, y:GY+26, lvl:(META.s.mods.squire ? 2 : 1), cd:0, slashT:0, sortie:false, down:false };
@@ -739,6 +742,8 @@ function updateFight(dt){
     sfx.boom(); shake = 14;
   }
 
+  wallGuards();
+
   for (const t of towers()){
     const g = t.g;
     g.cd = (g.cd||0) - dt;
@@ -839,6 +844,34 @@ function tickBuffs(e, dt){
     if (id === 'burn' || id === 'poison'){
       e.hp -= CONFIG.buffs[id].dps * dt;
       if (Math.random() < dt*3) puff(e.x, e.y - e.r*0.5, CONFIG.buffs[id].col);
+    }
+  }
+}
+// wall guards: melee swordsmen by default; bow-armed (real ranged damage) once 'Train Archers' is bought
+function wallGuards(){
+  if (mode !== 'fight' || breached) return;
+  const archer = !!META.s.mods.wallarchers;
+  const range = archer ? 175 : 50;
+  const dmg = (archer ? 8 : 12) * (1 + (wave-1)*0.18) * metaDmgMult();
+  for (const gd of guards){
+    if (gd.cd > 0) gd.cd -= dt;
+    if (gd.slashT > 0) gd.slashT -= dt;
+    let best = null, bd = range;
+    for (const e of enemies){
+      if (e.hp <= 0 || e.y > WALL_Y + 12) continue;   // only foes that have reached the wall
+      const d = Math.hypot(e.x-gd.x, e.y-gd.y);
+      if (d < bd){ bd = d; best = e; }
+    }
+    if (!best) continue;
+    gd.face = best.x < gd.x ? -1 : 1;
+    if (gd.cd > 0) continue;
+    if (archer){
+      projectiles.push({ x:gd.x, y:gd.y-14, tgt:best, tx:best.x, ty:best.y, dmg, crit:false, splash:0, slow:RUN.slowBonus||0, burn:RUN.burnDur, poison:RUN.poisonDur, kind:'arrow', spd:520 });
+      gd.slashT = 0.18; gd.cd = 0.85; if (Math.random()<0.5) sfx.shoot();
+    } else {
+      hitEnemy(best, dmg, RUN.slowBonus||0);
+      puff(best.x, best.y-6, '#fff');
+      gd.slashT = 0.22; gd.cd = 0.65; sfx.thud && sfx.thud();
     }
   }
 }
@@ -1080,12 +1113,19 @@ function drawWall(){
   const bc = bannerColor();
   flag(wl+11, WALL_Y+24, 17, bc.color, bc.ink);
   flag(wr-11, WALL_Y+24, 17, bc.color, bc.ink);
-  // lancer guards flanking the gate on the courtyard side
-  const lf = Math.floor(time*5)%6;
-  spr('lancer_down', 320, 320, lf, 0, gx-32, WALL_Y+50, 0.17, false, 0.74);
-  spr('lancer_down', 320, 320, (lf+3)%6, 0, gx+32, WALL_Y+50, 0.17, true, 0.74);
-  // archers pacing ON the walkway deck, loosing arrows during an assault
-  for (let k2=0;k2<2;k2++){
+  // wall guards on the deck: melee swordsmen by default, bow-archers once 'Train Archers' is bought
+  const archerUp = !!META.s.mods.wallarchers;
+  for (const gd of guards){
+    const flip = gd.face < 0, act = gd.slashT > 0;
+    if (archerUp){
+      spr('archer_b', 192, 192, Math.floor(time*8)%6, (mode==='fight' && act) ? 6 : 1, gd.x, gd.y+5, 0.42, flip, 0.82);
+    } else {
+      spr('warrior_b', 192, 192, Math.floor((act?time*16:time*4))%6, 0, gd.x, gd.y+5, 0.42, flip, 0.82);
+      if (act){ ctx.save(); ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.lineWidth=3; ctx.lineCap='round'; ctx.beginPath(); ctx.arc(gd.x+(flip?-11:11), gd.y-7, 13, flip?Math.PI*0.55:Math.PI*0.35, flip?Math.PI*1.15:Math.PI*0.95); ctx.stroke(); ctx.restore(); }
+    }
+  }
+  // extra archers pacing the walkway as ambiance — only once the upgrade is owned
+  if (archerUp) for (let k2=0;k2<2;k2++){
     const ph = time*0.22 + k2*2.4;
     const seg = k2===0 ? [wl+44, 140] : [wr-190, 140];
     const ax = seg[0] + (Math.sin(ph)*0.5+0.5)*seg[1];
@@ -2529,7 +2569,7 @@ function I(name){
  'ic_skull','ic_skullfire','ic_heart','ic_swords9'].forEach(I);
 // real fantasy item icons (Shikashi CC0) for store upgrades + gear
 function realIcon(name, cx, cy, size){ if (!name) return false; const im = I(name); if (!im.complete || !im.naturalWidth) return false; ctx.drawImage(im, 0, 0, im.naturalWidth, im.naturalHeight, cx-size/2, cy-size/2, size, size); return true; }
-const MOD_ICON = { coffers:'ic_pouch', gate:'ic_shield', fletcher:'ic_bow', quarter:'ic_reroll', squire:'ic_helmet', treasury:'ic_goldbar', bulwark:'ic_shield2', warhorn:'ic_horn' };
+const MOD_ICON = { coffers:'ic_pouch', gate:'ic_shield', fletcher:'ic_bow', quarter:'ic_reroll', squire:'ic_helmet', treasury:'ic_goldbar', bulwark:'ic_shield2', warhorn:'ic_horn', wallarchers:'ic_bow' };
 const GEAR_ICON = { sword:'ic_sword', bow:'ic_bow', plate:'ic_armor', drum:'ic_harp', coin:'ic_coin', rune:'ic_gem' };
 const BADGE_ICON = { first_blood:'ic_sword', centurion:'ic_swords9', slayer:'ic_skull', giantslayer:'ic_skullfire', veteran:'ic_shield', warlord:'ic_helmet', flawless:'ic_heart', collector:'ic_gem', tycoon:'ic_pouch' };
 function assetsReady(){ return imgLoaded >= imgCount; }
@@ -3030,6 +3070,7 @@ const MOD_CAT = [
   { id:'treasury', name:'Treasury',         desc:'+20% gold from kills',       cost:200 },
   { id:'bulwark',  name:'Bulwark',          desc:'+40 max wall HP',            cost:180 },
   { id:'warhorn',  name:'War Horn',         desc:'+12% tower fire rate',       cost:240 },
+  { id:'wallarchers', name:'Train Archers', desc:'Wall guards wield bows & shoot', cost:200 },
 ];
 // Prestige: pure flex. Spend Gems, gain permanent Honor rank. One-time trophies.
 const PRESTIGE_CAT = [
