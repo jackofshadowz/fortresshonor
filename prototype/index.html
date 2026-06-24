@@ -273,6 +273,18 @@ let spawnQueue = [], fightT = 0, clearT = 0, waveTotal = 0;
 let bestWave = +(localStorage.getItem('foh_best') || 0);
 let shake = 0, time = 0;
 const ptr = { x:0, y:0, down:false };
+// global camera: parks on the city during build, pans/zooms up to the wall for a wave (Fortress-Merge style)
+const cam = { cy: 400, zoom: 1, tcy: 400, tzoom: 1 };
+function updateCam(dt){
+  if (mode === 'fight' || mode === 'perk'){ cam.tcy = 360; cam.tzoom = 1.12; }   // zoom to the wall
+  else { cam.tcy = 400; cam.tzoom = 1; }                                          // city / build framing
+  const k = Math.min(1, dt * 3.2);
+  cam.cy  += (cam.tcy  - cam.cy ) * k;
+  cam.zoom += (cam.tzoom - cam.zoom) * k;
+}
+function applyCam(){ ctx.translate(W/2, H/2); ctx.scale(cam.zoom, cam.zoom); ctx.translate(-W/2, -cam.cy); }
+function worldPt(p){ return { x: (p.x - W/2)/cam.zoom + W/2, y: (p.y - H/2)/cam.zoom + cam.cy }; }
+function toScreen(wx, wy){ return { x: (wx - W/2)*cam.zoom + W/2, y: (wy - cam.cy)*cam.zoom + H/2 }; }
 
 /* ---------- analytics (local telemetry; mirrors Fortress Merge's event funnel) ----------
    Events go to console + localStorage('foh_events'). The key balance signal is 'run_over'
@@ -2403,7 +2415,8 @@ cv.addEventListener('pointerdown', ev => {
   }
   sellTarget = null; heroSel = false;
   // tap the hero to manage him
-  if (hero && Math.hypot(p.x-hero.x, p.y-hero.y) < 26){ heroSel = true; return; }
+  const wp = worldPt(p);
+  if (hero && Math.hypot(wp.x-hero.x, wp.y-hero.y) < 26){ heroSel = true; return; }
 
   // rotate button
   if (rotBtnRect && selected !== null && hand[selected] && inRect(p, rotBtnRect)){
@@ -2435,10 +2448,10 @@ cv.addEventListener('pointerdown', ev => {
   if (inRect(p, BTN.fight)){ startFight(); return; }
 
   // grid tap: place selected or pick sell target
-  const cell = cellAt(p);
+  const cell = cellAt(wp);
   if (cell){
     if (selected !== null && hand[selected]){
-      hoverCell = anchorFor(hand[selected], p);
+      hoverCell = anchorFor(hand[selected], wp);
       placeSelected(hoverCell);
     } else if (grid[idx(cell.c, cell.r)]){
       sellTarget = cell;
@@ -2448,18 +2461,20 @@ cv.addEventListener('pointerdown', ev => {
 cv.addEventListener('pointermove', ev => {
   const p = toLogical(ev);
   ptr.x = p.x; ptr.y = p.y;
-  if (mode==='build' && selected !== null && hand[selected] && p.y < GY + ROWS*CELL + 30){
+  const wp = worldPt(p);
+  if (mode==='build' && selected !== null && hand[selected] && wp.y < GY + ROWS*CELL + 30){
     // while dragging, the piece floats above the finger so it isn't hidden
-    hoverCell = anchorFor(hand[selected], dragging ? {x:p.x, y:p.y-36} : p);
+    hoverCell = anchorFor(hand[selected], dragging ? {x:wp.x, y:wp.y-36/cam.zoom} : wp);
   } else hoverCell = null;
 });
 cv.addEventListener('pointerup', ev => {
   const p = toLogical(ev);
   ptr.down = false;
   if (mode==='build' && dragging && selected !== null && hand[selected]){
+    const wp = worldPt(p);
     const moved = downPos && Math.hypot(p.x-downPos.x, p.y-downPos.y) > 12;
-    if (moved && p.y < GY + ROWS*CELL + 40){
-      placeSelected(anchorFor(hand[selected], {x:p.x, y:p.y-36}));
+    if (moved && wp.y < GY + ROWS*CELL + 40){
+      placeSelected(anchorFor(hand[selected], {x:wp.x, y:wp.y-36/cam.zoom}));
     }
   }
   dragging = false;
@@ -2516,9 +2531,11 @@ function frame(now){
     if (clearT > 1.1){ perkChoices = rollPerks(); mode = 'perk'; }
   }
 
-  drawSea();
+  updateCam(dt);
+  drawSea();                       // sea + sky stay screen-space (backdrop)
   drawClouds();
   drawGulls();
+  ctx.save(); applyCam();          // --- world camera (pans/zooms to the wall on a wave) ---
   drawIsland();
   metaTerrainWash();
   drawGrid();
@@ -2533,6 +2550,8 @@ function frame(now){
   drawEprojs();
   drawParticles(dt);
   drawFx(dt);
+  drawFloaters(dt);                // world-anchored combat text rides the camera
+  ctx.restore();                   // --- end world camera ---
   if (mode === 'build' || mode === 'clear') drawTray(); else if (mode === 'fight') drawFightHUD();
   sellBtnRect = drawSellButton();
   if (mode==='build' && dragging && selected !== null && hand[selected] && !hoverCell){
@@ -2541,7 +2560,6 @@ function frame(now){
   drawHUD();
   if (mode === 'perk') drawPerkDraft();
   if (mode === 'build' && shopOpen) drawShop();
-  drawFloaters(dt);
   if (mode === 'over') drawOver();
 
   ctx.restore();
