@@ -282,13 +282,14 @@ let hoverCell = null;          // {c,r} anchor for selected piece
 let sellTarget = null;         // {c,r}
 let enemies = [], projectiles = [], eprojs = [], particles = [], floaters = [], guards = [];
 let spawnQueue = [], fightT = 0, clearT = 0, waveTotal = 0;
+let cityDamage = 0, cityGold = 0, cityPile = null;   // village: razed cottages, uncollected tax pile, tap target
 let bestWave = +(localStorage.getItem('foh_best') || 0);
 let shake = 0, time = 0;
 const ptr = { x:0, y:0, down:false };
 // global camera: parks on the city during build, pans/zooms up to the wall for a wave (Fortress-Merge style)
 const cam = { cy: 400, zoom: 1, tcy: 400, tzoom: 1 };
 function updateCam(dt){
-  if (mode === 'fight' || mode === 'perk'){ cam.tcy = 360; cam.tzoom = 1.12; }   // zoom to the wall
+  if (mode === 'fight' || mode === 'perk'){ cam.tcy = 404; cam.tzoom = 1.0; }    // natural battlefield framing (roomy)
   else { cam.tcy = 632; cam.tzoom = 0.86; }                                       // pan down to show the whole city
   const k = Math.min(1, dt * 3.2);
   cam.cy  += (cam.tcy  - cam.cy ) * k;
@@ -339,7 +340,7 @@ function reset(){
   critters = [makeCritter('chicken'), makeCritter('chicken'), makeCritter('pig')];
   hero = { x:(FIELD_L+FIELD_R)/2, y:GY+26, lvl:(META.s.mods.squire ? 2 : 1), cd:0, slashT:0, sortie:false, down:false };
   hero.maxhp = 80 + 25*hero.lvl; hero.hp = hero.maxhp;
-  breached = false;
+  breached = false; cityDamage = 0; cityGold = 0; cityPile = null;
   selected = null; sellTarget = null; heroSel = false;
   mode = 'build';
   idleEarned = 0; shopOpen = false;
@@ -623,6 +624,7 @@ function waveCleared(){
   const bonus = Math.round((CONFIG.economy.waveBonusBase + CONFIG.economy.waveBonusPerWave*wave) * RUN.waveBonusMult);
   gold += bonus;
   floaters.push({ x:W/2, y:300, text:'+'+bonus+' gold', t:0, dur:1.4, size:24, color:'#ffd95e' });
+  cityGold += cityPop() * 3;   // the village pays taxes into a pile you collect by tapping the town
   wallHP = Math.min(wallMax, wallHP + CONFIG.economy.waveWallRegen);
   if (breached){
     breached = false;
@@ -2448,8 +2450,15 @@ cv.addEventListener('pointerdown', ev => {
     }
   }
   sellTarget = null; heroSel = false;
-  // tap the hero to manage him
   const wp = worldPt(p);
+  // tap the village to collect its tax pile
+  if (cityPile && Math.hypot(wp.x-cityPile.x, wp.y-cityPile.y) < cityPile.r && cityGold > 0){
+    gold += cityGold;
+    floaters.push({ x:cityPile.x, y:cityPile.y-18, text:'+'+cityGold+' gold', t:0, dur:1.2, size:18, color:'#ffd95e' });
+    cityGold = 0; sfx.sell && sfx.sell();
+    return;
+  }
+  // tap the hero to manage him
   if (hero && Math.hypot(wp.x-hero.x, wp.y-hero.y) < 26){ heroSel = true; return; }
 
   // rotate button
@@ -2778,36 +2787,47 @@ function drawIsland(){
 }
 // ---- the city behind the wall: an idle-style medieval town that grows with progression ----
 const CITY_TOP = IY0 + 10*TD;   // 704 — town begins just south of the original island
-const CITY_LOTS = [   // cottage lots, ordered so the town fills in organically as you advance
-  [72,760,'house1_b',0.34,0],[398,760,'house2_r',0.34,1],
-  [150,732,'house3_p',0.30,0],[322,732,'house_b',0.30,1],
-  [44,822,'house_r',0.36,0],[430,822,'house_p',0.36,1],
-  [112,856,'house2_r',0.34,0],[360,856,'house1_b',0.34,1],
-  [238,752,'house_b',0.30,0],[236,840,'house3_p',0.32,1],
-  [70,902,'house_p',0.34,0],[404,902,'house_r',0.34,1],
-  [160,904,'house1_b',0.32,0],[316,904,'house2_r',0.32,1],
+const CITY_LOTS = [   // tidy plots flanking the road, ordered so the town fills in organically (nearest the gate first)
+  [108,752,'house1_b',0.32,0],[372,752,'house2_r',0.32,1],
+  [62,806,'house_r',0.34,0],[178,808,'house3_p',0.30,0],[302,808,'house_b',0.30,1],[418,806,'house_p',0.34,1],
+  [108,862,'house2_r',0.33,0],[372,862,'house1_b',0.33,1],
+  [62,914,'house_p',0.34,0],[178,916,'house1_b',0.32,0],[302,916,'house2_r',0.32,1],[418,914,'house_r',0.34,1],
+  [150,766,'house_b',0.28,0],[330,766,'house3_p',0.28,1],
 ];
-const CITY_WONDERS = { p_garden:[238,794], p_cathedral:[122,812], p_throne:[358,812], p_statue:[172,882], p_fountain:[306,882] };
+const CITY_WONDERS = { p_cathedral:[110,788], p_throne:[372,788], p_garden:[240,772], p_statue:[150,888], p_fountain:[330,888] };
 function townLevel(){
   const v = (META.s.village.granary||0) + (META.s.village.warehouse||0);
   return Math.max(3, Math.min(CITY_LOTS.length, 3 + Math.floor((META.s.honor||0)/45) + Math.floor((bestWave||0)/2) + v*2));
 }
+function cityPop(){ return Math.max(0, townLevel() - cityDamage); }   // working population (razed cottages don't count)
 function drawCity(){
   // worn road from the gate down into the town
   ctx.save(); ctx.lineCap='round';
-  ctx.strokeStyle='rgba(150,120,72,0.45)'; ctx.lineWidth=13;
-  ctx.beginPath(); ctx.moveTo(W/2, GY+ROWS*CELL-4); ctx.lineTo(W/2, CITY_TOP+170); ctx.stroke();
-  ctx.strokeStyle='rgba(120,95,55,0.4)'; ctx.lineWidth=2; ctx.setLineDash([4,8]); ctx.stroke(); ctx.setLineDash([]); ctx.restore();
-  // depth-sorted: cottages (grow with progress) + wonders (landmarks) + townsfolk
-  const items = [], n = townLevel();
-  for (let i=0;i<n;i++){ const c=CITY_LOTS[i]; items.push({ y:c[1], f:()=>img(c[2], c[0], c[1], c[3], 0.92) }); }
+  ctx.strokeStyle='rgba(150,120,72,0.5)'; ctx.lineWidth=14;
+  ctx.beginPath(); ctx.moveTo(W/2, GY+ROWS*CELL-4); ctx.lineTo(W/2, CITY_TOP+182); ctx.stroke();
+  ctx.strokeStyle='rgba(120,95,55,0.45)'; ctx.lineWidth=2; ctx.setLineDash([5,9]); ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+  // depth-sorted: cottages (grow; razed ones become rubble) + wonders (landmarks) + townsfolk
+  const items = [], lvl = townLevel(), pop = cityPop();
+  for (let i=0;i<lvl;i++){ const c=CITY_LOTS[i];
+    if (i >= pop) items.push({ y:c[1], f:()=>{ img('house_x', c[0], c[1], c[3]*0.95, 0.92); if ((Math.floor(time*5)+i)%4===0) puff(c[0], c[1]-12, '#5a5a5a'); } });
+    else items.push({ y:c[1], f:()=>img(c[2], c[0], c[1], c[3], 0.92) });
+  }
   for (const id in CITY_WONDERS) if (META.s.owned.includes(id)){ const s=CITY_WONDERS[id]; items.push({ y:s[1], f:()=>drawDeco(id, s[0], s[1], 1.5) }); }
-  const folk=['pawn_b','pawn_y','pawn_p','pawn_r'];
-  for (let i=0;i<4;i++){ const tx=84+i*104+Math.sin(time*0.5+i*1.7)*22, ty=804+(i%2)*44; const fl=Math.cos(time*0.5+i*1.7)<0;
+  const folk=['pawn_b','pawn_y','pawn_p','pawn_r'], nFolk = Math.max(1, Math.min(4, Math.round(pop/3)));
+  for (let i=0;i<nFolk;i++){ const tx=92+i*98+Math.sin(time*0.5+i*1.7)*22, ty=820+(i%2)*36; const fl=Math.cos(time*0.5+i*1.7)<0;
     items.push({ y:ty, f:()=>spr(folk[i],192,192,Math.floor(time*8+i*3)%6,1,tx,ty,0.3,fl,0.8) }); }
   items.sort((a,b)=>a.y-b.y);
   for (const it of items) it.f();
-  drawTree(IX0+26, CITY_TOP+70, 0.8, 31); drawTree(IX0+ICOLS*TD-28, CITY_TOP+108, 0.85, 33);
+  drawTree(IX0+24, CITY_TOP+86, 0.8, 31); drawTree(IX0+ICOLS*TD-26, CITY_TOP+124, 0.85, 33);
+  // population banner + collectible tax pile (tap to collect)
+  cityPile = null;
+  chunkyText('POPULATION ' + pop + (cityDamage>0 ? '  (−'+cityDamage+')' : ''), W/2, CITY_TOP+16, 12, '#fff', '#2a1c0c', '700');
+  if (cityGold > 0 && mode !== 'over'){
+    const gx = W/2, gy = CITY_TOP + 42 + Math.sin(time*3)*3;
+    for (let k=0;k<3;k++) ocirc(gx-11+k*11, gy, 9, '#ffd95e', '#9c6f12', 2.5);
+    chunkyText('TAP  +' + cityGold, gx, gy-21, 12, '#ffec9e', '#6a4a08', '700');
+    cityPile = { x:gx, y:CITY_TOP+42, r:46 };   // world-space tap target
+  }
 }
 function drawTree(x, y, s, seed){
   const f = (Math.floor(time*5) + (seed||0)) % 4;
@@ -3238,6 +3258,7 @@ const IDLE = { capH:8, base:3, granaryRate:5, warehouseCap:2,
 function idleRate(){                                  // gems per hour
   let r = IDLE.base + META.s.village.granary * IDLE.granaryRate;
   for (const id in IDLE.yield) if (META.s.owned.includes(id)) r += IDLE.yield[id];
+  r += townLevel() * 0.6;       // a bigger town generates more gems while you're away
   return r;
 }
 function idleCapH(){ return IDLE.capH + META.s.village.warehouse * IDLE.warehouseCap; }
