@@ -780,7 +780,7 @@ function updateFight(dt){
     sfx.boom(); shake = 14;
   }
 
-  wallGuards();
+  wallGuards(dt);
 
   for (const t of towers()){
     const g = t.g;
@@ -887,7 +887,7 @@ function tickBuffs(e, dt){
   }
 }
 // wall guards: melee swordsmen by default; bow-armed (real ranged damage) once 'Train Archers' is bought
-function wallGuards(){
+function wallGuards(dt){
   if (mode !== 'fight' || breached) return;
   const archer = !!META.s.mods.wallarchers;
   const range = archer ? 175 : 50;
