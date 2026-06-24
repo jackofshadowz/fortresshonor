@@ -113,8 +113,8 @@ const CONFIG = {
              sell:[3, 9, 24, 60, 150], max:5 },
   rarity:  { spawnRare:0.16, dmgMult:[1, 1.4, 1.9],            // Common / Rare / Epic
              col:['', '#ffd95e', '#c9a2e8'], name:['', 'RARE', 'EPIC'] },
-  wave:    { baseCount:7, perWave:2.7, gapBase:1.4, gapPerWave:0.07, gapMin:0.35,
-             hpLin:0.42, hpQuad:0.032, bossEvery:5 },
+  wave:    { baseCount:8, perWave:3.2, gapBase:1.3, gapPerWave:0.07, gapMin:0.3,
+             hpLin:0.55, hpQuad:0.045, bossEvery:5 },
   enemies: {
     grunt:  { hp:15,  spd:38, dps:5,  r:18, gold:2,  col:'#7ec850' },
     runner: { hp:9,   spd:82, dps:4,  r:13, gold:2,  col:'#ff7ba6' },
@@ -652,7 +652,7 @@ function startFight(){
   waveTotal = spawnQueue.length;
   fightT = 0; mode = 'fight';
   ANALYTICS.log('wave_start', { wave, mode: runMode, enemies: waveTotal, chaos: waveMod.key });
-  for (const t of towers()){ t.g.maxhp = 24 + 28*t.g.tier*t.g.tier; t.g.hp = t.g.maxhp; }
+  for (const t of towers()){ t.g.maxhp = 24 + 28*t.g.tier*t.g.tier; t.g.hp = t.g.maxhp; t.g.mag = 4 + t.g.tier; t.g.reload = 0; }   // fully loaded each wave
   selected = null; sellTarget = null; hoverCell = null; heroSel = false; shopOpen = false;
   if (waveMod.key !== 'none'){ banner(waveMod.label + '!', waveMod.color); sfx.fanfare && sfx.fanfare(); }
   else banner('DEFEND!', '#ff7b5e');
@@ -829,6 +829,7 @@ function updateFight(dt){
 
   for (const t of towers()){
     const g = t.g;
+    if (g.reload > 0){ g.reload -= dt; if (g.reload <= 0) g.mag = 4 + g.tier; continue; }   // out of ammo — reloading the magazine
     g.cd = (g.cd||0) - dt;
     if (g.cd > 0) continue;
     const def = TYPES[g.type];
@@ -839,6 +840,7 @@ function updateFight(dt){
       if (d < range && e.y < bd){ bd = e.y; best = e; } // prioritize closest to wall
     }
     if (best){
+      if (g.mag === undefined) g.mag = 4 + g.tier;
       g.cd = 1/(def.rate * RUN.rateMult);
       g.recoil = 0.12;
       let dmg = def.dmg * TIER_DMG[g.tier-1] * metaDmgMult() * RUN.dmgMult * CONFIG.rarity.dmgMult[g.rarity||0];
@@ -849,6 +851,8 @@ function updateFight(dt){
         burn:RUN.burnDur, poison:RUN.poisonDur, stunChance:RUN.stunChance,
         kind:def.proj, spd: def.proj==='ball' ? 330 : 480 });
       if (def.proj!=='arrow' || Math.random()<0.4) sfx.shoot();
+      g.mag--;
+      if (g.mag <= 0) g.reload = 1.5;   // magazine empty → reload pause (no DPS while reloading)
     }
   }
 
@@ -922,7 +926,10 @@ function updateFight(dt){
         }
       }
     } else sackT = Math.min(sackT, 1.0);   // raiders pushed out → the sacking pauses
-    if (cityDamage >= townLevel()){        // the whole town is lost
+    // the city falls only when your defensive capability is nearly wiped out (no towers AND the hero is down),
+    // or the whole town has been razed
+    const defensesGone = towers().length === 0 && (!hero || hero.down);
+    if (defensesGone || cityDamage >= townLevel()){
       mode = 'over'; sfx.defeat(); shake = 16;
       metaOnGameOver();
       return;
