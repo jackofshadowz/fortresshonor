@@ -256,14 +256,17 @@ function randShape(){
   return s;
 }
 function randPiece(){
-  return { shape: randShape(), type: TYPE_KEYS[Math.floor(Math.random()*TYPE_KEYS.length)],
-           rarity: Math.random() < CONFIG.rarity.spawnRare ? 1 : 0 };
+  const shape = randShape();
+  return { shape, type: TYPE_KEYS[Math.floor(Math.random()*TYPE_KEYS.length)],
+           rarity: Math.random() < CONFIG.rarity.spawnRare ? 1 : 0,
+           cost: 4 + shape.length*4 };   // gold cost to build
 }
 
 /* ---------- game state ---------- */
 let mode = 'title';            // title | build | fight | clear | perk | over | store | badges | heroes | kingdom | gear
 let runMode = 'normal';        // 'normal' (Siege) | 'boss' (Boss Rush) — chosen on the title
 let guardUpBtn = null;         // in-build "Train Archers" prompt on the wall
+let repairWallBtn = null, rebuildBtn = null;   // pay-to-repair prompts (no free rebuild)
 // per-wave chaos: each round may roll a modifier so leveling is less predictable
 let waveMod = { key:'none' };
 const WAVE_MODS = [
@@ -583,6 +586,12 @@ function placeSelected(anchor){
   if (!piece) return false;
   const sol = resolvePlacement(piece, anchor);
   if (!sol) return false;
+  const cost = piece.cost || 0;
+  if (gold < cost){   // must pay gold to build
+    floaters.push({ x:cellX(sol.anchor.c)+CELL/2, y:cellY(sol.anchor.r), text:'need '+cost+'g', t:0, dur:0.9, size:14, color:'#ff8d7e' });
+    sfx.thud && sfx.thud(); return false;
+  }
+  gold -= cost;
   const cells = sol.shape.map(([c,r]) => [sol.anchor.c+c, sol.anchor.r+r]);
   for (const [c,r] of cells) grid[idx(c,r)] = { type:piece.type, tier:piece.tier||1, pop:0.001, rarity:piece.rarity||0 };
   hand[selected] = null;
@@ -671,14 +680,12 @@ function waveCleared(){
   floaters.push({ x:W/2, y:300, text:'+'+bonus+' gold', t:0, dur:1.4, size:24, color:'#ffd95e' });
   // the village treasury COMPOUNDS while uncollected (12%/wave) + the wave's tax — hoarding outgrows collecting, but raiders can plunder it
   cityGold = Math.min(9999, Math.round(cityGold * 1.12 + cityPop() * 3));
-  wallHP = Math.min(wallMax, wallHP + CONFIG.economy.waveWallRegen);
+  // NO auto-repair: the wall stays as damaged as you left it, and razed cottages stay in ruins —
+  // you must pay to rebuild between waves (see drawRepairBtns)
   if (breached){
     breached = false; sackT = 0;
-    wallHP = Math.max(wallHP, wallMax*0.5);
-    banner('CITY SAVED!', '#7ee860');
-    floaters.push({ x:W/2, y:WALL_Y-30, text:'WALL REBUILT', t:0, dur:1.4, size:18, color:'#7ee860' });
+    banner(wallHP > 0 ? 'HELD!' : 'WALL BREACHED — REPAIR IT!', wallHP > 0 ? '#7ee860' : '#ff9c3f');
   }
-  if (cityDamage > 0){ cityDamage = Math.max(0, cityDamage - 1); }   // the town rebuilds a razed cottage each wave
   wave++;
   if (wave-1 > bestWave){ bestWave = wave-1; localStorage.setItem('foh_best', bestWave); }
   for (let i=0;i<3;i++) if (!hand[i]) hand[i] = randPiece();
@@ -2072,7 +2079,11 @@ function drawTray(){
     orr(s.x, s.y, s.w, s.h, 12,
         sel ? '#fffdf2' : 'rgba(255,255,255,0.5)',
         sel ? '#f4b63a' : '#cfa86a', sel ? 3.5 : 2.5);
-    if (hand[i] && !(dragging && selected===i)) drawTrayPiece(hand[i], s.x+s.w/2, s.y+s.h/2 - 4, 62, false);
+    if (hand[i] && !(dragging && selected===i)){
+      drawTrayPiece(hand[i], s.x+s.w/2, s.y+s.h/2 - 8, 58, false);
+      const c = hand[i].cost||0, ok = gold >= c;   // build cost
+      chunkyText(c+'g', s.x+s.w/2, s.y+s.h-9, 12, ok?'#ffd95e':'#ff8d7e', '#5a3a0a', '700');
+    }
   });
   // rotate button above the selected slot
   rotBtnRect = null;
@@ -2483,6 +2494,17 @@ cv.addEventListener('pointerdown', ev => {
     else toast('Need 200 gems — earn idle or via the Store');
     return;
   }
+  // pay to repair the wall / rebuild razed cottages
+  if (repairWallBtn && inRect(p, repairWallBtn)){
+    if (gold >= repairWallBtn.cost){ gold -= repairWallBtn.cost; wallHP = wallMax; banner('Wall repaired!', '#7fc4ff'); sfx.merge && sfx.merge(); }
+    else floaters.push({ x:W/2, y:WALL_Y, text:'need '+repairWallBtn.cost+'g', t:0, dur:0.9, size:14, color:'#ff8d7e' });
+    return;
+  }
+  if (rebuildBtn && inRect(p, rebuildBtn)){
+    if (gold >= rebuildBtn.cost){ gold -= rebuildBtn.cost; cityDamage = 0; banner('Town rebuilt!', '#7ed05f'); sfx.merge && sfx.merge(); }
+    else floaters.push({ x:W/2, y:CITY_TOP+72, text:'need '+rebuildBtn.cost+'g', t:0, dur:0.9, size:14, color:'#ff8d7e' });
+    return;
+  }
 
   // in-run shop overlay (Quartermaster)
   if (shopOpen){
@@ -2702,6 +2724,20 @@ function frame(now){
     chunkyText('▲ upgrade the wall', gs.x, by - 8, 10, '#fff', '#10131f', '700');
     chunkyBtn(bx, by, bw, bh, '#7ed05f', '#56a83c', '#2e6326', 'TRAIN ARCHERS  200◆', 12);
     guardUpBtn = { x:bx, y:by, w:bw, h:bh };
+  }
+  // pay-to-repair: the wall and razed cottages stay ruined until you fund them
+  repairWallBtn = null; rebuildBtn = null;
+  if (mode === 'build' && wallHP < wallMax){
+    const cost = Math.ceil((wallMax - wallHP) * 0.6), gs = toScreen((FIELD_L+FIELD_R)/2, WALL_Y + 22);
+    const bw=156, bh=28, bx=Math.round(gs.x-bw/2), by=Math.round(gs.y), ok = gold >= cost;
+    chunkyBtn(bx, by, bw, bh, ok?'#7fc4ff':'#8a8a94', ok?'#3b80d2':'#5e5e68', ok?'#1d5a8a':'#3a3a44', 'REPAIR WALL '+cost+'g', 12);
+    repairWallBtn = { x:bx, y:by, w:bw, h:bh, cost };
+  }
+  if (mode === 'build' && cityDamage > 0){
+    const cost = cityDamage * 30, gs = toScreen(W/2, CITY_TOP + 72);
+    const bw=170, bh=28, bx=Math.round(gs.x-bw/2), by=Math.round(gs.y), ok = gold >= cost;
+    chunkyBtn(bx, by, bw, bh, ok?'#7ed05f':'#8a8a94', ok?'#56a83c':'#5e5e68', ok?'#2e6326':'#3a3a44', 'REBUILD TOWN '+cost+'g', 12);
+    rebuildBtn = { x:bx, y:by, w:bw, h:bh, cost };
   }
   sellBtnRect = drawSellButton();
   if (mode==='build' && dragging && selected !== null && hand[selected] && !hoverCell){
