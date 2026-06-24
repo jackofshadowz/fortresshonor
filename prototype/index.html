@@ -277,7 +277,7 @@ const ptr = { x:0, y:0, down:false };
 const cam = { cy: 400, zoom: 1, tcy: 400, tzoom: 1 };
 function updateCam(dt){
   if (mode === 'fight' || mode === 'perk'){ cam.tcy = 360; cam.tzoom = 1.12; }   // zoom to the wall
-  else { cam.tcy = 400; cam.tzoom = 1; }                                          // city / build framing
+  else { cam.tcy = 632; cam.tzoom = 0.86; }                                       // pan down to show the whole city
   const k = Math.min(1, dt * 3.2);
   cam.cy  += (cam.tcy  - cam.cy ) * k;
   cam.zoom += (cam.tzoom - cam.zoom) * k;
@@ -2537,6 +2537,7 @@ function frame(now){
   drawGulls();
   ctx.save(); applyCam();          // --- world camera (pans/zooms to the wall on a wave) ---
   drawIsland();
+  drawCity();                      // the growing medieval town behind the wall
   metaTerrainWash();
   drawGrid();
   drawCorpses();
@@ -2674,7 +2675,7 @@ function tileDraw(col, row, dx, dy, d){
 }
 
 /* ---------- terrain: tiled island on living water ---------- */
-const TD = 64, IX0 = 16, IY0 = 64, ICOLS = 7, IROWS = 10;
+const TD = 64, IX0 = 16, IY0 = 64, ICOLS = 7, IROWS = 14;   // rows 10-13 = the city zone behind the wall
 function islandHalfW(y, margin){ return Math.max(20, 224 - (margin||0)); }
 function drawSea(){
   for (let x=0;x<W;x+=TD) for (let y=0;y<H;y+=TD) tileDraw(0, 0, x, y, TD); // placeholder col set below
@@ -2727,6 +2728,39 @@ function drawIsland(){
     const mx = 60 + ((i*211)%(W-120));
     img(DECOS[i], mx, my, 0.62 + (i%3)*0.12, 0.7);
   }
+}
+// ---- the city behind the wall: an idle-style medieval town that grows with progression ----
+const CITY_TOP = IY0 + 10*TD;   // 704 — town begins just south of the original island
+const CITY_LOTS = [   // cottage lots, ordered so the town fills in organically as you advance
+  [72,760,'house1_b',0.34,0],[398,760,'house2_r',0.34,1],
+  [150,732,'house3_p',0.30,0],[322,732,'house_b',0.30,1],
+  [44,822,'house_r',0.36,0],[430,822,'house_p',0.36,1],
+  [112,856,'house2_r',0.34,0],[360,856,'house1_b',0.34,1],
+  [238,752,'house_b',0.30,0],[236,840,'house3_p',0.32,1],
+  [70,902,'house_p',0.34,0],[404,902,'house_r',0.34,1],
+  [160,904,'house1_b',0.32,0],[316,904,'house2_r',0.32,1],
+];
+const CITY_WONDERS = { p_garden:[238,794], p_cathedral:[122,812], p_throne:[358,812], p_statue:[172,882], p_fountain:[306,882] };
+function townLevel(){
+  const v = (META.s.village.granary||0) + (META.s.village.warehouse||0);
+  return Math.max(2, Math.min(CITY_LOTS.length, 2 + Math.floor((META.s.honor||0)/80) + Math.floor((bestWave||0)/4) + v));
+}
+function drawCity(){
+  // worn road from the gate down into the town
+  ctx.save(); ctx.lineCap='round';
+  ctx.strokeStyle='rgba(150,120,72,0.45)'; ctx.lineWidth=13;
+  ctx.beginPath(); ctx.moveTo(W/2, GY+ROWS*CELL-4); ctx.lineTo(W/2, CITY_TOP+170); ctx.stroke();
+  ctx.strokeStyle='rgba(120,95,55,0.4)'; ctx.lineWidth=2; ctx.setLineDash([4,8]); ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+  // depth-sorted: cottages (grow with progress) + wonders (landmarks) + townsfolk
+  const items = [], n = townLevel();
+  for (let i=0;i<n;i++){ const c=CITY_LOTS[i]; items.push({ y:c[1], f:()=>img(c[2], c[0], c[1], c[3], 0.92) }); }
+  for (const id in CITY_WONDERS) if (META.s.owned.includes(id)){ const s=CITY_WONDERS[id]; items.push({ y:s[1], f:()=>drawDeco(id, s[0], s[1], 1.5) }); }
+  const folk=['pawn_b','pawn_y','pawn_p','pawn_r'];
+  for (let i=0;i<4;i++){ const tx=84+i*104+Math.sin(time*0.5+i*1.7)*22, ty=804+(i%2)*44; const fl=Math.cos(time*0.5+i*1.7)<0;
+    items.push({ y:ty, f:()=>spr(folk[i],192,192,Math.floor(time*8+i*3)%6,1,tx,ty,0.3,fl,0.8) }); }
+  items.sort((a,b)=>a.y-b.y);
+  for (const it of items) it.f();
+  drawTree(IX0+26, CITY_TOP+70, 0.8, 31); drawTree(IX0+ICOLS*TD-28, CITY_TOP+108, 0.85, 33);
 }
 function drawTree(x, y, s, seed){
   const f = (Math.floor(time*5) + (seed||0)) % 4;
