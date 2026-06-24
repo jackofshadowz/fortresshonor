@@ -272,7 +272,8 @@ const WAVE_MODS = [
   { key:'fireproof', label:'FIREPROOF',  color:'#ff9c3f', immune:['burn'] },
   { key:'frostward', label:'FROST-WARD', color:'#7fe0ff', immune:['slow','stun'] },
   { key:'frenzy',    label:'FRENZY',     color:'#c9a2e8', spd:1.45 },
-  { key:'horde',     label:'ENDLESS HORDE', color:'#9ad36a', count:2.1, hp:0.5, gold:0.7 },
+  { key:'horde',     label:'ENDLESS HORDE', color:'#9ad36a', count:2.1, hp:0.5, gold:0.7, gap:0.5 },
+  { key:'blitz',     label:'ALL-OUT ASSAULT', color:'#ff5e4d', count:1.4, hp:0.8, gap:0.12 },  // they pour in all at once
 ];
 function rollWaveMod(w){ return (w < 2 || Math.random() < 0.42) ? { key:'none' } : WAVE_MODS[Math.floor(Math.random()*WAVE_MODS.length)]; }
 let grid, hand, gold, wave, wallHP, wallMax;
@@ -567,7 +568,7 @@ function buildWave(w){
   if (runMode === 'boss') return bossRushWave(w, hpS);
   const m = waveMod || { key:'none' };
   const count = Math.max(1, Math.round((wc.baseCount + Math.floor(w*wc.perWave)) * (m.count||1)));
-  const gap = Math.max(wc.gapMin, wc.gapBase - w*wc.gapPerWave);
+  const gap = Math.max(wc.gapMin, wc.gapBase - w*wc.gapPerWave) * (m.gap||1);   // chaos can compress the assault
   let t = 0.8;
   for (let i=0;i<count;i++){
     let kind = 'grunt';
@@ -917,6 +918,7 @@ function wallGuards(dt){
   }
 }
 function hitEnemy(e, dmg, slow, fx){
+  if (e.kind === 'golem' && fx && fx.kind === 'arrow') dmg *= 0.35;   // stone hide shrugs off arrows
   e.hp -= dmg; e.hitT = 0.1;
   if (slow) applyBuff(e, 'slow', slow);
   if (fx){
@@ -1182,6 +1184,24 @@ function drawWall(){
       const x = FIELD_L + 30 + ((i*137)%(ww-70));
       ctx.beginPath(); ctx.moveTo(x, WALL_Y+5); ctx.lineTo(x+5, WALL_Y+15); ctx.lineTo(x-3, WALL_Y+27); ctx.stroke();
     }
+  }
+  // BREACHED: a whole section is blown open — jagged gap + rubble pile + settling dust
+  if (breached){
+    const gx2 = (wl+wr)/2, gw = 104;
+    ctx.save();
+    ctx.fillStyle = '#0c111c';   // dark hole punched clean through the wall
+    ctx.beginPath();
+    ctx.moveTo(gx2-gw/2, WALL_Y-30); ctx.lineTo(gx2-gw/2+12, WALL_Y-6); ctx.lineTo(gx2-gw/2+5, WALL_Y+29);
+    ctx.lineTo(gx2+gw/2-7, WALL_Y+29); ctx.lineTo(gx2+gw/2-13, WALL_Y-4); ctx.lineTo(gx2+gw/2, WALL_Y-30);
+    ctx.closePath(); ctx.fill();
+    // jagged stone teeth at the break
+    opoly([[gx2-gw/2,WALL_Y-30],[gx2-gw/2+15,WALL_Y-30],[gx2-gw/2+6,WALL_Y-6]], STONE, INKW, 2);
+    opoly([[gx2+gw/2,WALL_Y-30],[gx2+gw/2-15,WALL_Y-30],[gx2+gw/2-6,WALL_Y-6]], STONE, INKW, 2);
+    // rubble spilling into the courtyard
+    for (let i=0;i<9;i++){ const rx = gx2-gw/2+6+i*12, ry = WALL_Y+22+Math.sin(i*1.9)*5;
+      ocirc(rx, ry, 4+(i%3)*2.4, i%2 ? STONE_L : STONE, INKW, 2); }
+    ctx.restore();
+    if (Math.random() < 0.22) puff(gx2+(Math.random()-0.5)*gw, WALL_Y+4, '#8a93a8');
   }
 }
 function drawGrid(){
@@ -1788,17 +1808,18 @@ function drawEnemy(e){
   ctx.fillStyle = 'rgba(20,50,30,0.25)';
   ctx.beginPath(); ctx.ellipse(e.x, e.y + r*0.95, r*0.85, 4.5, 0, 0, 7); ctx.fill();
 
+  const frosty = hasBuff(e,'slow');
   ctx.save();
   ctx.translate(e.x, y);
   if (e.spawnT > 0){ const k = 1 - e.spawnT/0.4; ctx.scale(k, k); }   // grow in from the treeline
   if (e.hitT > 0){ const k = 1 + e.hitT*0.9; ctx.scale(k, 2-k); } // squash-pop on hit
+  if (frosty) ctx.filter = 'sepia(1) hue-rotate(165deg) saturate(2.6) brightness(0.92)';   // frozen-blue tint on the whole unit
   ((typeof ENEMY_DRAW !== 'undefined' && ENEMY_DRAW[e.kind]) || drawDarkKnight)(r, step, e);
+  if (frosty) ctx.filter = 'none';
   ctx.restore();
 
-  // status-effect overlays
-  if (hasBuff(e,'slow')){
-    ctx.fillStyle = 'rgba(150,205,255,0.35)';
-    ctx.beginPath(); ctx.ellipse(e.x, y-r*0.2, r*1.05, r*1.2, 0, 0, 7); ctx.fill();
+  // a couple of frost shards instead of a flat blue disc
+  if (frosty){
     crystal(e.x-r*0.7, y-r*0.9, 5, false);
     crystal(e.x+r*0.7, y-r*0.5, 4, false);
   }
@@ -2995,7 +3016,7 @@ function drawBombardier(r, step, e){
 function drawGolem(r, step, e){
   // stone golem — generated sheet, 4 walk frames
   const f = Math.floor(time*6 + (e.wob||0)*5) % 4;
-  spr('golem', 96, 112, f, 0, 0, e.r*0.95, 1.15*r/24, e.face < 0, 0.95);
+  spr('golem', 96, 94, f, 0, 0, e.r*0.95, 1.36*r/24, e.face < 0, 0.95);
 }
 const ENEMY_DRAW = { grunt:drawGoblin, runner:drawScout, brute:drawOgre,
                      raider:drawRaider, sapper:drawSapper, boss:drawDarkKnight,
