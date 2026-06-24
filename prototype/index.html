@@ -290,7 +290,7 @@ const ptr = { x:0, y:0, down:false };
 // global camera: parks on the city during build, pans/zooms up to the wall for a wave (Fortress-Merge style)
 const cam = { cy: 400, zoom: 1, tcy: 400, tzoom: 1 };
 function updateCam(dt){
-  if (mode === 'fight' || mode === 'perk'){ cam.tcy = 404; cam.tzoom = 1.0; }    // natural battlefield framing (roomy)
+  if (mode === 'fight' || mode === 'perk'){ cam.tcy = 320; cam.tzoom = 0.9; }     // pan UP to reveal the long approach + wall + towers
   else { cam.tcy = 632; cam.tzoom = 0.86; }                                       // pan down to show the whole city
   const k = Math.min(1, dt * 3.2);
   cam.cy  += (cam.tcy  - cam.cy ) * k;
@@ -598,7 +598,7 @@ function buildWave(w){
 function makeEnemy(kind, hpS, at){
   const base = CONFIG.enemies[kind];
   // emerge from the treeline at the island's top — never out on the water
-  const sy = FIELD_TOP + 34 + Math.random()*52;
+  const sy = IY0 + 36 + Math.random()*60;   // emerge at the far northern treeline — a long march to the wall
   const hw = islandHalfW(sy, 34);
   return { kind, at,
     x: ISL.cx - hw + Math.random()*hw*2,
@@ -2768,7 +2768,7 @@ function tileDraw(col, row, dx, dy, d){
 }
 
 /* ---------- terrain: tiled island on living water ---------- */
-const TD = 64, IX0 = 16, IY0 = 64, ICOLS = 7, IROWS = 14;   // rows 10-13 = the city zone behind the wall
+const TD = 64, IX0 = 16, IY0 = -64, ICOLS = 7, IROWS = 16;   // extended north for a long battlefield; south rows = the city
 function islandHalfW(y, margin){ return Math.max(20, 224 - (margin||0)); }
 function drawSea(){
   for (let x=0;x<W;x+=TD) for (let y=0;y<H;y+=TD) tileDraw(0, 0, x, y, TD); // placeholder col set below
@@ -2823,7 +2823,7 @@ function drawIsland(){
   }
 }
 // ---- the city behind the wall: an idle-style medieval town that grows with progression ----
-const CITY_TOP = IY0 + 10*TD;   // 704 — town begins just south of the original island
+const CITY_TOP = 704;   // town begins south of the courtyard (fixed; independent of the north extension)
 const CITY_LOTS = [   // tidy plots flanking the road, ordered so the town fills in organically (nearest the gate first)
   [108,752,'house1_b',0.32,0],[372,752,'house2_r',0.32,1],
   [62,806,'house_r',0.34,0],[178,808,'house3_p',0.30,0],[302,808,'house_b',0.30,1],[418,806,'house_p',0.34,1],
