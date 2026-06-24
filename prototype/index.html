@@ -536,10 +536,40 @@ function tryMerge(c, r){
   sfx.merge(); shake = Math.max(shake, 5 + g.tier*1.5);
   tryMerge(c, r); // cascade
 }
+// would placing this exact shape at this anchor complete a merge (group of 3+)?
+function wouldMerge(piece, shape, anchor){
+  const cells = shape.map(([c,r]) => [anchor.c+c, anchor.r+r]);
+  if (!cells.every(([c,r]) => c>=0&&c<COLS&&r>=0&&r<ROWS&&!grid[idx(c,r)])) return false;
+  for (const [c,r] of cells) grid[idx(c,r)] = { type:piece.type, tier:piece.tier||1, rarity:piece.rarity||0 };
+  let merges = false;
+  for (const [c,r] of cells){ if (floodSame(c,r,piece.type,piece.tier||1,new Set()).length >= 3){ merges = true; break; } }
+  for (const [c,r] of cells) grid[idx(c,r)] = null;   // revert the trial
+  return merges;
+}
+// smart placement: auto-rotate to fit, snap to complete a merge, and prefer spots closer to the wall
+function resolvePlacement(piece, tap){
+  const rots = []; let s = piece.shape;
+  for (let i=0;i<4;i++){ rots.push(s); s = rotateShape(s); }
+  let best = null, bestScore = -1e9;
+  for (let dr=-2; dr<=2; dr++) for (let dc=-2; dc<=2; dc++){
+    const a = { c: tap.c+dc, r: tap.r+dr };
+    for (const shp of rots){
+      if (!canPlace({ shape:shp }, a)) continue;
+      const dist = Math.abs(dc) + Math.abs(dr);
+      const merge = wouldMerge(piece, shp, a) ? 1 : 0;
+      const wall = ROWS - a.r;                 // lower row = nearer the wall = preferred
+      const score = merge*100 - dist*8 + wall;
+      if (score > bestScore){ bestScore = score; best = { shape:shp, anchor:a }; }
+    }
+  }
+  return best;
+}
 function placeSelected(anchor){
   const piece = hand[selected];
-  if (!piece || !canPlace(piece, anchor)) return false;
-  const cells = shapeCells(piece, anchor);
+  if (!piece) return false;
+  const sol = resolvePlacement(piece, anchor);
+  if (!sol) return false;
+  const cells = sol.shape.map(([c,r]) => [sol.anchor.c+c, sol.anchor.r+r]);
   for (const [c,r] of cells) grid[idx(c,r)] = { type:piece.type, tier:piece.tier||1, pop:0.001, rarity:piece.rarity||0 };
   hand[selected] = null;
   selected = null; dragging = false; hoverCell = null;
