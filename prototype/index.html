@@ -263,6 +263,18 @@ function randPiece(){
 /* ---------- game state ---------- */
 let mode = 'title';            // title | build | fight | clear | perk | over | store | badges | heroes | kingdom | gear
 let runMode = 'normal';        // 'normal' (Siege) | 'boss' (Boss Rush) — chosen on the title
+let guardUpBtn = null;         // in-build "Train Archers" prompt on the wall
+// per-wave chaos: each round may roll a modifier so leveling is less predictable
+let waveMod = { key:'none' };
+const WAVE_MODS = [
+  { key:'swarm',     label:'SWARM',      color:'#5cb0f0', count:1.7, hp:0.62 },
+  { key:'elite',     label:'ELITE',      color:'#ff5e4d', count:0.6, hp:1.85, dps:1.3, gold:1.7 },
+  { key:'fireproof', label:'FIREPROOF',  color:'#ff9c3f', immune:['burn'] },
+  { key:'frostward', label:'FROST-WARD', color:'#7fe0ff', immune:['slow','stun'] },
+  { key:'frenzy',    label:'FRENZY',     color:'#c9a2e8', spd:1.45 },
+  { key:'horde',     label:'ENDLESS HORDE', color:'#9ad36a', count:2.1, hp:0.5, gold:0.7 },
+];
+function rollWaveMod(w){ return (w < 2 || Math.random() < 0.42) ? { key:'none' } : WAVE_MODS[Math.floor(Math.random()*WAVE_MODS.length)]; }
 let grid, hand, gold, wave, wallHP, wallMax;
 let selected = null;           // index into hand
 let dragging = false;
@@ -552,7 +564,8 @@ function buildWave(w){
   const wc = CONFIG.wave;
   const hpS = 1 + wc.hpLin*(w-1) + wc.hpQuad*(w-1)*(w-1);
   if (runMode === 'boss') return bossRushWave(w, hpS);
-  const count = wc.baseCount + Math.floor(w*wc.perWave);
+  const m = waveMod || { key:'none' };
+  const count = Math.max(1, Math.round((wc.baseCount + Math.floor(w*wc.perWave)) * (m.count||1)));
   const gap = Math.max(wc.gapMin, wc.gapBase - w*wc.gapPerWave);
   let t = 0.8;
   for (let i=0;i<count;i++){
@@ -561,14 +574,23 @@ function buildWave(w){
     if (w>=2 && roll<0.25) kind = 'runner';
     if (w>=3 && roll>0.82) kind = 'brute';
     if (w>=4 && roll>=0.55 && roll<0.67) kind = 'raider';
-    if (w>=3 && roll>=0.48 && roll<0.55) kind = 'sapper';  // rare: they hit hard
+    if (w>=2 && roll>=0.44 && roll<0.55) kind = 'sapper';  // dynamite barrels — they blow the wall
     if (w>=2 && roll>=0.25 && roll<0.38) kind = 'archer';
     if (w>=5 && roll>=0.40 && roll<0.46) kind = 'bombardier';
     if (w>=6 && roll>=0.67 && roll<0.73) kind = 'golem';
-    q.push(makeEnemy(kind, hpS, t));
+    const e = makeEnemy(kind, hpS*(m.hp||1), t);
+    if (m.dps) e.dps *= m.dps;
+    if (m.spd) e.spd *= m.spd;
+    if (m.gold) e.gold = Math.round(e.gold * m.gold);
+    if (m.immune) e.immuneTo = m.immune;
+    q.push(e);
     t += gap * (0.7 + Math.random()*0.6);
   }
-  if (w % CONFIG.wave.bossEvery === 0) q.push(makeEnemy('boss', hpS, t + 1.2));
+  if (w % CONFIG.wave.bossEvery === 0){
+    const bz = makeEnemy('boss', hpS, t + 1.2);
+    if (m.immune) bz.immuneTo = m.immune;   // bosses resist the round's immunity too
+    q.push(bz);
+  }
   return q;
 }
 function makeEnemy(kind, hpS, at){
@@ -584,13 +606,15 @@ function makeEnemy(kind, hpS, at){
     buffs: {}, wob: Math.random()*7, hitT: 0, spawnT: 0.4, face: 1, atk: false };
 }
 function startFight(){
+  waveMod = rollWaveMod(wave);                 // roll the round's chaos before building the wave
   spawnQueue = buildWave(wave);
   waveTotal = spawnQueue.length;
   fightT = 0; mode = 'fight';
-  ANALYTICS.log('wave_start', { wave, mode: runMode, enemies: waveTotal });
+  ANALYTICS.log('wave_start', { wave, mode: runMode, enemies: waveTotal, chaos: waveMod.key });
   for (const t of towers()){ t.g.maxhp = 24 + 28*t.g.tier*t.g.tier; t.g.hp = t.g.maxhp; }
   selected = null; sellTarget = null; hoverCell = null; heroSel = false; shopOpen = false;
-  banner('DEFEND!', '#ff7b5e');
+  if (waveMod.key !== 'none'){ banner(waveMod.label + '!', waveMod.color); sfx.fanfare && sfx.fanfare(); }
+  else banner('DEFEND!', '#ff7b5e');
 }
 function waveCleared(){
   const flawless = !breached && wallHP >= wallMax;
@@ -703,10 +727,12 @@ function updateFight(dt){
         const hw = Math.max(e.r, islandHalfW(e.y, 8) - e.r);
         e.x = Math.max(ISL.cx - hw, Math.min(ISL.cx + hw, e.x));
       } else if (e.kind === 'sapper'){
-        // dynamite barrel reaches the wall — BOOM
-        wallHP -= 22;
-        addFx('explosion', e.x, WALL_Y-6, 0.85);
-        sfx.boom(); shake = Math.max(shake, 9);
+        // dynamite barrel reaches the wall — BOOM, a big chunk of HP
+        wallHP -= 32;
+        addFx('explosion', e.x, WALL_Y-6, 1.2);
+        for (let k=0;k<6;k++) puff(e.x+(k-3)*9, WALL_Y-2, k%2?'#9a6a3c':'#ffae42');
+        floaters.push({ x:e.x, y:WALL_Y-28, text:'BOOM −32!', t:0, dur:1.0, size:17, color:'#ff5e4d' });
+        sfx.boom(); shake = Math.max(shake, 14);
         e.hp = 0;
       } else {
         e.atk = true;
@@ -809,7 +835,7 @@ function updateFight(dt){
       if (q.kind === 'dyn'){
         addFx('explosion', q.tx, q.ty, 0.7);
         sfx.boom(); shake = Math.max(shake, 5);
-        if (hitWall) wallHP -= 9; else damageBuildingAt(q.tx, q.ty, 14);
+        if (hitWall) wallHP -= 14; else damageBuildingAt(q.tx, q.ty, 14);
       } else {
         puff(q.tx, q.ty, '#e8d9b0');
         if (hitWall) wallHP -= 3.5; else damageBuildingAt(q.tx, q.ty, 6);
@@ -842,6 +868,7 @@ function updateFight(dt){
    One shared engine; towers apply buffs to enemies via hitEnemy's fx arg. Tunables in
    CONFIG.buffs. Slow reduces speed, Stun freezes, Burn/Poison deal damage-over-time. */
 function applyBuff(e, id, dur){
+  if (e.immuneTo && e.immuneTo.indexOf(id) >= 0) return;   // wave-chaos immunity
   if (!e.buffs) e.buffs = {};
   const b = e.buffs[id] || (e.buffs[id] = { t:0 });
   b.t = Math.max(b.t, dur);
@@ -2355,6 +2382,13 @@ cv.addEventListener('pointerdown', ev => {
   }
   if (mode !== 'build') return;
 
+  // tap the wall prompt to train the guards into archers
+  if (guardUpBtn && inRect(p, guardUpBtn)){
+    if (spendGems(200)){ META.s.mods.wallarchers = true; META.save(); banner('Archers trained!', '#7ed05f'); sfx.fanfare(); }
+    else toast('Need 200 gems — earn idle or via the Store');
+    return;
+  }
+
   // in-run shop overlay (Quartermaster)
   if (shopOpen){
     for (const b of shopBtns){ if (inRect(p, b)){ if (b.close) shopOpen = false; else buyShop(b.it); return; } }
@@ -2528,7 +2562,11 @@ function frame(now){
   updateHero(dt);
   if (mode === 'clear'){
     clearT += dt;
-    if (clearT > 1.1){ perkChoices = rollPerks(); mode = 'perk'; }
+    if (clearT > 1.1){
+      // blessings are no longer guaranteed — roll for one after each round
+      if (Math.random() < 0.45){ perkChoices = rollPerks(); mode = 'perk'; banner('✦ A BLESSING! ✦', '#ffd95e'); }
+      else { mode = 'build'; banner('WAVE ' + wave, '#ffd95e'); }
+    }
   }
 
   updateCam(dt);
@@ -2554,6 +2592,15 @@ function frame(now){
   drawFloaters(dt);                // world-anchored combat text rides the camera
   ctx.restore();                   // --- end world camera ---
   if (mode === 'build' || mode === 'clear') drawTray(); else if (mode === 'fight') drawFightHUD();
+  // in-build prompt to upgrade the wall guards to archers (discoverable, in-context)
+  guardUpBtn = null;
+  if (mode === 'build' && !META.s.mods.wallarchers){
+    const gs = toScreen((FIELD_L+FIELD_R)/2, WALL_Y - 6);
+    const bw = 168, bh = 30, bx = Math.round(gs.x - bw/2), by = Math.round(gs.y - bh - 10);
+    chunkyText('▲ upgrade the wall', gs.x, by - 8, 10, '#fff', '#10131f', '700');
+    chunkyBtn(bx, by, bw, bh, '#7ed05f', '#56a83c', '#2e6326', 'TRAIN ARCHERS  200◆', 12);
+    guardUpBtn = { x:bx, y:by, w:bw, h:bh };
+  }
   sellBtnRect = drawSellButton();
   if (mode==='build' && dragging && selected !== null && hand[selected] && !hoverCell){
     drawTrayPiece(hand[selected], ptr.x, ptr.y - 30, 70, false);
@@ -2743,7 +2790,7 @@ const CITY_LOTS = [   // cottage lots, ordered so the town fills in organically 
 const CITY_WONDERS = { p_garden:[238,794], p_cathedral:[122,812], p_throne:[358,812], p_statue:[172,882], p_fountain:[306,882] };
 function townLevel(){
   const v = (META.s.village.granary||0) + (META.s.village.warehouse||0);
-  return Math.max(2, Math.min(CITY_LOTS.length, 2 + Math.floor((META.s.honor||0)/80) + Math.floor((bestWave||0)/4) + v));
+  return Math.max(3, Math.min(CITY_LOTS.length, 3 + Math.floor((META.s.honor||0)/45) + Math.floor((bestWave||0)/2) + v*2));
 }
 function drawCity(){
   // worn road from the gate down into the town
