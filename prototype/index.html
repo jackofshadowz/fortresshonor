@@ -283,7 +283,7 @@ let hoverCell = null;          // {c,r} anchor for selected piece
 let sellTarget = null;         // {c,r}
 let enemies = [], projectiles = [], eprojs = [], particles = [], floaters = [], guards = [];
 let spawnQueue = [], fightT = 0, clearT = 0, waveTotal = 0;
-let cityDamage = 0, cityGold = 0, cityPile = null;   // village: razed cottages, uncollected tax pile, tap target
+let cityDamage = 0, cityGold = 0, cityPile = null, sackT = 0;   // village: razed cottages, tax pile, tap target, sack timer
 let bestWave = +(localStorage.getItem('foh_best') || 0);
 let shake = 0, time = 0;
 const ptr = { x:0, y:0, down:false };
@@ -341,7 +341,7 @@ function reset(){
   critters = [makeCritter('chicken'), makeCritter('chicken'), makeCritter('pig')];
   hero = { x:(FIELD_L+FIELD_R)/2, y:GY+26, lvl:(META.s.mods.squire ? 2 : 1), cd:0, slashT:0, sortie:false, down:false };
   hero.maxhp = 80 + 25*hero.lvl; hero.hp = hero.maxhp;
-  breached = false; cityDamage = 0; cityGold = 0; cityPile = null;
+  breached = false; cityDamage = 0; cityGold = 0; cityPile = null; sackT = 0;
   selected = null; sellTarget = null; heroSel = false;
   mode = 'build';
   idleEarned = 0; shopOpen = false;
@@ -628,10 +628,12 @@ function waveCleared(){
   cityGold += cityPop() * 3;   // the village pays taxes into a pile you collect by tapping the town
   wallHP = Math.min(wallMax, wallHP + CONFIG.economy.waveWallRegen);
   if (breached){
-    breached = false;
+    breached = false; sackT = 0;
     wallHP = Math.max(wallHP, wallMax*0.5);
+    banner('CITY SAVED!', '#7ee860');
     floaters.push({ x:W/2, y:WALL_Y-30, text:'WALL REBUILT', t:0, dur:1.4, size:18, color:'#7ee860' });
   }
+  if (cityDamage > 0){ cityDamage = Math.max(0, cityDamage - 1); }   // the town rebuilds a razed cottage each wave
   wave++;
   if (wave-1 > bestWave){ bestWave = wave-1; localStorage.setItem('foh_best', bestWave); }
   for (let i=0;i<3;i++) if (!hand[i]) hand[i] = randPiece();
@@ -859,11 +861,28 @@ function updateFight(dt){
     return false;
   });
 
-  // the city only falls when every building is razed
-  if (breached && towers().length === 0){
-    mode = 'over'; sfx.defeat(); shake = 12;
-    metaOnGameOver();
-    return;
+  // BREACH LAST STAND: while the wall is down and raiders are inside, they sack the town —
+  // but you can still repel them. The city falls only when the WHOLE town is razed.
+  if (breached){
+    const invaders = enemies.filter(e => e.y > WALL_Y + 12 && e.hp > 0);
+    if (invaders.length){
+      sackT -= dt;
+      if (sackT <= 0){
+        sackT = 2.6;
+        if (cityDamage < townLevel()){
+          cityDamage++;
+          const lot = CITY_LOTS[Math.max(0, townLevel()-cityDamage)] || [W/2, CITY_TOP+50];
+          if (typeof addFx === 'function') addFx('explosion', lot[0], lot[1], 0.7);
+          puff(lot[0], lot[1]-8, '#6a6a6a'); shake = Math.max(shake, 9); if (sfx.boom) sfx.boom();
+          floaters.push({ x:lot[0], y:lot[1]-22, text:'COTTAGE RAZED!', t:0, dur:1.2, size:14, color:'#ff5e4d' });
+        }
+      }
+    } else sackT = Math.min(sackT, 1.0);   // raiders pushed out → the sacking pauses
+    if (cityDamage >= townLevel()){        // the whole town is lost
+      mode = 'over'; sfx.defeat(); shake = 16;
+      metaOnGameOver();
+      return;
+    }
   }
   if (!spawnQueue.length && !enemies.length) waveCleared();
 }
@@ -1131,15 +1150,9 @@ function drawWall(){
   ctx.fillStyle = 'rgba(143,226,185,0.3)';
   for (let x=wl+20; x<wr-12; x+=64){ rr(x, WALL_Y+7, 9, 3.5, 1.5); ctx.fill(); }
   ctx.restore();
-  // gate (smashed open while breached) — warm Tiny Swords wood
+  // gate — warm Tiny Swords wood (intact only; when breached this whole section collapses into boulders below)
   const gx = (wl+wr)/2;
-  if (breached){
-    ctx.fillStyle = '#161c2e';
-    ctx.beginPath(); ctx.moveTo(gx-16, WALL_Y+29); ctx.lineTo(gx-16, WALL_Y+12);
-    ctx.arc(gx, WALL_Y+12, 16, Math.PI, 0); ctx.lineTo(gx+16, WALL_Y+29); ctx.closePath(); ctx.fill();
-    opoly([[gx-16,WALL_Y+27],[gx-27,WALL_Y+38],[gx-8,WALL_Y+31]], '#b48355', '#161c2e', 2.2);
-    opoly([[gx+14,WALL_Y+25],[gx+27,WALL_Y+36],[gx+6,WALL_Y+33]], '#dab570', '#161c2e', 2.2);
-  } else {
+  if (!breached){
     ctx.fillStyle = '#dab570';
     ctx.beginPath(); ctx.moveTo(gx-15, WALL_Y+29); ctx.lineTo(gx-15, WALL_Y+12);
     ctx.arc(gx, WALL_Y+12, 15, Math.PI, 0); ctx.lineTo(gx+15, WALL_Y+29); ctx.closePath();
@@ -1159,6 +1172,7 @@ function drawWall(){
   // wall guards on the deck: melee swordsmen by default, bow-archers once 'Train Archers' is bought
   const archerUp = !!META.s.mods.wallarchers;
   for (const gd of guards){
+    if (breached && Math.abs(gd.x - gx) < 60) continue;   // guards at the collapsed section are gone
     const flip = gd.face < 0, act = gd.slashT > 0;
     if (archerUp){
       spr('archer_b', 192, 192, Math.floor(time*8)%6, (mode==='fight' && act) ? 6 : 1, gd.x, gd.y+5, 0.42, flip, 0.82);
@@ -1185,23 +1199,25 @@ function drawWall(){
       ctx.beginPath(); ctx.moveTo(x, WALL_Y+5); ctx.lineTo(x+5, WALL_Y+15); ctx.lineTo(x-3, WALL_Y+27); ctx.stroke();
     }
   }
-  // BREACHED: a whole section is blown open — jagged gap + rubble pile + settling dust
+  // BREACHED: the section has COLLAPSED into a pile of boulders — erase the wall here, reveal ground, heap rubble
   if (breached){
-    const gx2 = (wl+wr)/2, gw = 104;
-    ctx.save();
-    ctx.fillStyle = '#0c111c';   // dark hole punched clean through the wall
-    ctx.beginPath();
-    ctx.moveTo(gx2-gw/2, WALL_Y-30); ctx.lineTo(gx2-gw/2+12, WALL_Y-6); ctx.lineTo(gx2-gw/2+5, WALL_Y+29);
-    ctx.lineTo(gx2+gw/2-7, WALL_Y+29); ctx.lineTo(gx2+gw/2-13, WALL_Y-4); ctx.lineTo(gx2+gw/2, WALL_Y-30);
-    ctx.closePath(); ctx.fill();
-    // jagged stone teeth at the break
-    opoly([[gx2-gw/2,WALL_Y-30],[gx2-gw/2+15,WALL_Y-30],[gx2-gw/2+6,WALL_Y-6]], STONE, INKW, 2);
-    opoly([[gx2+gw/2,WALL_Y-30],[gx2+gw/2-15,WALL_Y-30],[gx2+gw/2-6,WALL_Y-6]], STONE, INKW, 2);
-    // rubble spilling into the courtyard
-    for (let i=0;i<9;i++){ const rx = gx2-gw/2+6+i*12, ry = WALL_Y+22+Math.sin(i*1.9)*5;
-      ocirc(rx, ry, 4+(i%3)*2.4, i%2 ? STONE_L : STONE, INKW, 2); }
+    const gx2 = (wl+wr)/2, gw = 116;
+    // erase the wall structure in the gap by repainting the ground tiles that were behind it
+    ctx.save(); ctx.beginPath(); rr(gx2-gw/2, WALL_Y-46, gw, 78, 8); ctx.clip();
+    for (let txp=gx2-gw/2-TD; txp<gx2+gw/2+TD; txp+=TD)
+      for (let typ=WALL_Y-64; typ<WALL_Y+34; typ+=TD) tileDraw(1, 1, Math.round(txp), Math.round(typ), TD);
     ctx.restore();
-    if (Math.random() < 0.22) puff(gx2+(Math.random()-0.5)*gw, WALL_Y+4, '#8a93a8');
+    // a heaped pile of fallen boulders filling the breach (deterministic so it doesn't shimmer)
+    for (let i=0;i<22;i++){
+      const rx = gx2-gw/2 + 8 + (i*617 % (gw-16));
+      const ry = WALL_Y - 26 + (i*389 % 56);
+      const rs = 5 + (i*7 % 4)*2.4;
+      ocirc(rx, ry, rs, (i%3===0) ? STONE_L : (i%3===1 ? STONE : STONE_D), INKW, 2.4);
+      if (i%4===0) glint(rx-rs*0.3, ry-rs*0.3, rs*0.3);
+    }
+    // bigger fallen blocks settling at the base
+    for (let i=0;i<5;i++) orr(gx2-gw/2+12+i*22, WALL_Y+16, 19, 14, 4, i%2?STONE:STONE_D, INKW, 2.6);
+    if (Math.random() < 0.25) puff(gx2+(Math.random()-0.5)*gw, WALL_Y-14, '#9aa3b6');
   }
 }
 function drawGrid(){
@@ -3016,7 +3032,7 @@ function drawBombardier(r, step, e){
 function drawGolem(r, step, e){
   // stone golem — generated sheet, 4 walk frames
   const f = Math.floor(time*6 + (e.wob||0)*5) % 4;
-  spr('golem', 96, 94, f, 0, 0, e.r*0.95, 1.36*r/24, e.face < 0, 0.95);
+  spr('golem', 96, 96, f, 0, 0, e.r*0.95, 1.18*r/24, e.face < 0, 0.95);
 }
 const ENEMY_DRAW = { grunt:drawGoblin, runner:drawScout, brute:drawOgre,
                      raider:drawRaider, sapper:drawSapper, boss:drawDarkKnight,
