@@ -456,12 +456,20 @@ function drawHero(){
     orr(hero.x-18, hero.y-34, 36, 44, 10, null, '#ffd95e', 3);
   }
 }
+function emptyCellPoint(){   // a random empty courtyard cell so folk walk BETWEEN buildings, not over them
+  const empties = [];
+  for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++) if (!grid[idx(c,r)]) empties.push([c,r]);
+  if (!empties.length) return null;
+  const [c,r] = empties[Math.floor(Math.random()*empties.length)];
+  return { x: cellX(c)+CELL/2, y: cellY(r)+CELL/2 };
+}
 function updateVillagers(dt){
   for (const v of villagers){
     v.t -= dt;
     if (v.t <= 0){
-      v.tx = GX+16+Math.random()*(COLS*CELL-32);
-      v.ty = GY+8+Math.random()*(ROWS*CELL-24);
+      const p = emptyCellPoint();
+      v.tx = p ? p.x : GX+16+Math.random()*(COLS*CELL-32);
+      v.ty = p ? p.y : GY+8+Math.random()*(ROWS*CELL-24);
       v.t = (mode==='fight' ? 0.8 : 2) + Math.random()*(mode==='fight' ? 1 : 3.5);
     }
     const dx = v.tx-v.x, dy = v.ty-v.y, d = Math.hypot(dx,dy);
@@ -474,8 +482,9 @@ function updateVillagers(dt){
   for (const c of critters){
     c.t -= dt;
     if (c.t <= 0){
-      c.tx = GX+24+Math.random()*(COLS*CELL-48);
-      c.ty = GY+12+Math.random()*(ROWS*CELL-32);
+      const p = emptyCellPoint();
+      c.tx = p ? p.x : GX+24+Math.random()*(COLS*CELL-48);
+      c.ty = p ? p.y : GY+12+Math.random()*(ROWS*CELL-32);
       c.t = 3 + Math.random()*4;
     }
     const dx = c.tx-c.x, dy = c.ty-c.y, d = Math.hypot(dx,dy);
@@ -655,7 +664,8 @@ function waveCleared(){
   const bonus = Math.round((CONFIG.economy.waveBonusBase + CONFIG.economy.waveBonusPerWave*wave) * RUN.waveBonusMult);
   gold += bonus;
   floaters.push({ x:W/2, y:300, text:'+'+bonus+' gold', t:0, dur:1.4, size:24, color:'#ffd95e' });
-  cityGold += cityPop() * 3;   // the village pays taxes into a pile you collect by tapping the town
+  // the village treasury COMPOUNDS while uncollected (12%/wave) + the wave's tax — hoarding outgrows collecting, but raiders can plunder it
+  cityGold = Math.min(9999, Math.round(cityGold * 1.12 + cityPop() * 3));
   wallHP = Math.min(wallMax, wallHP + CONFIG.economy.waveWallRegen);
   if (breached){
     breached = false; sackT = 0;
@@ -905,6 +915,10 @@ function updateFight(dt){
           if (typeof addFx === 'function') addFx('explosion', lot[0], lot[1], 0.7);
           puff(lot[0], lot[1]-8, '#6a6a6a'); shake = Math.max(shake, 9); if (sfx.boom) sfx.boom();
           floaters.push({ x:lot[0], y:lot[1]-22, text:'COTTAGE RAZED!', t:0, dur:1.2, size:14, color:'#ff5e4d' });
+          if (cityGold > 0){   // raiders plunder the uncollected treasury — the downside of hoarding
+            const looted = Math.ceil(cityGold * 0.35); cityGold -= looted;
+            floaters.push({ x:lot[0], y:lot[1]-6, text:'−'+looted+' looted!', t:0, dur:1.2, size:13, color:'#ffd95e' });
+          }
         }
       }
     } else sackT = Math.min(sackT, 1.0);   // raiders pushed out → the sacking pauses
@@ -2912,10 +2926,13 @@ function drawCity(){
   }
   for (const id in CITY_WONDERS) if (META.s.owned.includes(id)){ const s=CITY_WONDERS[id]; items.push({ y:s[1], f:()=>drawDeco(id, s[0], s[1], 1.5) }); }
   // townsfolk: scale with population, walk the streets, some hauling goods
-  const folk=['pawn_b','pawn_y','pawn_p','pawn_r'], nFolk = Math.max(2, Math.min(7, Math.round(pop/2)));
-  for (let i=0;i<nFolk;i++){ const lane = 786 + (i%3)*60, dir = i%2?1:-1;
-    const tx = 74 + ((i*123 + time*15*dir) % (W-148) + (W-148)) % (W-148);
-    items.push({ y:lane, f:()=>spr(folk[i%4], 192, 192, Math.floor(time*8+i*3)%6, i%4===0?5:1, tx, lane, 0.3, dir<0, 0.8) }); }
+  // townsfolk stroll the central road (between the flanking cottage rows), depth-sorted with the buildings
+  const folk=['pawn_b','pawn_y','pawn_p','pawn_r'], nFolk = Math.max(2, Math.min(6, Math.round(pop/2)));
+  const range = 220;
+  for (let i=0;i<nFolk;i++){ const dir = i%2?1:-1;
+    const ty = CITY_TOP+40 + (((i*73 + time*13*dir) % range) + range) % range;
+    const tx = W/2 + (i%2 ? -15 : 15) + Math.sin(time*0.7+i)*5;
+    items.push({ y:ty, f:()=>spr(folk[i%4], 192, 192, Math.floor(time*8+i*3)%6, 1, tx, ty, 0.3, dir<0, 0.8) }); }
   items.sort((a,b)=>a.y-b.y);
   for (const it of items) it.f();
   drawTree(IX0+24, CITY_TOP+92, 0.8, 31); drawTree(IX0+ICOLS*TD-26, CITY_TOP+132, 0.85, 33);
