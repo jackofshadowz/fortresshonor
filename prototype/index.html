@@ -275,7 +275,12 @@ const WAVE_MODS = [
   { key:'horde',     label:'ENDLESS HORDE', color:'#9ad36a', count:2.1, hp:0.5, gold:0.7, gap:0.5 },
   { key:'blitz',     label:'ALL-OUT ASSAULT', color:'#ff5e4d', count:1.4, hp:0.8, gap:0.12 },  // they pour in all at once
 ];
-function rollWaveMod(w){ return (w < 2 || Math.random() < 0.42) ? { key:'none' } : WAVE_MODS[Math.floor(Math.random()*WAVE_MODS.length)]; }
+function rollWaveMod(w){
+  if (w < 2 || Math.random() < 0.30) return { key:'none' };   // chaos more often
+  // frenzy is a crowd-pleaser — weight it heavier
+  const bag = WAVE_MODS.concat(WAVE_MODS.filter(m => m.key === 'frenzy'), WAVE_MODS.filter(m => m.key === 'frenzy'));
+  return bag[Math.floor(Math.random()*bag.length)];
+}
 let grid, hand, gold, wave, wallHP, wallMax;
 let selected = null;           // index into hand
 let dragging = false;
@@ -2661,7 +2666,7 @@ function frame(now){
     clearT += dt;
     if (clearT > 1.1){
       // blessings are no longer guaranteed — roll for one after each round
-      if (Math.random() < 0.45){ perkChoices = rollPerks(); mode = 'perk'; banner('✦ A BLESSING! ✦', '#ffd95e'); }
+      if (Math.random() < 0.28){ perkChoices = rollPerks(); mode = 'perk'; banner('✦ A BLESSING! ✦', '#ffd95e'); }
       else { mode = 'build'; banner('WAVE ' + wave, '#ffd95e'); }
     }
   }
@@ -2672,8 +2677,8 @@ function frame(now){
   drawGulls();
   ctx.save(); applyCam();          // --- world camera (pans/zooms to the wall on a wave) ---
   drawIsland();
+  metaTerrainWash();               // tint the GROUND only (before the town/buildings so they aren't washed olive)
   drawCity();                      // the growing medieval town behind the wall
-  metaTerrainWash();
   drawGrid();
   drawCorpses();
   drawWall();
@@ -3289,9 +3294,9 @@ const SKIN_CAT = {
   ],
   terrain: [
     { id:'terrain_verdant', name:'Verdant',     cost:0 },
-    { id:'terrain_dusk',    name:'Dusk',        cost:80,  wash:'rgba(110,60,165,0.30)' },
-    { id:'terrain_snow',    name:'Winterhold',  cost:80,  wash:'rgba(205,228,255,0.40)' },
-    { id:'terrain_ember',   name:'Emberfall',   cost:130, wash:'rgba(255,110,30,0.28)' },
+    { id:'terrain_dusk',    name:'Dusk',        cost:80,  wash:'rgba(110,60,165,0.20)' },
+    { id:'terrain_snow',    name:'Winterhold',  cost:80,  wash:'rgba(205,228,255,0.28)' },
+    { id:'terrain_ember',   name:'Emberfall',   cost:130, wash:'rgba(255,110,30,0.18)' },
   ],
 };
 // Gem acquisition — a free daily claim + IAP-style bundles. DEMO ONLY: "purchases"
