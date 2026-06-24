@@ -3079,7 +3079,7 @@ function drawBombardier(r, step, e){
 function drawGolem(r, step, e){
   // stone golem — generated sheet, 4 walk frames
   const f = Math.floor(time*6 + (e.wob||0)*5) % 4;
-  spr('golem', 96, 96, f, 0, 0, e.r*0.95, 1.18*r/24, e.face < 0, 0.95);
+  spr('golem', 132, 96, f, 0, 0, e.r*0.95, 1.18*r/24, e.face < 0, 0.95);
 }
 const ENEMY_DRAW = { grunt:drawGoblin, runner:drawScout, brute:drawOgre,
                      raider:drawRaider, sapper:drawSapper, boss:drawDarkKnight,
@@ -3282,9 +3282,9 @@ const SKIN_CAT = {
   ],
   terrain: [
     { id:'terrain_verdant', name:'Verdant',     cost:0 },
-    { id:'terrain_dusk',    name:'Dusk',        cost:80,  wash:'rgba(120,70,160,0.18)' },
-    { id:'terrain_snow',    name:'Winterhold',  cost:80,  wash:'rgba(200,225,255,0.30)' },
-    { id:'terrain_ember',   name:'Emberfall',   cost:130, wash:'rgba(255,120,40,0.17)' },
+    { id:'terrain_dusk',    name:'Dusk',        cost:80,  wash:'rgba(110,60,165,0.30)' },
+    { id:'terrain_snow',    name:'Winterhold',  cost:80,  wash:'rgba(205,228,255,0.40)' },
+    { id:'terrain_ember',   name:'Emberfall',   cost:130, wash:'rgba(255,110,30,0.28)' },
   ],
 };
 // Gem acquisition — a free daily claim + IAP-style bundles. DEMO ONLY: "purchases"
@@ -3424,7 +3424,7 @@ function heroSprite(){ const h = metaEquip('hero'); return (h && h.sprite) || 'w
 function bannerColor(){ const b = metaEquip('banner'); return b ? { color:b.color, ink:b.ink } : { color:'#ff5e6e', ink:'#9c2433' }; }
 function rerollCost(){ return META.s.mods.quarter ? 10 : CONFIG.economy.rerollCost; }
 function metaDmgMult(){ return META.s.mods.fletcher ? 1.12 : 1; }
-function metaTerrainWash(){ const t = metaEquip('terrain'); if (t && t.wash){ ctx.fillStyle = t.wash; ctx.fillRect(0,0,W,H); } }
+function metaTerrainWash(){ const t = metaEquip('terrain'); if (t && t.wash){ ctx.fillStyle = t.wash; ctx.fillRect(IX0-40, IY0-20, ICOLS*TD+80, IROWS*TD+60); } }  // tints the island in world space (runs inside the camera)
 
 /* ---------- run economy & badges ---------- */
 let runKills = 0;
