@@ -1366,15 +1366,21 @@ function draggedUnit(){   // the unit object currently held (from tray or board)
   return dragUnit.from==='tray' ? hand[dragUnit.i] : grid[idx(dragUnit.c, dragUnit.r)];
 }
 function drawMergeHints(){
-  // while dragging a unit, ring every identical unit you could fuse it with
+  // while holding a unit, show WHERE it can go: empty cells (green) + identical units to fuse (gold)
   if (mode !== 'build' || !dragUnit) return;
   const u = draggedUnit();
-  if (!isUnit(u) || u.tier >= MAX_TIER) return;
-  ctx.save(); ctx.globalAlpha = 0.5 + Math.sin(time*8)*0.3; ctx.strokeStyle = '#ffd95e'; ctx.lineWidth = 4; ctx.lineJoin = 'round';
+  if (!isUnit(u)) return;
+  ctx.save(); ctx.lineJoin = 'round';
   for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){
     if (dragUnit.from==='board' && c===dragUnit.c && r===dragUnit.r) continue;
     const g = grid[idx(c,r)];
-    if (isUnit(g) && g.type===u.type && g.tier===u.tier){ rr(cellX(c)+2, cellY(r)+2, CELL-4, CELL-4, 11); ctx.stroke(); }
+    if (!g){
+      ctx.globalAlpha = 0.22 + Math.sin(time*5 + (c+r))*0.06; ctx.fillStyle = '#7ed05f';
+      rr(cellX(c)+5, cellY(r)+5, CELL-10, CELL-10, 9); ctx.fill();
+    } else if (isUnit(g) && g.type===u.type && g.tier===u.tier && g.tier < MAX_TIER){
+      ctx.globalAlpha = 0.55 + Math.sin(time*8)*0.3; ctx.strokeStyle = '#ffd95e'; ctx.lineWidth = 4;
+      rr(cellX(c)+2, cellY(r)+2, CELL-4, CELL-4, 11); ctx.stroke();
+    }
   }
   ctx.restore();
 }
@@ -3001,23 +3007,17 @@ const TYPE_ROLE = { archer:'fast • single target', cannon:'slow • splash', f
 function drawBuilding(x, y, type, tier, recoil, noBadge){
   const cx = x+CELL/2, baseY = y+CELL-2;
   const skin = metaEquip('tower');
-  let sprite, scale, glow = false;
-  if (skin && skin.suffix){
-    // equipped colour theme: uniform house → tower → castle in one livery
-    const suf = skin.suffix;
-    sprite = ['house_'+suf,'tower_'+suf,'tower_'+suf,'castle_'+suf,'castle_'+suf][tier-1];
-    scale  = [0.42, 0.34, 0.40, 0.28, 0.34][tier-1];
-    glow   = !!skin.glow;
-  } else {
-    // default "Trinity": distinct silhouettes per line — house → guild hall → tower → castle
-    const BSPRITE = {
-      archer: ['house1_b','archery_b','tower_b','castle_b','castle_b'],
-      cannon: ['house2_r','barracks_r','tower_r','castle_r','castle_r'],
-      frost:  ['house3_p','monastery_p','tower_p','castle_p','castle_p'],
-    }[type];
-    sprite = tier===5 ? BSPRITE[4] : BSPRITE[tier-1];
-    scale  = tier===5 ? 0.34 : [0.42,0.30,0.38,0.26,0.34][tier-1] * (BSPRITE[tier-1]==='monastery_p' ? 0.92 : 1);
-  }
+  // units ALWAYS render as their distinct building line so types stay readable for merging
+  // (archer = Archery→Tower→Castle, cannon = Barracks→…, frost = Monastery→…); a skin only adds a glow.
+  const BSPRITE = {
+    archer: ['archery_b','tower_b','tower_b','castle_b','castle_b'],
+    cannon: ['barracks_r','tower_r','tower_r','castle_r','castle_r'],
+    frost:  ['monastery_p','tower_p','tower_p','castle_p','castle_p'],
+  }[type] || ['tower_b','tower_b','tower_b','castle_b','castle_b'];
+  const ti = Math.min(tier,5)-1;
+  const sprite = BSPRITE[ti];
+  const scale = [0.30,0.34,0.40,0.26,0.34][ti] * (ti===0 ? 0.95 : 1);
+  const glow = (skin && skin.glow) || tier>=5;
   ctx.save(); ctx.translate(0, recoil ? recoil*8 : 0);
   if (tier===5 || glow) aura(cx, baseY-34, 46, glow ? '#ffe08a' : TYPES[type].trim);
   img(sprite, cx, baseY, scale);
