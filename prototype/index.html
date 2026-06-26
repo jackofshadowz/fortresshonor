@@ -326,12 +326,19 @@ let dragUnit = null;            // {from:'tray',i} | {from:'board',c,r}
 let spawnT = 0;                 // countdown to the next recruit into the tray
 const SPAWN_EVERY = 1.6;        // seconds between recruits
 const TRAY_N = 4;               // tray slots
+function popCap(){ return 12 + (META.s.mods.squire ? 2 : 0); }   // army population cap (the core balance knob)
+function unitCount(){   // total army = units on the board + units waiting in the tray
+  let n = 0;
+  for (let i=0;i<ROWS*COLS;i++) if (isUnit(grid[i])) n++;
+  for (let i=0;i<TRAY_N;i++) if (hand[i]) n++;
+  return n;
+}
 function traySlotRect(i){ return { x:14 + i*72, y:TRAY_Y+8, w:66, h:80 }; }
 function isUnit(g){ return g && g.tier !== undefined && !g.obstacle && !g.rubble; }
 function newUnit(){ return { type: TYPE_KEYS[Math.floor(Math.random()*TYPE_KEYS.length)], tier:1, rarity: Math.random()<CONFIG.rarity.spawnRare?1:0 }; }
 function emptyTraySlot(){ for (let i=0;i<TRAY_N;i++) if (!hand[i]) return i; return -1; }
-function updateSpawner(dt){   // the generator drips new Lv1 units into the tray
-  if (emptyTraySlot() < 0) return;
+function updateSpawner(dt){   // the generator drips Lv1 recruits into the tray — but only up to the population cap
+  if (emptyTraySlot() < 0 || unitCount() >= popCap()) return;
   spawnT -= dt;
   if (spawnT <= 0){ spawnT = SPAWN_EVERY; const i = emptyTraySlot(); if (i>=0){ hand[i] = newUnit(); sfx.place && sfx.place(); } }
 }
@@ -2093,8 +2100,11 @@ function drawTray(){
   rotBtnRect = null;
   // sandy dock
   orr(6, TRAY_Y-6, W-12, 104, 18, '#f2dca2', '#c9a25f', 4);
+  // army population vs cap (the generator pauses at cap — merge to make room)
+  const pop = unitCount(), cap = popCap(), atCap = pop >= cap;
+  chunkyText('ARMY ' + pop + '/' + cap + (atCap ? '  — MERGE TO RECRUIT' : ''), 14, TRAY_Y-14, 12, atCap ? '#ff8d7e' : '#fff', '#3a2a12', '700', 'left');
   // recruit tray: drag a unit out onto the board (place on empty, or onto an identical to merge)
-  const full = emptyTraySlot() < 0;
+  const full = emptyTraySlot() < 0 || atCap;
   for (let i=0;i<TRAY_N;i++){
     const s = traySlotRect(i);
     orr(s.x, s.y, s.w, s.h, 11, 'rgba(255,255,255,0.5)', '#cfa86a', 2.5);
