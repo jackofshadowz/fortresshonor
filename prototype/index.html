@@ -321,6 +321,45 @@ const ANALYTICS = {
     if (typeof console !== 'undefined') console.log('[FoH]', ev, data || '');
   }
 };
+/* ---------- Fortress-Merge-style core: an auto-spawner drops Lv1 units; drag one onto an identical to fuse ---------- */
+let dragUnit = null;            // {c, r} of the unit currently being dragged
+let spawnT = 0;                 // countdown to the next auto-spawn
+const SPAWN_EVERY = 2.0;        // seconds between auto-spawned units
+function isUnit(g){ return g && g.tier !== undefined && !g.obstacle && !g.rubble; }
+function emptyBuildCell(){
+  const empties = [];
+  for (let i=0;i<ROWS*COLS;i++) if (!grid[i]) empties.push(i);
+  return empties.length ? empties[Math.floor(Math.random()*empties.length)] : -1;
+}
+function spawnUnit(){
+  const k = emptyBuildCell();
+  if (k < 0) return false;
+  grid[k] = { type: TYPE_KEYS[Math.floor(Math.random()*TYPE_KEYS.length)], tier: 1, pop: 0.001,
+              rarity: Math.random() < CONFIG.rarity.spawnRare ? 1 : 0, spawn: 0.001 };
+  sfx.place && sfx.place();
+  return true;
+}
+function updateSpawner(dt){
+  spawnT -= dt;
+  if (spawnT <= 0){ spawnT = SPAWN_EVERY; spawnUnit(); }
+}
+// drag-drop a unit: fuse with an identical, move to empty, else snap back
+function dropUnit(sc, sr, tc, tr){
+  if (sc===tc && sr===tr) return;
+  const si = idx(sc,sr), ti = idx(tc,tr), s = grid[si], t = grid[ti];
+  if (!isUnit(s)) return;
+  if (!t){ grid[ti] = s; grid[si] = null; return; }                     // move to empty
+  if (isUnit(t) && t.type===s.type && t.tier===s.tier && t.tier < MAX_TIER){
+    grid[ti] = { type:t.type, tier:t.tier+1, pop:0.001, rarity: Math.max(s.rarity||0, t.rarity||0) };
+    grid[si] = null;
+    const rx = cellX(tc)+CELL/2, ry = cellY(tr)+CELL/2;
+    for (let i=0;i<14;i++){ const a=Math.random()*7, sp=50+Math.random()*80; particles.push({ x:rx, y:ry, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-25, t:0, dur:0.4+Math.random()*0.25, r:2.5+Math.random()*3.5, col:'#ffd95e' }); }
+    floaters.push({ x:rx, y:cellY(tr)+2, text:'TIER '+(t.tier+1)+'!', t:0, dur:1.0, size:20, color:'#ffd95e' });
+    if (RUN && RUN.goldOnMerge){ gold += RUN.goldOnMerge; floaters.push({ x:rx, y:cellY(tr)+24, text:'+'+RUN.goldOnMerge, t:0, dur:0.8, size:13, color:'#ffd95e' }); }
+    sfx.merge && sfx.merge(); shake = Math.max(shake, 5 + t.tier*1.4);
+  }
+  // non-matching: leave both where they are (snap back)
+}
 function reset(){
   grid = Array(ROWS*COLS).fill(null);
   // scatter obstacles to build around — clear them for gold if they're in the way
@@ -330,7 +369,9 @@ function reset(){
     const k = spots.splice(Math.floor(Math.random()*spots.length), 1)[0];
     grid[k] = { obstacle: Math.random()<0.75 ? 'tree' : 'rock' };
   }
-  hand = [randPiece(), randPiece(), randPiece()];
+  hand = [];                       // no tray — units come from the spawner now
+  dragUnit = null; spawnT = 0.5;
+  for (let n=0;n<4;n++) spawnUnit();   // seed the board with a few Lv1 units
   // store upgrades ("mods") apply at the start of every run
   gold = CONFIG.economy.startGold + (META.s.mods.coffers ? 20 : 0);
   RUN = freshRun(); perkChoices = [];
@@ -1314,39 +1355,17 @@ function drawGrid(){
 
 // merge legibility: show matching clusters ("2/3"), and telegraph a merge while placing
 function drawMergeHints(){
-  if (mode !== 'build') return;
-  const seen = new Set();
+  // while dragging a unit, ring every identical unit you could fuse it with
+  if (mode !== 'build' || !dragUnit) return;
+  const u = grid[idx(dragUnit.c, dragUnit.r)];
+  if (!isUnit(u) || u.tier >= MAX_TIER) return;
+  ctx.save(); ctx.globalAlpha = 0.5 + Math.sin(time*8)*0.3; ctx.strokeStyle = '#ffd95e'; ctx.lineWidth = 4; ctx.lineJoin = 'round';
   for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){
-    const k = idx(c,r), g = grid[k];
-    if (!g || g.obstacle || g.rubble || g.tier===undefined || g.tier>=MAX_TIER || seen.has(k)) continue;
-    const group = floodSame(c, r, g.type, g.tier, new Set());
-    for (const m of group) seen.add(idx(m[0], m[1]));
-    if (group.length < 2) continue;                       // 3 auto-merges, so a lingering pair = "one away"
-    const col = TYPES[g.type].roof;
-    ctx.save(); ctx.globalAlpha = 0.4 + Math.sin(time*4)*0.22;
-    for (const m of group) orr(cellX(m[0])+2, cellY(m[1])+2, CELL-4, CELL-4, 11, null, col, 3.5);
-    ctx.restore();
-    let top = group[0]; for (const m of group) if (m[1] < top[1]) top = m;
-    const bx = cellX(top[0])+CELL/2, byy = cellY(top[1])-3;
-    orr(bx-17, byy-13, 34, 17, 8, '#1c2030', col, 2);
-    chunkyText(group.length+'/3', bx, byy-4, 10, '#fff', null, '700');
+    if (c===dragUnit.c && r===dragUnit.r) continue;
+    const g = grid[idx(c,r)];
+    if (isUnit(g) && g.type===u.type && g.tier===u.tier){ rr(cellX(c)+2, cellY(r)+2, CELL-4, CELL-4, 11); ctx.stroke(); }
   }
-  // placement preview: would this spot complete a merge?
-  if (selected!==null && hoverCell && hand[selected] && canPlace(hand[selected], hoverCell)){
-    const piece = hand[selected], cells = shapeCells(piece, hoverCell), tmp = cells.map(m=>idx(m[0],m[1]));
-    for (const m of cells) grid[idx(m[0],m[1])] = { type:piece.type, tier:piece.tier||1 };
-    const mg = new Set();
-    for (const m of cells){ const gg = grid[idx(m[0],m[1])]; const grp = floodSame(m[0],m[1],gg.type,gg.tier,new Set()); if (grp.length>=3) for (const q of grp) mg.add(idx(q[0],q[1])); }
-    for (const t of tmp) grid[t] = null;
-    if (mg.size){
-      ctx.save(); ctx.globalAlpha = 0.55 + Math.sin(time*9)*0.3; ctx.strokeStyle = '#ffd95e'; ctx.lineWidth = 4; ctx.lineJoin = 'round';
-      let tk = null;
-      for (const k2 of mg){ const cc = k2%COLS, rr2 = (k2/COLS)|0; rr(cellX(cc)+2, cellY(rr2)+2, CELL-4, CELL-4, 11); ctx.stroke(); if (tk===null || rr2 < (tk/COLS|0)) tk = k2; }
-      ctx.restore();
-      const cc = tk%COLS, rr2 = (tk/COLS)|0;
-      chunkyText('MERGE!', cellX(cc)+CELL/2, cellY(rr2)-9, 14, '#ffd95e', '#5a4a12');
-    }
-  }
+  ctx.restore();
 }
 
 /* ---------- building primitives (sticker style) ---------- */
@@ -2073,33 +2092,17 @@ function drawTray(){
   for (let x=40; x<W-20; x+=44){
     ctx.beginPath(); ctx.moveTo(x, TRAY_Y-2); ctx.lineTo(x, TRAY_Y+94); ctx.stroke();
   }
-  // slots
-  BTN.slots.forEach((s, i) => {
-    const sel = selected === i;
-    orr(s.x, s.y, s.w, s.h, 12,
-        sel ? '#fffdf2' : 'rgba(255,255,255,0.5)',
-        sel ? '#f4b63a' : '#cfa86a', sel ? 3.5 : 2.5);
-    if (hand[i] && !(dragging && selected===i)){
-      drawTrayPiece(hand[i], s.x+s.w/2, s.y+s.h/2 - 8, 58, false);
-      const c = hand[i].cost||0, ok = gold >= c;   // build cost
-      chunkyText(c+'g', s.x+s.w/2, s.y+s.h-9, 12, ok?'#ffd95e':'#ff8d7e', '#5a3a0a', '700');
-    }
-  });
-  // rotate button above the selected slot
+  // spawner status: the keep recruits units automatically; you drag matching ones together to merge
   rotBtnRect = null;
-  if (selected !== null && hand[selected]){
-    const s = BTN.slots[selected];
-    const rx = s.x + s.w - 16, ry = s.y - 14;
-    ocirc(rx, ry, 15, '#52b3f0', '#1d5a8a', 3);
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.arc(rx, ry, 7, -0.4, Math.PI*1.25); ctx.stroke();
-    opoly([[rx+8.5, ry-5.5],[rx+3, ry-6],[rx+7, ry-0.5]], '#fff', null);
-    rotBtnRect = { x:rx-17, y:ry-17, w:34, h:34 };
+  const bx = 18, by = TRAY_Y+12;
+  chunkyText('Drag matching units to MERGE', bx, by, 13, '#7a5320', null, '700', 'left');
+  const room = emptyBuildCell() >= 0;
+  chunkyText(room ? 'Next recruit' : 'Board full — merge!', bx, by+28, 11, '#7a5320', null, '600', 'left');
+  if (room){
+    const frac = 1 - Math.max(0, spawnT)/SPAWN_EVERY;
+    orr(bx+86, by+19, 156, 16, 8, 'rgba(120,90,50,0.28)', '#9a6a3c', 2);
+    ctx.fillStyle = '#7ed05f'; rr(bx+88, by+21, Math.max(2, 152*frac), 12, 6); ctx.fill();
   }
-  // reroll
-  const rb = BTN.reroll, rc = rerollCost(), canRR = gold >= rc;
-  if (canRR) chunkyBtn(rb.x, rb.y, rb.w, rb.h, '#52b3f0', '#2f7fb5', '#1d5a8a', 'REROLL  −'+rc, 15);
-  else chunkyBtn(rb.x, rb.y, rb.w, rb.h, '#b0ada6', '#8d8a83', '#6e6b64', 'REROLL  −'+rc, 15);
   // fight
   const fb = BTN.fight;
   const pulse = 1 + Math.sin(time*4)*0.02;
@@ -2576,64 +2579,29 @@ cv.addEventListener('pointerdown', ev => {
   // tap the hero to manage him
   if (hero && Math.hypot(wp.x-hero.x, wp.y-hero.y) < 26){ heroSel = true; return; }
 
-  // rotate button
-  if (rotBtnRect && selected !== null && hand[selected] && inRect(p, rotBtnRect)){
-    hand[selected].shape = rotateShape(hand[selected].shape); sfx.rotate();
-    return;
-  }
-  // tray slots
-  for (let i=0;i<3;i++){
-    if (inRect(p, BTN.slots[i]) && hand[i]){
-      if (selected === i){
-        hand[i].shape = rotateShape(hand[i].shape); sfx.rotate();
-      } else selected = i;
-      dragging = true; downSlot = i;
-      return;
-    }
-  }
-  // reroll
-  if (inRect(p, BTN.reroll)){
-    const rc = RUN.freeReroll ? 0 : rerollCost();
-    if (gold >= rc){
-      gold -= rc; hand = [randPiece(), randPiece(), randPiece()];
-      selected = null; sfx.reroll();
-    } else {
-      floaters.push({ x:BTN.reroll.x+BTN.reroll.w/2, y:BTN.reroll.y-8, text:'need '+rc+'g', t:0, dur:0.8, size:14, color:'#ff8d7e' });
-    }
-    return;
-  }
-  // fight
+  // FIGHT
   if (inRect(p, BTN.fight)){ startFight(); return; }
-
-  // grid tap: place selected or pick sell target
+  // pick up a unit to drag (drop it on an identical to MERGE, or on an empty cell to move)
   const cell = cellAt(wp);
   if (cell){
-    if (selected !== null && hand[selected]){
-      hoverCell = anchorFor(hand[selected], wp);
-      placeSelected(hoverCell);
-    } else if (grid[idx(cell.c, cell.r)]){
-      sellTarget = cell;
-    }
+    const g = grid[idx(cell.c, cell.r)];
+    if (isUnit(g)){ dragUnit = { c:cell.c, r:cell.r }; downPos = p; return; }
+    if (g){ sellTarget = cell; return; }   // obstacle / rubble → clear popup
   }
 });
 cv.addEventListener('pointermove', ev => {
   const p = toLogical(ev);
   ptr.x = p.x; ptr.y = p.y;
-  const wp = worldPt(p);
-  if (mode==='build' && selected !== null && hand[selected] && wp.y < GY + ROWS*CELL + 30){
-    // while dragging, the piece floats above the finger so it isn't hidden
-    hoverCell = anchorFor(hand[selected], dragging ? {x:wp.x, y:wp.y-36/cam.zoom} : wp);
-  } else hoverCell = null;
 });
 cv.addEventListener('pointerup', ev => {
   const p = toLogical(ev);
   ptr.down = false;
-  if (mode==='build' && dragging && selected !== null && hand[selected]){
-    const wp = worldPt(p);
-    const moved = downPos && Math.hypot(p.x-downPos.x, p.y-downPos.y) > 12;
-    if (moved && wp.y < GY + ROWS*CELL + 40){
-      placeSelected(anchorFor(hand[selected], {x:wp.x, y:wp.y-36/cam.zoom}));
-    }
+  if (mode==='build' && dragUnit){
+    const moved = downPos && Math.hypot(p.x-downPos.x, p.y-downPos.y) > 10;
+    const cell = cellAt(worldPt(p));
+    if (!moved){ sellTarget = { c:dragUnit.c, r:dragUnit.r }; }   // quick tap → sell popup
+    else if (cell){ dropUnit(dragUnit.c, dragUnit.r, cell.c, cell.r); }
+    dragUnit = null;
   }
   dragging = false;
 });
@@ -2682,6 +2650,7 @@ function frame(now){
   }
 
   if (mode === 'fight') updateFight(dt);
+  if (mode === 'build') updateSpawner(dt);   // auto-spawn Lv1 units to merge
   updateVillagers(dt);
   updateHero(dt);
   if (mode === 'clear'){
@@ -2740,9 +2709,6 @@ function frame(now){
     rebuildBtn = { x:bx, y:by, w:bw, h:bh, cost };
   }
   sellBtnRect = drawSellButton();
-  if (mode==='build' && dragging && selected !== null && hand[selected] && !hoverCell){
-    drawTrayPiece(hand[selected], ptr.x, ptr.y - 30, 70, false);
-  }
   drawHUD();
   if (mode === 'perk') drawPerkDraft();
   if (mode === 'build' && shopOpen) drawShop();
@@ -3049,6 +3015,7 @@ function drawBuildings(dt){
   for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){
     const g = grid[idx(c,r)];
     if (!g) continue;
+    if (dragUnit && dragUnit.c===c && dragUnit.r===r) continue;   // lifted unit is drawn at the cursor
     const ox = cellX(c)+CELL/2, oy = cellY(r)+CELL/2;
     if (g.obstacle){
       if (g.obstacle === 'tree') drawTree(ox, oy+14, 0.95, c*7+r);
@@ -3090,6 +3057,15 @@ function drawBuildings(dt){
     }
     if (sellTarget && sellTarget.c===c && sellTarget.r===r)
       orr(cellX(c)+3, cellY(r)+3, CELL-6, CELL-6, 10, null, '#ffd95e', 4);
+  }
+  // the lifted unit follows the cursor while dragging
+  if (dragUnit){
+    const u = grid[idx(dragUnit.c, dragUnit.r)];
+    if (isUnit(u)){
+      const wp = worldPt(ptr);
+      ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(wp.x, wp.y+16, 20, 6, 0, 0, 7); ctx.fill();
+      drawBuilding(wp.x - CELL/2, wp.y - CELL/2 - 18, u.type, u.tier, 0, true);
+    }
   }
 }
 
