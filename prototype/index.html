@@ -337,11 +337,7 @@ const ANALYTICS = {
 };
 /* ---------- Fortress-Merge-style core: a generator recruits units into a TRAY; drag them to the board and fuse identicals ---------- */
 let dragUnit = null;            // {from:'tray',i} | {from:'board',c,r}
-let spawnT = 0;                 // countdown to the next recruit into the tray
-const SPAWN_EVERY = 1.6;        // seconds between recruits
-const TRAY_N = 4;               // tray slots
-let recruitsLeft = 0;           // recruits the generator will still give THIS turn
-function recruitsPerTurn(){ return 5 + Math.floor((wave||1)/4); }   // limited intake per build phase
+const TRAY_N = 4;               // exactly 4 buildings are offered per round
 function popCap(){ return 12 + (META.s.mods.squire ? 2 : 0); }   // army population cap (the core balance knob)
 function unitCount(){   // total army = units on the board + units waiting in the tray
   let n = 0;
@@ -353,10 +349,8 @@ function traySlotRect(i){ return { x:14 + i*72, y:TRAY_Y+8, w:66, h:80 }; }
 function isUnit(g){ return g && g.tier !== undefined && !g.obstacle && !g.rubble; }
 function newUnit(){ return { type: TYPE_KEYS[Math.floor(Math.random()*TYPE_KEYS.length)], tier:1, rarity: Math.random()<CONFIG.rarity.spawnRare?1:0 }; }
 function emptyTraySlot(){ for (let i=0;i<TRAY_N;i++) if (!hand[i]) return i; return -1; }
-function updateSpawner(dt){   // generator drips Lv1 recruits into the tray — capped per turn AND by population
-  if (recruitsLeft <= 0 || emptyTraySlot() < 0 || unitCount() >= popCap()) return;
-  spawnT -= dt;
-  if (spawnT <= 0){ spawnT = SPAWN_EVERY; const i = emptyTraySlot(); if (i>=0){ hand[i] = newUnit(); recruitsLeft--; sfx.place && sfx.place(); } }
+function fillTray(){   // offer up to 4 buildings each round (no continuous drip)
+  for (let i=0;i<TRAY_N;i++) if (!hand[i]) hand[i] = newUnit();
 }
 function mergeInto(ti, t, srcRarity){   // fuse a unit into the unit already at cell ti → next tier
   const tc = ti%COLS, tr = (ti/COLS)|0, nt = t.tier+1;
@@ -375,14 +369,14 @@ function mergeInto(ti, t, srcRarity){   // fuse a unit into the unit already at 
 function placeFromTray(unit, ti){   // drop a tray unit onto board cell ti; place on empty or merge if identical
   const t = grid[ti];
   if (!t){ grid[ti] = { type:unit.type, tier:unit.tier, pop:0.001, rarity:unit.rarity||0 }; sfx.place && sfx.place(); return true; }
-  if (isUnit(t) && t.type===unit.type && t.tier===unit.tier && t.tier<MAX_TIER){ mergeInto(ti, t, unit.rarity); return true; }
+  if (isUnit(t) && t.type===unit.type && t.tier===unit.tier){ mergeInto(ti, t, unit.rarity); return true; }   // continual upgrade
   return false;   // occupied by a non-matching unit → reject (stays in tray)
 }
 function dropBoardUnit(sc, sr, ti){   // drag a board unit onto cell ti: fuse / move
   const si = idx(sc,sr), s = grid[si]; if (!isUnit(s) || ti===si) return;
   const t = grid[ti];
   if (!t){ grid[ti] = s; grid[si] = null; return; }
-  if (isUnit(t) && t.type===s.type && t.tier===s.tier && t.tier<MAX_TIER){ mergeInto(ti, t, s.rarity); grid[si] = null; }
+  if (isUnit(t) && t.type===s.type && t.tier===s.tier){ mergeInto(ti, t, s.rarity); grid[si] = null; }   // continual upgrade
 }
 function reset(){
   grid = Array(ROWS*COLS).fill(null);
@@ -394,11 +388,10 @@ function reset(){
     grid[k] = { obstacle: Math.random()<0.75 ? 'tree' : 'rock' };
   }
   hand = new Array(TRAY_N).fill(null);   // the recruit tray
-  dragUnit = null; spawnT = 0.4; recruitsLeft = recruitsPerTurn();
-  for (let n=0;n<3;n++){ const i = emptyTraySlot(); if (i>=0) hand[i] = newUnit(); }   // start with a few recruits
+  dragUnit = null; fillTray();           // 4 buildings offered this round
   { // seed the board with a couple of Lv1 units to merge
     const open = []; for (let k=0;k<ROWS*COLS;k++) if (!grid[k]) open.push(k);
-    for (let n=0;n<3 && open.length;n++){ const k = open.splice(Math.floor(Math.random()*open.length),1)[0]; grid[k] = Object.assign(newUnit(), { pop:0.001 }); }
+    for (let n=0;n<2 && open.length;n++){ const k = open.splice(Math.floor(Math.random()*open.length),1)[0]; grid[k] = Object.assign(newUnit(), { pop:0.001 }); }
   }
   // store upgrades ("mods") apply at the start of every run
   gold = CONFIG.economy.startGold + (META.s.mods.coffers ? 20 : 0);
@@ -764,7 +757,7 @@ function waveCleared(){
   }
   wave++;
   if (wave-1 > bestWave){ bestWave = wave-1; localStorage.setItem('foh_best', bestWave); }
-  recruitsLeft = recruitsPerTurn();   // a fresh batch of recruits for the next turn
+  fillTray();   // refill to 4 buildings for the next round
   if (villagers.length < 10) villagers.push(makeVillager());  // the base grows
   grid = grid.map(g => g && g.rubble ? null : g);             // villagers clear the rubble
   projectiles = [];
@@ -2134,24 +2127,15 @@ function drawTray(){
   rotBtnRect = null;
   // sandy dock
   orr(6, TRAY_Y-6, W-12, 104, 18, '#f2dca2', '#c9a25f', 4);
-  // army population vs cap, and recruits remaining this turn
+  // army population vs cap; the tray offers up to 4 buildings this round
   const pop = unitCount(), cap = popCap(), atCap = pop >= cap;
-  const noRecruits = recruitsLeft <= 0;
-  chunkyText('ARMY ' + pop + '/' + cap + '     RECRUITS ' + Math.max(0,recruitsLeft), 14, TRAY_Y-14, 12,
-             (atCap || noRecruits) ? '#ff8d7e' : '#fff', '#3a2a12', '700', 'left');
-  // recruit tray: drag a unit out onto the board (place on empty, or onto an identical to merge)
-  const full = emptyTraySlot() < 0 || atCap || noRecruits;
+  chunkyText('ARMY ' + pop + '/' + cap + (atCap ? '  — MERGE!' : '') + '     4 buildings / round', 14, TRAY_Y-14, 12,
+             atCap ? '#ff8d7e' : '#fff', '#3a2a12', '700', 'left');
   for (let i=0;i<TRAY_N;i++){
     const s = traySlotRect(i);
     orr(s.x, s.y, s.w, s.h, 11, 'rgba(255,255,255,0.5)', '#cfa86a', 2.5);
     if (hand[i] && !(dragUnit && dragUnit.from==='tray' && dragUnit.i===i)){
       drawBuilding(s.x + s.w/2 - CELL/2, s.y + s.h/2 - CELL/2 + 4, hand[i].type, hand[i].tier, 0, true);
-    } else if (!hand[i] && i === emptyTraySlot()){
-      // the next recruit fills this slot — show the generator timer
-      const frac = full ? 0 : 1 - Math.max(0, spawnT)/SPAWN_EVERY;
-      ocirc(s.x+s.w/2, s.y+s.h/2, 15, 'rgba(120,90,50,0.18)', '#9a6a3c', 2.5);
-      ctx.save(); ctx.strokeStyle='#7ed05f'; ctx.lineWidth=4; ctx.lineCap='round';
-      ctx.beginPath(); ctx.arc(s.x+s.w/2, s.y+s.h/2, 15, -Math.PI/2, -Math.PI/2 + frac*Math.PI*2); ctx.stroke(); ctx.restore();
     }
   }
   // fight
@@ -2700,7 +2684,6 @@ function frame(now){
   }
 
   if (mode === 'fight') updateFight(dt);
-  if (mode === 'build') updateSpawner(dt);   // auto-spawn Lv1 units to merge
   updateVillagers(dt);
   updateHero(dt);
   if (mode === 'clear'){
@@ -3051,7 +3034,7 @@ function drawBuilding(x, y, type, tier, recoil, noBadge){
   // each line KEEPS its building identity (Archery stays Archery, Monastery stays Monastery) —
   // it just grows and gains stars/glow/banner each tier (FM-style). A skin only adds a glow.
   const sprite = LINE_SPRITE[type] || 'tower_b';
-  const scale = (LINE_BASESCALE[sprite] || 0.30) * (0.82 + tier*0.12);   // bigger every tier
+  const scale = (LINE_BASESCALE[sprite] || 0.30) * Math.min(0.82 + tier*0.12, 1.7);   // bigger every tier (capped)
   const glow = (skin && skin.glow) || tier>=3;
   ctx.save(); ctx.translate(0, recoil ? recoil*8 : 0);
   if (glow) aura(cx, baseY-34, 40 + tier*6, tier>=4 ? '#ffe08a' : TYPES[type].trim);
@@ -3064,6 +3047,7 @@ function drawBuilding(x, y, type, tier, recoil, noBadge){
   if (!noBadge){
     const n = Math.min(tier, 5), sw = 11, sx = cx - (n-1)*sw/2, sy = baseY - 188*scale*0.9 - 6;
     for (let i=0;i<n;i++) star(sx + i*sw, sy, 5, '#ffd95e', '#a8761c');
+    if (tier > 5) chunkyText('Lv'+tier, cx, sy-12, 11, '#ffd95e', '#3a2a12', '700');   // beyond 5 stars, show the level
     typeGlyph(cx, y+9, type);
   }
 }
