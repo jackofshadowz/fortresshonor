@@ -326,6 +326,8 @@ let dragUnit = null;            // {from:'tray',i} | {from:'board',c,r}
 let spawnT = 0;                 // countdown to the next recruit into the tray
 const SPAWN_EVERY = 1.6;        // seconds between recruits
 const TRAY_N = 4;               // tray slots
+let recruitsLeft = 0;           // recruits the generator will still give THIS turn
+function recruitsPerTurn(){ return 5 + Math.floor((wave||1)/4); }   // limited intake per build phase
 function popCap(){ return 12 + (META.s.mods.squire ? 2 : 0); }   // army population cap (the core balance knob)
 function unitCount(){   // total army = units on the board + units waiting in the tray
   let n = 0;
@@ -337,19 +339,24 @@ function traySlotRect(i){ return { x:14 + i*72, y:TRAY_Y+8, w:66, h:80 }; }
 function isUnit(g){ return g && g.tier !== undefined && !g.obstacle && !g.rubble; }
 function newUnit(){ return { type: TYPE_KEYS[Math.floor(Math.random()*TYPE_KEYS.length)], tier:1, rarity: Math.random()<CONFIG.rarity.spawnRare?1:0 }; }
 function emptyTraySlot(){ for (let i=0;i<TRAY_N;i++) if (!hand[i]) return i; return -1; }
-function updateSpawner(dt){   // the generator drips Lv1 recruits into the tray — but only up to the population cap
-  if (emptyTraySlot() < 0 || unitCount() >= popCap()) return;
+function updateSpawner(dt){   // generator drips Lv1 recruits into the tray — capped per turn AND by population
+  if (recruitsLeft <= 0 || emptyTraySlot() < 0 || unitCount() >= popCap()) return;
   spawnT -= dt;
-  if (spawnT <= 0){ spawnT = SPAWN_EVERY; const i = emptyTraySlot(); if (i>=0){ hand[i] = newUnit(); sfx.place && sfx.place(); } }
+  if (spawnT <= 0){ spawnT = SPAWN_EVERY; const i = emptyTraySlot(); if (i>=0){ hand[i] = newUnit(); recruitsLeft--; sfx.place && sfx.place(); } }
 }
 function mergeInto(ti, t, srcRarity){   // fuse a unit into the unit already at cell ti → next tier
-  const tc = ti%COLS, tr = (ti/COLS)|0;
-  grid[ti] = { type:t.type, tier:t.tier+1, pop:0.001, rarity: Math.max(srcRarity||0, t.rarity||0) };
+  const tc = ti%COLS, tr = (ti/COLS)|0, nt = t.tier+1;
+  grid[ti] = { type:t.type, tier:nt, pop:0.001, rarity: Math.max(srcRarity||0, t.rarity||0) };
   const rx = cellX(tc)+CELL/2, ry = cellY(tr)+CELL/2;
-  for (let i=0;i<14;i++){ const a=Math.random()*7, sp=50+Math.random()*80; particles.push({ x:rx, y:ry, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-25, t:0, dur:0.4+Math.random()*0.25, r:2.5+Math.random()*3.5, col:'#ffd95e' }); }
-  floaters.push({ x:rx, y:cellY(tr)+2, text:'TIER '+(t.tier+1)+'!', t:0, dur:1.0, size:20, color:'#ffd95e' });
+  // happy explosion — a burst of gold + white sparks, scaling with the new tier
+  const burst = 18 + nt*4;
+  for (let i=0;i<burst;i++){ const a=Math.random()*7, sp=60+Math.random()*130; particles.push({ x:rx, y:ry, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-30, t:0, dur:0.45+Math.random()*0.35, r:2.5+Math.random()*4, col: i%3 ? '#ffd95e' : '#fff' }); }
+  // a ring of star-pops
+  for (let i=0;i<6+nt;i++){ const a=i/(6+nt)*Math.PI*2; particles.push({ x:rx+Math.cos(a)*10, y:ry+Math.sin(a)*10, vx:Math.cos(a)*70, vy:Math.sin(a)*70-20, t:0, dur:0.55, r:3.5, col:'#fff3b0' }); }
+  if (typeof addFx === 'function') addFx('explosion', rx, ry-4, 0.5);
+  floaters.push({ x:rx, y:cellY(tr)-4, text:'★ TIER '+nt+' ★', t:0, dur:1.1, size:21, color:'#ffd95e' });
   if (RUN && RUN.goldOnMerge){ gold += RUN.goldOnMerge; }
-  sfx.merge && sfx.merge(); shake = Math.max(shake, 5 + t.tier*1.4);
+  sfx.merge && sfx.merge(); if (nt>=3 && sfx.fanfare) sfx.fanfare(); shake = Math.max(shake, 7 + nt*1.6);
 }
 function placeFromTray(unit, ti){   // drop a tray unit onto board cell ti; place on empty or merge if identical
   const t = grid[ti];
@@ -373,7 +380,7 @@ function reset(){
     grid[k] = { obstacle: Math.random()<0.75 ? 'tree' : 'rock' };
   }
   hand = new Array(TRAY_N).fill(null);   // the recruit tray
-  dragUnit = null; spawnT = 0.4;
+  dragUnit = null; spawnT = 0.4; recruitsLeft = recruitsPerTurn();
   for (let n=0;n<3;n++){ const i = emptyTraySlot(); if (i>=0) hand[i] = newUnit(); }   // start with a few recruits
   { // seed the board with a couple of Lv1 units to merge
     const open = []; for (let k=0;k<ROWS*COLS;k++) if (!grid[k]) open.push(k);
@@ -736,7 +743,7 @@ function waveCleared(){
   }
   wave++;
   if (wave-1 > bestWave){ bestWave = wave-1; localStorage.setItem('foh_best', bestWave); }
-  for (let i=0;i<3;i++) if (!hand[i]) hand[i] = randPiece();
+  recruitsLeft = recruitsPerTurn();   // a fresh batch of recruits for the next turn
   if (villagers.length < 10) villagers.push(makeVillager());  // the base grows
   grid = grid.map(g => g && g.rubble ? null : g);             // villagers clear the rubble
   projectiles = [];
@@ -2106,11 +2113,13 @@ function drawTray(){
   rotBtnRect = null;
   // sandy dock
   orr(6, TRAY_Y-6, W-12, 104, 18, '#f2dca2', '#c9a25f', 4);
-  // army population vs cap (the generator pauses at cap — merge to make room)
+  // army population vs cap, and recruits remaining this turn
   const pop = unitCount(), cap = popCap(), atCap = pop >= cap;
-  chunkyText('ARMY ' + pop + '/' + cap + (atCap ? '  — MERGE TO RECRUIT' : ''), 14, TRAY_Y-14, 12, atCap ? '#ff8d7e' : '#fff', '#3a2a12', '700', 'left');
+  const noRecruits = recruitsLeft <= 0;
+  chunkyText('ARMY ' + pop + '/' + cap + '     RECRUITS ' + Math.max(0,recruitsLeft), 14, TRAY_Y-14, 12,
+             (atCap || noRecruits) ? '#ff8d7e' : '#fff', '#3a2a12', '700', 'left');
   // recruit tray: drag a unit out onto the board (place on empty, or onto an identical to merge)
-  const full = emptyTraySlot() < 0 || atCap;
+  const full = emptyTraySlot() < 0 || atCap || noRecruits;
   for (let i=0;i<TRAY_N;i++){
     const s = traySlotRect(i);
     orr(s.x, s.y, s.w, s.h, 11, 'rgba(255,255,255,0.5)', '#cfa86a', 2.5);
@@ -2730,6 +2739,14 @@ function frame(now){
   }
   sellBtnRect = drawSellButton();
   drawHUD();
+  // the lifted unit follows the cursor — drawn in the HUD pass (screen space) so it's never hidden behind the tray
+  if (dragUnit){
+    const u = draggedUnit();
+    if (isUnit(u)){
+      ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(ptr.x, ptr.y+18, 22, 6, 0, 0, 7); ctx.fill();
+      drawBuilding(ptr.x - CELL/2, ptr.y - CELL/2 - 20, u.type, u.tier, 0, true);
+    }
+  }
   if (mode === 'perk') drawPerkDraft();
   if (mode === 'build' && shopOpen) drawShop();
   if (mode === 'over') drawOver();
@@ -2765,7 +2782,8 @@ function I(name){
  'ui_panel','ui_ribbon_y','ui_ribbon_b','ui_btn_b','ui_btn_r','ui_banner',
  'ic_sword','ic_bow','ic_armor','ic_shield','ic_shield2','ic_helmet','ic_coin','ic_pouch','ic_goldbar','ic_gem','ic_reroll','ic_horn','ic_harp','ic_ring',
  'ic_skull','ic_skullfire','ic_heart','ic_swords9',
- 'pre_pagoda','pre_temple','pre_keep','pre_cathedral','pre_palace'].forEach(I);
+ 'pre_pagoda','pre_temple','pre_keep','pre_cathedral','pre_palace',
+ 'e_skull','e_thief','e_gnoll','e_minotaur','e_troll'].forEach(I);
 // prestige wonders: real grand-building art (SevenKingdoms CC0)
 const PRE_SPR = { p_statue:'pre_pagoda', p_fountain:'pre_temple', p_garden:'pre_keep', p_cathedral:'pre_cathedral', p_throne:'pre_palace' };
 // real fantasy item icons (Shikashi CC0) for store upgrades + gear
@@ -3004,26 +3022,29 @@ function typeGlyph(cx, cy, type){
   ctx.restore();
 }
 const TYPE_ROLE = { archer:'fast • single target', cannon:'slow • splash', frost:'slows enemies' };
+const LINE_SPRITE = { archer:'archery_b', cannon:'barracks_r', frost:'monastery_p' };
+const LINE_BASESCALE = { archery_b:0.30, barracks_r:0.30, monastery_p:0.27 };
 function drawBuilding(x, y, type, tier, recoil, noBadge){
   const cx = x+CELL/2, baseY = y+CELL-2;
   const skin = metaEquip('tower');
-  // units ALWAYS render as their distinct building line so types stay readable for merging
-  // (archer = Archery→Tower→Castle, cannon = Barracks→…, frost = Monastery→…); a skin only adds a glow.
-  const BSPRITE = {
-    archer: ['archery_b','tower_b','tower_b','castle_b','castle_b'],
-    cannon: ['barracks_r','tower_r','tower_r','castle_r','castle_r'],
-    frost:  ['monastery_p','tower_p','tower_p','castle_p','castle_p'],
-  }[type] || ['tower_b','tower_b','tower_b','castle_b','castle_b'];
-  const ti = Math.min(tier,5)-1;
-  const sprite = BSPRITE[ti];
-  const scale = [0.30,0.34,0.40,0.26,0.34][ti] * (ti===0 ? 0.95 : 1);
-  const glow = (skin && skin.glow) || tier>=5;
+  // each line KEEPS its building identity (Archery stays Archery, Monastery stays Monastery) —
+  // it just grows and gains stars/glow/banner each tier (FM-style). A skin only adds a glow.
+  const sprite = LINE_SPRITE[type] || 'tower_b';
+  const scale = (LINE_BASESCALE[sprite] || 0.30) * (0.82 + tier*0.12);   // bigger every tier
+  const glow = (skin && skin.glow) || tier>=3;
   ctx.save(); ctx.translate(0, recoil ? recoil*8 : 0);
-  if (tier===5 || glow) aura(cx, baseY-34, 46, glow ? '#ffe08a' : TYPES[type].trim);
+  if (glow) aura(cx, baseY-34, 40 + tier*6, tier>=4 ? '#ffe08a' : TYPES[type].trim);
+  const top = baseY - 192*scale*0.9;   // approx sprite top
   img(sprite, cx, baseY, scale);
-  if (tier===5) star(cx, baseY-92, 7, '#ffd95e', '#a8761c');
+  // tier banner from tier 3+ (a little flag in the line colour)
+  if (tier >= 3){ flag(cx + 14 + tier, top + 14, 14, TYPES[type].roof, '#1c2030'); }
   ctx.restore();
-  if (!noBadge){ badge(cx-17, baseY-8, tier); typeGlyph(cx, y+9, type); }
+  // FM-style tier read-out: a row of stars above the building (1..tier)
+  if (!noBadge){
+    const n = Math.min(tier, 5), sw = 11, sx = cx - (n-1)*sw/2, sy = baseY - 188*scale*0.9 - 6;
+    for (let i=0;i<n;i++) star(sx + i*sw, sy, 5, '#ffd95e', '#a8761c');
+    typeGlyph(cx, y+9, type);
+  }
 }
 function drawBuildings(dt){
   for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++){
@@ -3071,15 +3092,6 @@ function drawBuildings(dt){
     }
     if (sellTarget && sellTarget.c===c && sellTarget.r===r)
       orr(cellX(c)+3, cellY(r)+3, CELL-6, CELL-6, 10, null, '#ffd95e', 4);
-  }
-  // the lifted unit follows the cursor while dragging
-  if (dragUnit){
-    const u = draggedUnit();
-    if (isUnit(u)){
-      const wp = worldPt(ptr);
-      ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(wp.x, wp.y+16, 20, 6, 0, 0, 7); ctx.fill();
-      drawBuilding(wp.x - CELL/2, wp.y - CELL/2 - 18, u.type, u.tier, 0, true);
-    }
   }
 }
 
