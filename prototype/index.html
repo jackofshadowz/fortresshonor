@@ -303,7 +303,7 @@ let selected = null;           // index into hand
 let dragging = false;
 let hoverCell = null;          // {c,r} anchor for selected piece
 let sellTarget = null;         // {c,r}
-let enemies = [], projectiles = [], eprojs = [], particles = [], floaters = [], guards = [];
+let enemies = [], projectiles = [], eprojs = [], particles = [], floaters = [], guards = [], allies = [];
 let spawnQueue = [], fightT = 0, clearT = 0, waveTotal = 0;
 let cityDamage = 0, cityGold = 0, cityPile = null, sackT = 0;   // village: razed cottages, tax pile, tap target, sack timer
 let bestWave = +(localStorage.getItem('foh_best') || 0);
@@ -403,7 +403,7 @@ function reset(){
   wave = 1;
   wallMax = CONFIG.economy.wallBase + (META.s.mods.gate ? 25 : 0) + (META.s.mods.bulwark ? 40 : 0); wallHP = wallMax;
   runKills = 0;
-  enemies = []; projectiles = []; eprojs = []; particles = []; floaters = [];
+  enemies = []; projectiles = []; eprojs = []; particles = []; floaters = []; allies = [];
   { const gateX = (FIELD_L+FIELD_R)/2; guards = [
       { x: gateX-30, y: WALL_Y-3, cd:0, slashT:0, face:1, mv:0 },
       { x: gateX+30, y: WALL_Y-3, cd:0, slashT:0, face:-1, mv:0 } ]; }
@@ -937,6 +937,18 @@ function updateFight(dt){
     }
   }
 
+  // barracks muster lancers, monasteries muster monks — melee allies that sortie out to fight
+  for (const t of towers()){
+    const g = t.g, akind = g.type==='cannon' ? 'lancer' : g.type==='frost' ? 'monk' : null;
+    if (!akind) continue;
+    g.allyCd = (g.allyCd||1) - dt;
+    if (g.allyCd <= 0 && allies.length < 14){
+      g.allyCd = Math.max(2.4, 6.5 - g.tier*0.8);
+      allies.push({ x:t.x+(Math.random()-0.5)*18, y:t.y+12, kind:akind, hp:18+g.tier*12, maxhp:18+g.tier*12, dmg:4+g.tier*2.2, cd:0, face:1, t:0, moving:false });
+    }
+  }
+  updateAllies(dt);
+
   for (const p of projectiles){
     if (p.tgt && p.tgt.hp > 0){ p.tx = p.tgt.x; p.ty = p.tgt.y; }
     const dx = p.tx-p.x, dy = p.ty-p.y, d = Math.hypot(dx,dy);
@@ -1066,6 +1078,30 @@ function wallGuards(dt){
       puff(best.x, best.y-6, '#fff');
       gd.slashT = 0.22; gd.cd = 0.65; sfx.thud && sfx.thud();
     }
+  }
+}
+// barracks/monastery melee allies — march to the nearest foe and fight; can fall
+function updateAllies(dt){
+  for (const a of allies){
+    a.t += dt; if (a.cd > 0) a.cd -= dt;
+    let best=null, bd=1e9;
+    for (const e of enemies){ if (e.hp<=0) continue; const d=Math.hypot(e.x-a.x, e.y-a.y); if (d<bd){ bd=d; best=e; } }
+    if (best){
+      a.face = best.x < a.x ? -1 : 1;
+      if (bd > 24){ const dx=best.x-a.x, dy=best.y-a.y, d=Math.hypot(dx,dy)||1; a.x+=dx/d*48*dt; a.y+=dy/d*48*dt; a.moving=true; }
+      else { a.moving=false; if (a.cd<=0){ a.cd=0.7; hitEnemy(best, a.dmg, 0); puff(best.x, best.y-6, '#fff'); } a.hp -= best.dps*dt; }
+    } else { a.moving = a.y > WALL_Y-30; if (a.moving) a.y -= 30*dt; }   // no foes: hold at the wall
+    a.x = Math.max(FIELD_L+10, Math.min(FIELD_R-10, a.x));
+    a.y = Math.max(FIELD_TOP+10, Math.min(GY+ROWS*CELL, a.y));
+  }
+  allies = allies.filter(a => a.hp > 0);
+}
+function drawAllies(){
+  for (const a of allies){
+    ctx.fillStyle='rgba(20,50,30,0.25)'; ctx.beginPath(); ctx.ellipse(a.x, a.y+10, 9, 3, 0, 0, 7); ctx.fill();
+    if (a.kind==='lancer') spr('ally_lancer', 320, 320, Math.floor(time*10 + a.t*4)%6, 0, a.x, a.y+8, 0.16, a.face<0, 0.8);
+    else spr('ally_monk', 192, 192, Math.floor(time*8 + a.t*4)%4, 0, a.x, a.y+8, 0.28, a.face<0, 0.8);
+    if (a.hp < a.maxhp){ const w=18; orr(a.x-w/2-1, a.y-23, w+2, 5, 2, 'rgba(38,35,58,0.9)', null); ctx.fillStyle='#7ee860'; rr(a.x-w/2, a.y-22, Math.max(2, w*a.hp/a.maxhp), 3, 1.5); ctx.fill(); }
   }
 }
 function hitEnemy(e, dmg, slow, fx){
@@ -2710,6 +2746,7 @@ function frame(now){
   drawMergeHints();
   drawVillagers();
   drawHero();
+  drawAllies();
   for (const e of enemies.slice().sort((a,b)=>a.y-b.y)) drawEnemy(e);
   for (const pr of projectiles) drawProjectile(pr);
   drawEprojs();
@@ -2787,7 +2824,8 @@ function I(name){
  'ic_sword','ic_bow','ic_armor','ic_shield','ic_shield2','ic_helmet','ic_coin','ic_pouch','ic_goldbar','ic_gem','ic_reroll','ic_horn','ic_harp','ic_ring',
  'ic_skull','ic_skullfire','ic_heart','ic_swords9',
  'pre_pagoda','pre_temple','pre_keep','pre_cathedral','pre_palace',
- 'e_skull','e_thief','e_gnoll','e_minotaur','e_troll'].forEach(I);
+ 'e_skull','e_thief','e_gnoll','e_minotaur','e_troll',
+ 'ally_lancer','ally_monk'].forEach(I);
 // prestige wonders: real grand-building art (SevenKingdoms CC0)
 const PRE_SPR = { p_statue:'pre_pagoda', p_fountain:'pre_temple', p_garden:'pre_keep', p_cathedral:'pre_cathedral', p_throne:'pre_palace' };
 // real fantasy item icons (Shikashi CC0) for store upgrades + gear
@@ -3137,21 +3175,22 @@ function drawGolem(r, step, e){
   spr('golem', 132, 96, f, 0, 0, e.r*0.95, 1.18*r/24, e.face < 0, 0.95);
 }
 // generic animated-sprite enemy from the Enemy Pack (fw×fh sheet, `frames` cols, row 0)
-function spriteEnemy(name, fw, fh, frames, baseS){
+function spriteEnemy(name, fw, fh, frames, baseS, ay){
+  ay = ay || 0.66;   // Enemy-Pack art sits high in its frame; anchor near the character's feet so it doesn't float
   return function(r, step, e){
     const f = Math.floor(time*8 + (e.wob||0)*4) % frames;
-    spr(name, fw, fh, f, 0, 0, e.r*0.9, baseS * r/18, e.face < 0, 0.92);
+    spr(name, fw, fh, f, 0, 0, e.r*0.6, baseS * r/18, e.face < 0, ay);
     if (e.special){ star(0, -e.r*2.2, 6, '#ffd95e', '#a8761c'); }   // rare-early special marker
   };
 }
 const ENEMY_DRAW = { grunt:drawGoblin, runner:drawScout, brute:drawOgre,
                      raider:drawRaider, sapper:drawSapper, boss:drawDarkKnight,
                      archer:drawArcherE, bombardier:drawBombardier, golem:drawGolem,
-                     skull:    spriteEnemy('e_skull',    192, 192, 6, 0.45),
-                     thief:    spriteEnemy('e_thief',    192, 192, 6, 0.42),
-                     gnoll:    spriteEnemy('e_gnoll',    192, 192, 8, 0.48),
-                     minotaur: spriteEnemy('e_minotaur', 320, 320, 8, 0.40),
-                     troll:    spriteEnemy('e_troll',    384, 384, 10, 0.42) };
+                     skull:    spriteEnemy('e_skull',    192, 192, 6,  0.62),
+                     thief:    spriteEnemy('e_thief',    192, 192, 6,  0.60),
+                     gnoll:    spriteEnemy('e_gnoll',    192, 192, 8,  0.64),
+                     minotaur: spriteEnemy('e_minotaur', 320, 320, 8,  0.52),
+                     troll:    spriteEnemy('e_troll',    384, 384, 10, 0.54) };
 function drawEprojs(){
   for (const q of eprojs){
     const k = Math.min(1, q.t/q.dur);
