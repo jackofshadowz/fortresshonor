@@ -942,8 +942,8 @@ function updateFight(dt){
     const g = t.g, akind = g.type==='cannon' ? 'lancer' : g.type==='frost' ? 'monk' : null;
     if (!akind) continue;
     g.allyCd = (g.allyCd||1) - dt;
-    if (g.allyCd <= 0 && allies.length < 14){
-      g.allyCd = Math.max(2.4, 6.5 - g.tier*0.8);
+    if (g.allyCd <= 0 && allies.length < 8){
+      g.allyCd = Math.max(5, 11 - g.tier*1.1);   // muster slowly (a bit faster at higher tier)
       allies.push({ x:t.x+(Math.random()-0.5)*18, y:t.y+12, kind:akind, hp:18+g.tier*12, maxhp:18+g.tier*12, dmg:4+g.tier*2.2, cd:0, face:1, t:0, moving:false });
     }
   }
@@ -1082,18 +1082,27 @@ function wallGuards(dt){
 }
 // barracks/monastery melee allies — march to the nearest foe and fight; can fall
 function updateAllies(dt){
-  for (const a of allies){
+  const gateX = (FIELD_L+FIELD_R)/2;
+  const charge = hero && (hero.sortie || breached);   // hold at the gate until SORTIE (or a breach)
+  allies.forEach((a, i) => {
     a.t += dt; if (a.cd > 0) a.cd -= dt;
-    let best=null, bd=1e9;
-    for (const e of enemies){ if (e.hp<=0) continue; const d=Math.hypot(e.x-a.x, e.y-a.y); if (d<bd){ bd=d; best=e; } }
-    if (best){
-      a.face = best.x < a.x ? -1 : 1;
-      if (bd > 24){ const dx=best.x-a.x, dy=best.y-a.y, d=Math.hypot(dx,dy)||1; a.x+=dx/d*48*dt; a.y+=dy/d*48*dt; a.moving=true; }
-      else { a.moving=false; if (a.cd<=0){ a.cd=0.7; hitEnemy(best, a.dmg, 0); puff(best.x, best.y-6, '#fff'); } a.hp -= best.dps*dt; }
-    } else { a.moving = a.y > WALL_Y-30; if (a.moving) a.y -= 30*dt; }   // no foes: hold at the wall
+    if (charge){
+      let best=null, bd=1e9;
+      for (const e of enemies){ if (e.hp<=0) continue; const d=Math.hypot(e.x-a.x, e.y-a.y); if (d<bd){ bd=d; best=e; } }
+      if (best){
+        a.face = best.x < a.x ? -1 : 1;
+        if (bd > 24){ const dx=best.x-a.x, dy=best.y-a.y, d=Math.hypot(dx,dy)||1; a.x+=dx/d*52*dt; a.y+=dy/d*52*dt; a.moving=true; }
+        else { a.moving=false; if (a.cd<=0){ a.cd=0.7; hitEnemy(best, a.dmg, 0); puff(best.x, best.y-6, '#fff'); } a.hp -= best.dps*dt; }
+      } else a.moving=false;
+    } else {
+      // muster: queue in ranks just inside the gate, waiting for the order
+      const sx = gateX - 44 + (i%5)*22, sy = WALL_Y + 34 + Math.floor(i/5)*20;
+      const dx=sx-a.x, dy=sy-a.y, d=Math.hypot(dx,dy);
+      if (d > 3){ a.x+=dx/d*50*dt; a.y+=dy/d*50*dt; a.moving=true; a.face = dx<0?-1:1; } else { a.moving=false; a.face=1; }
+    }
     a.x = Math.max(FIELD_L+10, Math.min(FIELD_R-10, a.x));
     a.y = Math.max(FIELD_TOP+10, Math.min(GY+ROWS*CELL, a.y));
-  }
+  });
   allies = allies.filter(a => a.hp > 0);
 }
 function drawAllies(){
