@@ -62,6 +62,7 @@ let SCALE = 1;
 // nav/gesture bar) so no gameplay hides under the system bars, while the sky
 // still bleeds full-screen behind them. Adapts to any device via env() insets.
 let OX = 0, OY = 0, VX0 = 0, VY0 = 0, VXW = W, VYH = H;
+let TRAY_Y = 706;   // screen-space bottom UI band — resize() pins it to the bottom of the (taller) stage (declared before resize() runs)
 
 // Probe element to read the OS safe-area insets (CSS px) — needs viewport-fit=cover.
 const insetProbe = document.createElement('div');
@@ -78,16 +79,18 @@ function safeInsets(){
 function resize(){
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const cw = window.innerWidth, ch = window.innerHeight;
-  const s = Math.min(cw / W, ch / H);   // fit — never crop gameplay
-  SCALE = s;
-  cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
-  cv.style.width = cw + 'px'; cv.style.height = ch + 'px';
-  // center the stage within the safe area, not the raw viewport
   const ins = safeInsets();
   const safeW = cw - ins.left - ins.right, safeH = ch - ins.top - ins.bottom;
-  OX = (ins.left + (safeW - W * s) / 2) / s;
-  OY = (ins.top  + (safeH - H * s) / 2) / s;
-  VX0 = -OX; VY0 = -OY; VXW = cw / s; VYH = ch / s;      // full canvas in stage coords (bg bleeds behind bars)
+  // The stage spans the whole SAFE AREA: scale to fill its width (art is 480 wide),
+  // then grow H so the stage also fills the safe height — no letterbox, no crop.
+  const s = safeW / W;
+  SCALE = s;
+  H = Math.round(Math.max(800, Math.min(1180, safeH / s)));   // taller stage on tall phones (clamped sane)
+  TRAY_Y = Math.round(H - 94);                                // bottom UI band rides the new floor
+  cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
+  cv.style.width = cw + 'px'; cv.style.height = ch + 'px';
+  OX = ins.left / s; OY = ins.top / s;                  // stage origin sits at the safe-area corner
+  VX0 = -OX; VY0 = -OY; VXW = cw / s; VYH = ch / s;     // full canvas in stage coords (bg bleeds behind bars)
   ctx.setTransform(s * dpr, 0, 0, s * dpr, OX * s * dpr, OY * s * dpr);
 }
 window.addEventListener('resize', resize);
@@ -100,7 +103,7 @@ const COLS = 7, ROWS = 4, CELL = 58;
 const GX = 37, GY = 464;                       // build grid origin
 const WALL_Y = 440;                            // wall line
 const FIELD_TOP = 78, FIELD_L = 30, FIELD_R = 450;
-const TRAY_Y = 706;
+// (TRAY_Y declared earlier, before resize())
 // island oval — used to keep walkers on the grass, not the sea
 const ISL = { cx:(FIELD_L+FIELD_R)/2, cy:(FIELD_TOP+716)/2, w:(FIELD_R-FIELD_L)/2+24, h:(716-FIELD_TOP)/2+18 };
 function islandHalfW(y, margin){
@@ -372,6 +375,7 @@ function diff(){ return DIFF[META.s.difficulty] || DIFF.normal; }
 let curLevel = 0;              // which level is being played
 let levelWon = false;         // has this run already cleared the level's wave goal?
 let wonStars = 0;             // stars earned on the level just cleared
+let reviveCount = 0;          // times you've spent gems to continue this run (cost escalates)
 let levelMapBtn = null, wonBtns = null, mapNodeRects = null, buyGoldBtn = null;
 let gateOpen = 0;             // 0 = shut, 1 = open; the door swings open only while units pass through
 let mapWalk = null;          // {from, to, t} — the hero walking between map nodes before entering a land
@@ -542,8 +546,21 @@ function saveLevelCity(){
   L.city = serializeCity(); L.best = Math.max(L.best||0, wave-1);
   META.save();
 }
+function reviveCost(){ return 8 + reviveCount*6; }   // escalates each continue within a run
+function continueRun(){
+  const cost = reviveCost();
+  if (!spendGems(cost)){ return; }
+  reviveCount++;
+  // last-ditch reinforcements: clear the field, mend the wall, revive the champion, regroup at the same wave
+  enemies = []; eprojs = []; projectiles = []; spawnQueue = [];
+  grid = grid.map(g => g && g.rubble ? null : g);   // crews clear the rubble
+  wallHP = wallMax; breached = false; cityDamage = 0; sackT = 0;
+  if (hero){ hero.down = false; hero.sortie = false; hero.maxhp = 80 + 25*hero.lvl; hero.hp = hero.maxhp; }
+  fillTray();
+  mode = 'build'; banner('REINFORCEMENTS!', '#7ed05f'); sfx.fanfare && sfx.fanfare();
+}
 function startLevel(id){
-  curLevel = id; levelWon = false; runMode = 'normal';
+  curLevel = id; levelWon = false; runMode = 'normal'; reviveCount = 0;
   META.s.mapPos = id; META.save();   // the hero now stands on this land
   reset();   // fresh board, run boons, etc.
   const L = META.s.levels[id];
@@ -2851,15 +2868,20 @@ function drawOver(){
   chunkyText('REWARDS', W/2, 383, 12, '#cfd6e2', null, '600');
   gemIcon(W/2-72, 408, 9);  chunkyText('+'+lastEarn.gems, W/2-56, 409, 18, '#9fe8ff', null, '600', 'left');
   honorIcon(W/2+28, 408, 9); chunkyText('+'+lastEarn.honor, W/2+44, 409, 18, '#ffd95e', null, '600', 'left');
-  drawWallet(W/2-95, 448);
-  chunkyBtn(W/2-105, 478, 210, 50, '#ff9c3f', '#d9742a', '#9c4f12', 'RETRY LEVEL', 21);
-  hit(W/2-105, 478, 210, 50, ()=>startLevel(curLevel));
-  chunkyBtn(W/2-105, 536, 210, 46, '#5cb0f0', '#3b80d2', '#1d5a8a', 'WORLD MAP', 19);
-  hit(W/2-105, 536, 210, 46, ()=>{ mode='map'; });
-  chunkyBtn(W/2-160, 592, 150, 44, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 19);
-  hit(W/2-160, 592, 150, 44, ()=>{ mode='store'; storeTab='cos'; });
-  chunkyBtn(W/2+10, 592, 150, 44, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BADGES', 17);
-  hit(W/2+10, 592, 150, 44, ()=>{ mode='badges'; });
+  drawWallet(W/2-95, 446);
+  // gem CONTINUE — last-ditch reinforcements: keep your city, regroup at the same wave
+  const rc = reviveCost(), canRevive = META.s.gems >= rc;
+  chunkyBtn(W/2-150, 474, 300, 48, canRevive?'#7ed05f':'#7a8166', canRevive?'#56a83c':'#5a6048', '#2e6326', 'CONTINUE  '+rc+'◆', 19);
+  hit(W/2-150, 474, 300, 48, ()=>{ if (META.s.gems >= reviveCost()) continueRun(); else toast && toast('Need '+reviveCost()+' gems'); });
+  chunkyText('keep your city — regroup at this wave', W/2, 530, 10, '#bfe9b0', null, '600');
+  chunkyBtn(W/2-150, 544, 145, 44, '#ff9c3f', '#d9742a', '#9c4f12', 'RETRY', 18);
+  hit(W/2-150, 544, 145, 44, ()=>startLevel(curLevel));
+  chunkyBtn(W/2+5, 544, 145, 44, '#5cb0f0', '#3b80d2', '#1d5a8a', 'WORLD MAP', 16);
+  hit(W/2+5, 544, 145, 44, ()=>{ mode='map'; });
+  chunkyBtn(W/2-150, 596, 145, 42, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 18);
+  hit(W/2-150, 596, 145, 42, ()=>{ mode='store'; storeTab='cos'; });
+  chunkyBtn(W/2+5, 596, 145, 42, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BADGES', 16);
+  hit(W/2+5, 596, 145, 42, ()=>{ mode='badges'; });
 }
 function mapNodeXY(i){ const X0=30, Y0=132, MW=W-60, MH=548, p=LEVEL_POS[i]; return { x:X0+p[0]*MW, y:Y0+p[1]*MH }; }
 function drawMap(){
