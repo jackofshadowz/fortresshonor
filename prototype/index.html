@@ -303,6 +303,7 @@ let curLevel = 0;              // which level is being played
 let levelWon = false;         // has this run already cleared the level's wave goal?
 let wonStars = 0;             // stars earned on the level just cleared
 let levelMapBtn = null, wonBtns = null, mapNodeRects = null, buyGoldBtn = null;
+let gateOpen = 0;             // 0 = shut, 1 = open; the door swings open only while units pass through
 let guardUpBtn = null;         // in-build "Train Archers" prompt on the wall
 let repairWallBtn = null, rebuildBtn = null;   // pay-to-repair prompts (no free rebuild)
 // per-wave chaos: each round may roll a modifier so leveling is less predictable
@@ -1497,14 +1498,28 @@ function drawWall(){
   // gate — warm Tiny Swords wood (intact only; when breached this whole section collapses into boulders below)
   const gx = (wl+wr)/2;
   if (!breached){
+    // open only while a friendly is actually AT the doorway crossing (so it shuts behind them)
+    const atDoor = (ux, uy) => Math.abs(ux - gx) < 34 && Math.abs(uy - WALL_Y) < 26;
+    let busy = false;
+    for (const a of allies){ if (a.kind!=='archer' && atDoor(a.x, a.y)){ busy = true; break; } }   // wall archers sit here but don't open it
+    if (!busy && typeof knights !== 'undefined') for (const k of knights){ if (atDoor(k.x, k.y)){ busy = true; break; } }
+    if (!busy && hero && !hero.down && atDoor(hero.x, hero.y)) busy = true;
+    gateOpen += ((busy ? 1 : 0) - gateOpen) * 0.16;   // swing toward open/shut each frame
+    // dark archway behind the door
+    ctx.save();
+    ctx.fillStyle = '#241a10';
+    ctx.beginPath(); ctx.moveTo(gx-15, WALL_Y+29); ctx.lineTo(gx-15, WALL_Y+12); ctx.arc(gx, WALL_Y+12, 15, Math.PI, 0); ctx.lineTo(gx+15, WALL_Y+29); ctx.closePath(); ctx.fill();
+    // the wooden door rises into the wall (portcullis) as it opens — clipped to the archway
+    ctx.beginPath(); ctx.moveTo(gx-15, WALL_Y+29); ctx.lineTo(gx-15, WALL_Y+12); ctx.arc(gx, WALL_Y+12, 15, Math.PI, 0); ctx.lineTo(gx+15, WALL_Y+29); ctx.closePath(); ctx.clip();
+    ctx.translate(0, -gateOpen * 26);
     ctx.fillStyle = '#dab570';
-    ctx.beginPath(); ctx.moveTo(gx-15, WALL_Y+29); ctx.lineTo(gx-15, WALL_Y+12);
-    ctx.arc(gx, WALL_Y+12, 15, Math.PI, 0); ctx.lineTo(gx+15, WALL_Y+29); ctx.closePath();
+    ctx.beginPath(); ctx.moveTo(gx-15, WALL_Y+29); ctx.lineTo(gx-15, WALL_Y+12); ctx.arc(gx, WALL_Y+12, 15, Math.PI, 0); ctx.lineTo(gx+15, WALL_Y+29); ctx.closePath();
     ctx.fill(); ctx.strokeStyle = '#161c2e'; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.stroke();
     ctx.strokeStyle = '#b48355'; ctx.lineWidth = 2.4;
     for (let i=-1;i<=1;i++){ ctx.beginPath(); ctx.moveTo(gx+i*8, WALL_Y+7+(i%2?2:5)); ctx.lineTo(gx+i*8, WALL_Y+28); ctx.stroke(); }
     ctx.fillStyle = '#161c2e';
     ctx.beginPath(); ctx.arc(gx-9, WALL_Y+18, 1.4, 0, 7); ctx.arc(gx+9, WALL_Y+18, 1.4, 0, 7); ctx.fill();
+    ctx.restore();
   }
   // guard towers bookending the wall
   img('tower_b', wl+11, WALL_Y+42, 0.3);
