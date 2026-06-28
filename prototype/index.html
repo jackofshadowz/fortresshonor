@@ -344,7 +344,7 @@ const ANALYTICS = {
 let dragUnit = null;            // {from:'tray',i} | {from:'board',c,r}
 const TRAY_N = 4;               // exactly 4 buildings are offered per round
 function popCap(){ return 12 + (META.s.mods.squire ? 2 : 0); }   // building population cap (the core balance knob)
-function armyCap(){ return 3 + Math.floor(townLevel()/3); }      // mustered soldiers the city can SUPPLY (grows with the town)
+function armyCap(){ return 2 + Math.floor(townLevel()/4); }      // mustered soldiers the city can SUPPLY (grows with the town)
 function unitCount(){   // total army = units on the board + units waiting in the tray
   let n = 0;
   for (let i=0;i<ROWS*COLS;i++) if (isUnit(grid[i])) n++;
@@ -358,8 +358,8 @@ function emptyTraySlot(){ for (let i=0;i<TRAY_N;i++) if (!hand[i]) return i; ret
 function fillTray(){   // offer up to 4 buildings each round (no continuous drip)
   for (let i=0;i<TRAY_N;i++) if (!hand[i]) hand[i] = newUnit();
 }
-function mergeInto(ti, t, srcRarity){   // fuse a unit into the unit already at cell ti → next tier
-  const tc = ti%COLS, tr = (ti/COLS)|0, nt = t.tier+1;
+function mergeInto(ti, t, srcRarity, srcTier){   // feed a same-type building in → next tier (forgiving: uses the higher tier +1)
+  const tc = ti%COLS, tr = (ti/COLS)|0, nt = Math.max(t.tier, srcTier || t.tier) + 1;
   grid[ti] = { type:t.type, tier:nt, pop:0.001, rarity: Math.max(srcRarity||0, t.rarity||0) };
   const rx = cellX(tc)+CELL/2, ry = cellY(tr)+CELL/2;
   // happy explosion — a burst of gold + white sparks, scaling with the new tier
@@ -375,14 +375,14 @@ function mergeInto(ti, t, srcRarity){   // fuse a unit into the unit already at 
 function placeFromTray(unit, ti){   // drop a tray unit onto board cell ti; place on empty or merge if identical
   const t = grid[ti];
   if (!t){ grid[ti] = { type:unit.type, tier:unit.tier, pop:0.001, rarity:unit.rarity||0 }; sfx.place && sfx.place(); return true; }
-  if (isUnit(t) && t.type===unit.type && t.tier===unit.tier){ mergeInto(ti, t, unit.rarity); return true; }   // continual upgrade
-  return false;   // occupied by a non-matching unit → reject (stays in tray)
+  if (isUnit(t) && t.type===unit.type){ mergeInto(ti, t, unit.rarity, unit.tier); return true; }   // same TYPE upgrades it (+1), any tier
+  return false;   // occupied by a different type → reject (stays in tray)
 }
 function dropBoardUnit(sc, sr, ti){   // drag a board unit onto cell ti: fuse / move
   const si = idx(sc,sr), s = grid[si]; if (!isUnit(s) || ti===si) return;
   const t = grid[ti];
   if (!t){ grid[ti] = s; grid[si] = null; return; }
-  if (isUnit(t) && t.type===s.type && t.tier===s.tier){ mergeInto(ti, t, s.rarity); grid[si] = null; }   // continual upgrade
+  if (isUnit(t) && t.type===s.type){ mergeInto(ti, t, s.rarity, s.tier); grid[si] = null; }   // same TYPE upgrades it (+1)
 }
 function reset(){
   grid = Array(ROWS*COLS).fill(null);
@@ -758,8 +758,9 @@ function waveCleared(){
   // NO auto-repair: the wall stays as damaged as you left it, and razed cottages stay in ruins —
   // you must pay to rebuild between waves (see drawRepairBtns)
   if (breached){
-    breached = false; sackT = 0;
-    banner(wallHP > 0 ? 'HELD!' : 'WALL BREACHED — REPAIR IT!', wallHP > 0 ? '#7ee860' : '#ff9c3f');
+    sackT = 0;
+    if (wallHP > 0){ breached = false; banner('HELD!', '#7ee860'); }   // only un-breach if the wall actually stands
+    else banner('WALL BREACHED — REPAIR IT!', '#ff9c3f');              // stays visibly breached until you repair
   }
   wave++;
   if (wave-1 > bestWave){ bestWave = wave-1; localStorage.setItem('foh_best', bestWave); }
@@ -806,6 +807,7 @@ function updateFight(dt){
   for (const e of enemies){
     e.hitT = Math.max(0, e.hitT - dt);
     e.spawnT = Math.max(0, (e.spawnT||0) - dt);
+    if (e.slowStacks) e.slowStacks = Math.max(0, e.slowStacks - dt*0.6);   // big units shake off slow-buildup over time
     tickBuffs(e, dt);
     e.atk = false;
     if (e.hp <= 0) continue;                 // finished off by a damage-over-time tick
@@ -947,9 +949,9 @@ function updateFight(dt){
   for (const t of towers()){
     const g = t.g, akind = g.type==='cannon' ? 'lancer' : g.type==='frost' ? 'monk' : null;
     if (!akind) continue;
-    g.allyCd = (g.allyCd||1) - dt;
+    g.allyCd = (g.allyCd==null ? 11 : g.allyCd) - dt;   // initial delay before the first muster
     if (g.allyCd <= 0 && allies.length < armyCap()){
-      g.allyCd = Math.max(8, 15 - g.tier*1.2);   // long recharge — a few defenders, not a swarm
+      g.allyCd = Math.max(11, 20 - g.tier*1.3);   // long recharge — a few defenders, not a swarm
       allies.push({ x:t.x+(Math.random()-0.5)*18, y:t.y+12, kind:akind, hp:18+g.tier*12, maxhp:18+g.tier*12, dmg:4+g.tier*2.2, cd:0, face:1, t:0, moving:false });
     }
   }
@@ -1086,7 +1088,19 @@ function wallGuards(dt){
     }
   }
 }
-// barracks/monastery melee allies — march to the nearest foe and fight; can fall
+// move a unit toward (tx,ty), funnelling through the gate when it must cross the wall (no phasing)
+function moveViaGate(a, tx, ty, sp, dt){
+  const gateX = (FIELD_L+FIELD_R)/2;
+  let gx = tx, gy = ty;
+  if ((a.y > WALL_Y) !== (ty > WALL_Y)){            // target is on the far side of the wall → route through the door
+    gx = gateX;
+    gy = Math.abs(a.x - gateX) > 16 ? (a.y > WALL_Y ? WALL_Y + 20 : WALL_Y - 20)   // first reach the doorway
+                                    : (a.y > WALL_Y ? WALL_Y - 24 : WALL_Y + 24);  // then step through it
+  }
+  const dx = gx-a.x, dy = gy-a.y, d = Math.hypot(dx,dy)||1;
+  a.x += dx/d*sp*dt; a.y += dy/d*sp*dt; a.moving = true; if (Math.abs(dx) > 1) a.face = dx < 0 ? -1 : 1;
+}
+// barracks/monastery melee allies — hold at the gate, then sortie through the door and fight; can fall
 function updateAllies(dt){
   const gateX = (FIELD_L+FIELD_R)/2;
   const charge = hero && (hero.sortie || breached);   // hold at the gate until SORTIE (or a breach)
@@ -1096,33 +1110,41 @@ function updateAllies(dt){
       let best=null, bd=1e9;
       for (const e of enemies){ if (e.hp<=0) continue; const d=Math.hypot(e.x-a.x, e.y-a.y); if (d<bd){ bd=d; best=e; } }
       if (best){
-        a.face = best.x < a.x ? -1 : 1;
-        if (bd > 24){ const dx=best.x-a.x, dy=best.y-a.y, d=Math.hypot(dx,dy)||1; a.x+=dx/d*52*dt; a.y+=dy/d*52*dt; a.moving=true; }
-        else { a.moving=false; if (a.cd<=0){ a.cd=0.7; hitEnemy(best, a.dmg, 0); puff(best.x, best.y-6, '#fff'); } a.hp -= best.dps*dt; }
+        if (bd > 24){ moveViaGate(a, best.x, best.y, 52, dt); }
+        else { a.moving=false; a.face = best.x < a.x ? -1 : 1; if (a.cd<=0){ a.cd=0.7; hitEnemy(best, a.dmg, 0); puff(best.x, best.y-6, '#fff'); } a.hp -= best.dps*dt; }
       } else a.moving=false;
     } else {
-      // muster: queue in ranks just inside the gate, waiting for the order
-      const sx = gateX - 44 + (i%5)*22, sy = WALL_Y + 34 + Math.floor(i/5)*20;
-      const dx=sx-a.x, dy=sy-a.y, d=Math.hypot(dx,dy);
-      if (d > 3){ a.x+=dx/d*50*dt; a.y+=dy/d*50*dt; a.moving=true; a.face = dx<0?-1:1; } else { a.moving=false; a.face=1; }
+      // muster: queue in loose ranks just inside the gate, waiting for the order
+      const sx = gateX - 48 + (i%4)*32, sy = WALL_Y + 36 + Math.floor(i/4)*22;
+      if (Math.hypot(sx-a.x, sy-a.y) > 3){ moveViaGate(a, sx, sy, 50, dt); } else { a.moving=false; a.face=1; }
     }
     a.x = Math.max(FIELD_L+10, Math.min(FIELD_R-10, a.x));
     a.y = Math.max(FIELD_TOP+10, Math.min(GY+ROWS*CELL, a.y));
   });
+  // separation — keep the party from stacking on one another
+  for (let i=0;i<allies.length;i++) for (let j=i+1;j<allies.length;j++){
+    const a=allies[i], o=allies[j]; let dx=a.x-o.x, dy=a.y-o.y, d=Math.hypot(dx,dy);
+    if (d < 17 && d > 0.01){ const push=(17-d)/2; dx/=d; dy/=d; a.x+=dx*push; a.y+=dy*push; o.x-=dx*push; o.y-=dy*push; }
+  }
   allies = allies.filter(a => a.hp > 0);
 }
 function drawAllies(){
   for (const a of allies){
     ctx.fillStyle='rgba(20,50,30,0.25)'; ctx.beginPath(); ctx.ellipse(a.x, a.y+10, 9, 3, 0, 0, 7); ctx.fill();
-    if (a.kind==='lancer') spr('ally_lancer', 320, 320, Math.floor(time*10 + a.t*4)%6, 0, a.x, a.y+4, 0.28, a.face<0, 0.72);
-    else spr('ally_monk', 192, 192, Math.floor(time*8 + a.t*4)%4, 0, a.x, a.y+4, 0.46, a.face<0, 0.66);
+    if (a.kind==='lancer') spr('ally_lancer', 320, 320, Math.floor(time*10 + a.t*4)%6, 0, a.x, a.y+4, 0.50, a.face<0, 0.72);
+    else spr('ally_monk', 192, 192, Math.floor(time*8 + a.t*4)%4, 0, a.x, a.y+4, 0.52, a.face<0, 0.66);
     if (a.hp < a.maxhp){ const w=18; orr(a.x-w/2-1, a.y-23, w+2, 5, 2, 'rgba(38,35,58,0.9)', null); ctx.fillStyle='#7ee860'; rr(a.x-w/2, a.y-22, Math.max(2, w*a.hp/a.maxhp), 3, 1.5); ctx.fill(); }
   }
 }
+const SLOW_RESIST = { golem:0.25, boss:0.3, minotaur:0.3, troll:0.2 };   // big units shrug off most of a slow
 function hitEnemy(e, dmg, slow, fx){
   if (e.kind === 'golem' && fx && fx.kind === 'arrow') dmg *= 0.35;   // stone hide shrugs off arrows
   e.hp -= dmg; e.hitT = 0.1;
-  if (slow) applyBuff(e, 'slow', slow);
+  if (slow){
+    const rr = SLOW_RESIST[e.kind];
+    if (rr){ e.slowStacks = (e.slowStacks||0) + 1; if (e.slowStacks >= 4) applyBuff(e, 'slow', slow*rr); }   // only a brief, weak slow after many hits
+    else applyBuff(e, 'slow', slow);
+  }
   if (fx){
     if (fx.burn)   applyBuff(e, 'burn', fx.burn);
     if (fx.poison) applyBuff(e, 'poison', fx.poison);
@@ -1449,7 +1471,7 @@ function drawMergeHints(){
     if (!g){
       ctx.globalAlpha = 0.22 + Math.sin(time*5 + (c+r))*0.06; ctx.fillStyle = '#7ed05f';
       rr(cellX(c)+5, cellY(r)+5, CELL-10, CELL-10, 9); ctx.fill();
-    } else if (isUnit(g) && g.type===u.type && g.tier===u.tier && g.tier < MAX_TIER){
+    } else if (isUnit(g) && g.type===u.type){
       ctx.globalAlpha = 0.55 + Math.sin(time*8)*0.3; ctx.strokeStyle = '#ffd95e'; ctx.lineWidth = 4;
       rr(cellX(c)+2, cellY(r)+2, CELL-4, CELL-4, 11); ctx.stroke();
     }
@@ -2585,7 +2607,7 @@ cv.addEventListener('pointerdown', ev => {
   }
   // pay to repair the wall / rebuild razed cottages
   if (repairWallBtn && inRect(p, repairWallBtn)){
-    if (gold >= repairWallBtn.cost){ gold -= repairWallBtn.cost; wallHP = wallMax; banner('Wall repaired!', '#7fc4ff'); sfx.merge && sfx.merge(); }
+    if (gold >= repairWallBtn.cost){ gold -= repairWallBtn.cost; wallHP = wallMax; breached = false; banner('Wall repaired!', '#7fc4ff'); sfx.merge && sfx.merge(); }
     else floaters.push({ x:W/2, y:WALL_Y, text:'need '+repairWallBtn.cost+'g', t:0, dur:0.9, size:14, color:'#ff8d7e' });
     return;
   }
@@ -3187,7 +3209,7 @@ function drawBombardier(r, step, e){
 function drawGolem(r, step, e){
   // stone golem — generated sheet, 4 walk frames
   const f = Math.floor(time*6 + (e.wob||0)*5) % 4;
-  spr('golem', 132, 96, f, 0, 0, e.r*0.95, 1.18*r/24, e.face < 0, 0.95);
+  spr('golem', 168, 96, f, 0, 0, e.r*0.95, 1.18*r/24, e.face < 0, 0.95);
 }
 // generic animated-sprite enemy from the Enemy Pack (fw×fh sheet, `frames` cols, row 0)
 function spriteEnemy(name, fw, fh, frames, baseS, ay){
@@ -3264,7 +3286,8 @@ function drawHero(){
   knights.forEach((k, i) => {
     const row = k.slashT > 0 ? 2 : (k.mv ? 1 : 0);
     const f = k.slashT > 0 ? (5 - Math.floor(k.slashT/0.16*5)) % 6 : Math.floor(time*8 + i*2)%6;
-    spr(hspr, 192, 192, f, row, k.x, k.y+8, 0.42, k.face < 0, 0.76);
+    const ksc = (i===0 ? 0.56 : 0.42) * (1 + (hero.lvl-1)*0.05);   // the champion is bigger and grows with each upgrade
+    spr(hspr, 192, 192, f, row, k.x, k.y+8, ksc, k.face < 0, 0.76);
   });
   badge(hero.x-14, hero.y+4, hero.lvl);
   if (hero.down){
