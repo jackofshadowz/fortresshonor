@@ -667,6 +667,11 @@ function updateHero(dt){
     k.x = Math.max(FIELD_L+16, Math.min(FIELD_R-16, k.x));
     k.y = Math.max(FIELD_TOP+24, Math.min(GY+ROWS*CELL-6, k.y));
   });
+  // keep the party from bunching up — push members apart
+  for (let a=0;a<knights.length;a++) for (let bk=a+1;bk<knights.length;bk++){
+    const k1=knights[a], k2=knights[bk]; let dx=k1.x-k2.x, dy=k1.y-k2.y, d=Math.hypot(dx,dy);
+    if (d < 26 && d > 0.01){ const push=(26-d)/2; dx/=d; dy/=d; k1.x+=dx*push; k1.y+=dy*push; k2.x-=dx*push; k2.y-=dy*push; }
+  }
   // champion falls when overwhelmed — revive for gold between waves
   if (!hero.down && hero.hp <= 0){
     hero.down = true; hero.hp = 0; hero.sortie = false; knights.length = 0;
@@ -2948,75 +2953,109 @@ function drawWon(){
   hit(W/2-150, y, 300, 46, ()=>{ saveLevelCity(); mode='map'; });
 }
 /* ---------- CODEX: an MTG-style card for every building, defender and foe ---------- */
-let codexTab = 'build';
+let codexTab = 'build', codexIdx = 0;
 const CARDS_BUILD = [
-  { name:'Watchtower',     role:'shoots foes',       img:'tower_b',     s:0.5,  rar:'#cdd9e8', flav:'Tap to set Arrow / Fire / Freeze.' },
-  { name:'Archery Range',  role:'drafts archers',    img:'archery_b',   s:0.5,  rar:'#7ed05f', flav:'Archers climb the wall to shoot.' },
-  { name:'Barracks',       role:'musters lancers',   img:'barracks_r',  s:0.5,  rar:'#ff9d3f', flav:'Melee that sorties through the gate.' },
-  { name:'Monastery',      role:'magic + monks',     img:'monastery_p', s:0.46, rar:'#7fc4ff', flav:'Frost shots; ordains healer-monks.' },
-  { name:'Gold Mine',      role:'makes gold',        img:'mine',        s:0.6,  rar:'#ffd95e', flav:'Funds the war, build and battle.' },
+  { name:'Watchtower',    role:'BUILDING · SHOOTER',  img:'tower_b',     s:0.62, rar:'#cdd9e8', stats:[['DMG','6'],['RATE','1.7/s'],['RANGE','360']], flav:'The keep’s ranged ward. Tap it to attune Arrow, Fire, or Freeze.' },
+  { name:'Archery Range', role:'BUILDING · PRODUCER',  img:'archery_b',   s:0.62, rar:'#7ed05f', stats:[['DRAFTS','Archers'],['RANGE','240']], flav:'Drafts archers who climb the rampart and loose arrows over the wall.' },
+  { name:'Barracks',      role:'BUILDING · PRODUCER',  img:'barracks_r',  s:0.62, rar:'#ff9d3f', stats:[['MUSTERS','Lancers'],['ROLE','Melee']], flav:'Musters lancers who sortie through the gate to skewer the front rank.' },
+  { name:'Monastery',     role:'BUILDING · SUPPORT',   img:'monastery_p', s:0.58, rar:'#7fc4ff', stats:[['MAGIC','Frost'],['ORDAINS','Monks']], flav:'Casts slowing frost and ordains monks who heal allies and mend the wall.' },
+  { name:'Gold Mine',     role:'BUILDING · ECONOMY',   img:'mine',        s:0.72, rar:'#ffd95e', stats:[['GOLD','+ / wave'],['SCALES','tier']], flav:'Funds the war effort through every wave; output grows with its tier.' },
 ];
 const CARDS_DEF = [
-  { name:'Soldier',  role:'melee · champion',  spr:'__hero', fw:192, fn:6, s:0.56, rar:'#ffd95e', flav:'Your hero — grows each upgrade.' },
-  { name:'Lancer',   role:'melee · reach',     spr:'ally_lancer', fw:320, fn:6, s:0.5,  ay:0.58, rar:'#7fc4ff', flav:'Sorties out to skewer the foe.' },
-  { name:'Monk',     role:'support · heal',    spr:'ally_monk',   fw:192, fn:4, s:0.55, ay:0.66, rar:'#c9a2e8', flav:'Heals, mends the wall, swings a mace.' },
-  { name:'Archer',   role:'ranged · wall',     spr:'ally_archer', fw:192, fn:4, s:0.55, ay:0.66, rar:'#7ed05f', flav:'Mans the rampart, looses arrows.' },
+  { name:'Soldier', role:'DEFENDER · CHAMPION', spr:'__hero',      fw:192, fn:6, s:0.78, rar:'#ffd95e', stats:[['DMG','10'],['ROLE','Lead']], flav:'Your hero. Leads the sortie and grows larger with every upgrade.' },
+  { name:'Lancer',  role:'DEFENDER · MELEE',    spr:'ally_lancer', fw:320, fn:6, s:0.72, ay:0.58, rar:'#7fc4ff', stats:[['DMG','8'],['REACH','long']], flav:'First through the gate on a sortie; strikes with a long spear.' },
+  { name:'Monk',    role:'DEFENDER · SUPPORT',  spr:'ally_monk',   fw:192, fn:4, s:0.78, ay:0.66, rar:'#c9a2e8', stats:[['HEAL','✓'],['MEND','wall']], flav:'Heals allies and mends the wall; swings a mace as a last resort.' },
+  { name:'Archer',  role:'DEFENDER · RANGED',   spr:'ally_archer', fw:192, fn:4, s:0.78, ay:0.66, rar:'#7ed05f', stats:[['DMG','11'],['RANGE','240']], flav:'Mans the rampart and out-ranges enemy bowmen.' },
 ];
-function drawCodexArt(c, ax, ay){
-  if (c.img){ img(c.img, ax, ay+14, c.s); return; }
-  if (c.spr){ const nm = c.spr==='__hero' ? heroSprite() : c.spr; spr(nm, c.fw, c.fw, Math.floor(time*6)%c.fn, c.spr==='__hero'?0:0, ax, ay+16, c.s, false, c.ay||0.76); return; }
+const FOE_FLAV = {
+  grunt:'Goblin rank-and-file. Numerous and disposable.', runner:'A darting scout — fast and frail.',
+  archer:'Hangs back and rains arrows on your wall.', brute:'A lumbering ogre; soaks a lot of fire.',
+  raider:'Quick flanker that rushes the gate.', sapper:'Carries dynamite — blows a hole in the wall.',
+  skull:'Undead and relentless; cheap to field.', gnoll:'A bone-throwing skirmisher.',
+  thief:'An assassin — scales the wall to cut down your hero. Arrows barely touch it.',
+  bombardier:'Lobs explosives from a raft offshore.', minotaur:'A heavy that shrugs off frost and charges.',
+  golem:'Living stone. Shrugs off arrows; needs heavy fire.', troll:'A mountain of muscle — winds up a crushing club.',
+  boss:'A dark champion leading the assault.',
+};
+function drawCodexArt(c, ax, ay, k){
+  k = k || 1;
+  if (c.img){ img(c.img, ax, ay, c.s*k); return; }
+  if (c.spr){ const nm = c.spr==='__hero' ? heroSprite() : c.spr; spr(nm, c.fw, c.fw, Math.floor(time*6)%c.fn, 0, ax, ay+8, c.s*k, false, c.ay||0.76); return; }
   if (c.foe){
     const cfg = CONFIG.enemies[c.foe]; if (!cfg) return;
-    ctx.save(); ctx.translate(ax, ay+4);
-    try { (ENEMY_DRAW[c.foe]||function(){})(cfg.r, 0, { x:ax, y:ay, r:cfg.r, wob:2, face:1, atk:false, hp:1, maxhp:1, kind:c.foe, buffs:{}, special:false }); } catch(e){}
+    ctx.save(); ctx.translate(ax, ay); ctx.scale(k*0.85, k*0.85);
+    try { (ENEMY_DRAW[c.foe]||function(){})(cfg.r, 0, { x:0, y:0, r:cfg.r, wob:2, face:1, atk:false, hp:1, maxhp:1, kind:c.foe, buffs:{}, special:false }); } catch(e){}
     ctx.restore();
   }
 }
-function drawCard(x, y, w, h, c, locked){
-  // ---- 3C "Foil Legendary": rainbow foil border, dark interior, art window, type line, rules box ----
+function codexList(){
+  if (codexTab==='build') return CARDS_BUILD;
+  if (codexTab==='def') return CARDS_DEF;
+  return Object.keys(ENEMY_NAME).map(k => ({ foe:k, name:ENEMY_NAME[k], role:'FOE · LAND '+((ENEMY_INTRO[k]||0)+1),
+    stats:[['HP',CONFIG.enemies[k].hp],['DMG',CONFIG.enemies[k].dps],['SPD',CONFIG.enemies[k].spd]], rar:'#ff8d7e', flav:FOE_FLAV[k]||'' }));
+}
+function codexFlip(d){ const n=codexList().length; codexIdx=((codexIdx+d)%n+n)%n; sfx.place && sfx.place(); }
+function drawBigCard(x, y, w, h, c, locked){
+  // foil frame + glow
   ctx.save();
-  if (!locked){ ctx.shadowColor = 'rgba(160,120,255,0.7)'; ctx.shadowBlur = 11; }
+  if (!locked){ ctx.shadowColor='rgba(160,120,255,0.75)'; ctx.shadowBlur=22; }
   let border;
-  if (locked){ border = '#3a4258'; }
-  else { border = ctx.createLinearGradient(x, y, x+w, y+h);
-    ['#ffe06a','#6ff3ff','#a06fff','#ff7be0','#ffe06a'].forEach((col,i,a)=>border.addColorStop(i/(a.length-1), col)); }
-  orr(x, y, w, h, 13, border, null);   // foil frame
+  if (locked) border='#3a4258';
+  else { border=ctx.createLinearGradient(x,y,x+w,y+h); ['#ffe06a','#6ff3ff','#a06fff','#ff7be0','#ffe06a'].forEach((col,i,a)=>border.addColorStop(i/(a.length-1),col)); }
+  orr(x, y, w, h, 22, border, null);
   ctx.restore();
-  // dark interior
-  gradPanel(x+5, y+5, w-10, h-10, 9, 'rgba(34,26,62,0.99)', 'rgba(18,13,34,1)', null, 0);
+  gradPanel(x+7, y+7, w-14, h-14, 17, 'rgba(36,27,66,0.99)', 'rgba(18,13,34,1)', null, 0);
   // title plate
-  orr(x+9, y+9, w-18, 21, 6, 'rgba(58,42,110,0.92)', locked?'#4a5170':'#c9a2ff', 1.5);
-  chunkyText(locked ? '? ? ?' : c.name, x+w/2, y+23, 12, '#fff', '#10131f', '700');
-  // art window
-  const aw = w-22, ax = x+11, ay = y+34, ah = 64;
-  orr(ax, ay, aw, ah, 7, 'rgba(16,11,30,0.95)', locked?'#4a5170':'#a06fff', 2);
-  ctx.save(); rr(ax+2, ay+2, aw-4, ah-4, 6); ctx.clip();
-  if (locked) chunkyText('?', x+w/2, ay+ah/2+11, 30, '#4a5170', null, '800'); else drawCodexArt(c, x+w/2, ay+ah/2-2);
+  orr(x+16, y+16, w-32, 40, 11, 'rgba(58,42,110,0.95)', locked?'#4a5170':'#c9a2ff', 2);
+  chunkyText(locked ? '? ? ?' : c.name, x+w/2, y+44, 24, '#fff', '#10131f', '800');
+  // big art window
+  const ax=x+18, ay=y+66, aw=w-36, ah=h*0.46;
+  orr(ax, ay, aw, ah, 12, 'rgba(14,10,28,0.96)', locked?'#4a5170':'#a06fff', 2.5);
+  ctx.save(); rr(ax+3, ay+3, aw-6, ah-6, 10); ctx.clip();
+  if (locked) chunkyText('?', x+w/2, ay+ah/2+22, 66, '#3f475f', null, '800');
+  else drawCodexArt(c, x+w/2, ay+ah/2 + ah*0.18, 2.5);
   ctx.restore();
   // type line
-  chunkyText(locked ? 'Undiscovered' : (c.role||''), x+w/2, y+112, 9, locked?'#7a8398':'#e6d6ff', null, '600');
-  // rules / flavour box
-  orr(x+9, y+120, w-18, h-130, 6, 'rgba(24,17,52,0.92)', locked?'#39435f':'#6a4fae', 1.5);
-  if (locked) chunkyText('Meet this foe in battle', x+w/2, y+h-18, 8.5, '#8a93a8', null, '500');
-  else if (c.flav) chunkyText(c.flav, x+w/2, y+h-18, 8.5, '#d6c6ff', null, '500');
-  // foil rarity gem (bottom-right)
-  if (!locked){ const gx=x+w-16, gy=y+h-16; ocirc(gx, gy, 6, c.rar||'#ffd95e', '#1a1030', 2); glint(gx-2, gy-2.5, 1.6); }
+  chunkyText(locked ? 'UNDISCOVERED' : (c.role||''), x+w/2, ay+ah+24, 12, locked?'#7a8398':'#e6d6ff', null, '700');
+  // stat chips
+  if (!locked && c.stats){
+    const n=c.stats.length, cw2=Math.min(120,(w-44)/n), sx0=x+w/2-(n*cw2+(n-1)*8)/2, sy=ay+ah+38;
+    c.stats.forEach((s,i)=>{ const sx=sx0+i*(cw2+8);
+      orr(sx, sy, cw2, 46, 9, 'rgba(26,18,56,0.95)', '#6a4fae', 1.5);
+      chunkyText(String(s[1]), sx+cw2/2, sy+22, 16, '#fff', null, '800');
+      chunkyText(String(s[0]), sx+cw2/2, sy+38, 9, '#b9a6e6', null, '600'); });
+  }
+  // flavour box
+  const fy = ay+ah + (locked?40:92);
+  orr(x+16, fy, w-32, y+h-16-fy, 10, 'rgba(24,17,52,0.95)', locked?'#39435f':'#6a4fae', 1.5);
+  const ftxt = locked ? 'Meet this foe in battle to add it to your Codex.' : (c.flav||'');
+  wrapText(ftxt, x+w/2, fy+24, w-56, 16, 11, locked?'#8a93a8':'#dccdfa');
+  if (!locked){ const gx=x+w-26, gy=y+h-26; ocirc(gx, gy, 9, c.rar||'#ffd95e', '#1a1030', 2.5); glint(gx-3, gy-3.5, 2.2); }
+}
+function wrapText(txt, cx, y, maxw, lh, px, col){
+  const words=String(txt).split(' '); let line='', yy=y;
+  ctx.font='600 '+px+"px 'Fredoka', sans-serif";
+  for (const wd of words){ const t=line?line+' '+wd:wd; if (ctx.measureText(t).width > maxw && line){ chunkyText(line, cx, yy, px, col, null, '600'); line=wd; yy+=lh; } else line=t; }
+  if (line) chunkyText(line, cx, yy, px, col, null, '600');
 }
 function drawCodex(){
   uiHits = []; menuBg(); menuHeader('CODEX');
-  const tabs = [['build','Buildings'],['def','Defenders'],['foe','Foes']];
-  tabs.forEach((t,i)=>{ const tw=(W-28)/3-4, tx=14+i*((W-28)/3); chunkyBtn(tx, 92, tw, 30, codexTab===t[0]?'#ffce5a':'#566089', codexTab===t[0]?'#dba32c':'#3a4364', codexTab===t[0]?'#9c6f12':'#222a44', t[1], 13); hit(tx, 92, tw, 30, ()=>{ codexTab=t[0]; }); });
-  let list;
-  if (codexTab==='build') list = CARDS_BUILD;
-  else if (codexTab==='def') list = CARDS_DEF;
-  else list = Object.keys(ENEMY_NAME).map(k => ({ foe:k, name:ENEMY_NAME[k], role:'land '+((ENEMY_INTRO[k]||0)+1)+' · hp '+CONFIG.enemies[k].hp, intro:ENEMY_INTRO[k]||0, rar:'#ff8d7e' }));
-  const cw = (W-34)/2, ch = 156; let y = 134;
-  for (let i=0;i<list.length;i++){
-    const col = i%2, x = 14 + col*(cw+6);
-    if (col===0 && i>0) y += ch+8;
-    const locked = codexTab==='foe' && !(META.s.seen && META.s.seen[list[i].foe]);   // foes stay a mystery until encountered
-    drawCard(x, y, cw, ch, list[i], locked);
-  }
+  // big tabs
+  const tabs=[['build','BUILDINGS'],['def','DEFENDERS'],['foe','FOES']], tw=(W-28)/3-6;
+  tabs.forEach((t,i)=>{ const tx=14+i*((W-28)/3), on=codexTab===t[0];
+    chunkyBtn(tx, 94, tw, 42, on?'#ffce5a':'#3b466a', on?'#dba32c':'#2a3450', on?'#9c6f12':'#1a2138', t[1], 13);
+    hit(tx, 94, tw, 42, ()=>{ if(codexTab!==t[0]){ codexTab=t[0]; codexIdx=0; sfx.place&&sfx.place(); } }); });
+  const list = codexList(); if (codexIdx>=list.length) codexIdx=0;
+  const c = list[codexIdx];
+  const locked = codexTab==='foe' && !(META.s.seen && META.s.seen[c.foe]);
+  if (codexTab==='foe'){ const seen=list.filter(x=>META.s.seen&&META.s.seen[x.foe]).length; chunkyText('Discovered  '+seen+' / '+list.length, W/2, 156, 12, '#9fb0cc', null, '600'); }
+  drawBigCard(24, 168, W-48, H-330, c, locked);
+  // nav — big arrows + swipe (handled in pointerup), with a counter
+  const ny=H-150;
+  chunkyBtn(24, ny, 96, 56, '#5cb0f0', '#3b80d2', '#1d5a8a', '‹ PREV', 16); hit(24, ny, 96, 56, ()=>codexFlip(-1));
+  chunkyBtn(W-120, ny, 96, 56, '#5cb0f0', '#3b80d2', '#1d5a8a', 'NEXT ›', 16); hit(W-120, ny, 96, 56, ()=>codexFlip(1));
+  chunkyText((codexIdx+1)+' / '+list.length, W/2, ny+28, 20, '#fff', '#10131f', '800');
+  chunkyText('swipe the card', W/2, ny+48, 10, '#7f93b8', null, '500');
   drawMenuToast();
 }
 
@@ -3050,6 +3089,9 @@ cv.addEventListener('pointerdown', ev => {
   downPos = p; downSlot = null;
 
   if (mode === 'title'){ if (handleMenuTap(p)) return; mode = 'map'; return; }
+  if (mode === 'codex' && downPos && Math.abs(p.x-downPos.x) > 45 && Math.abs(p.x-downPos.x) > Math.abs(p.y-downPos.y)){
+    codexFlip(p.x < downPos.x ? 1 : -1); return;   // swipe left = next, right = prev
+  }
   if (mode === 'store' || mode === 'badges' || mode === 'heroes' || mode === 'kingdom' || mode === 'gear' || mode === 'codex'){ handleMenuTap(p); return; }
   if (mode === 'over' || mode === 'map' || mode === 'won'){ handleMenuTap(p); return; }
   if (mode === 'perk'){
@@ -4608,8 +4650,18 @@ function drawTitleMenu(){
 }
 </script>
 <script>
-  // register the service worker so the game installs + runs offline
-  if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  // Register the service worker so the WEB build installs + runs offline.
+  // Inside the Capacitor (native) shell the SW only serves stale cached builds —
+  // masking every rebuild — so there we skip registration AND tear down any SW a
+  // prior build left behind, so reinstalls always load fresh from the APK assets.
+  if ('serviceWorker' in navigator) {
+    if (window.Capacitor) {
+      navigator.serviceWorker.getRegistrations()
+        .then(rs => rs.forEach(r => r.unregister())).catch(() => {});
+    } else {
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+    }
+  }
 </script>
 </body>
 </html>
