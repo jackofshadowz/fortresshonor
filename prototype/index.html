@@ -17,8 +17,10 @@
     background-attachment:fixed;
     touch-action:none; -webkit-user-select:none; user-select:none;
   }
-  #wrap { position:fixed; inset:0; height:100dvh; display:flex; align-items:center; justify-content:center; }
-  canvas { display:block; border-radius:14px; box-shadow:0 20px 60px rgba(10,50,80,.45), 0 0 0 1px rgba(255,255,255,.18); }
+  #wrap { position:fixed; inset:0; height:100dvh; }
+  /* full-bleed: the canvas covers the whole viewport; the play area is centered
+     inside it and the surrounding sky is painted by the game, so no dead bands. */
+  canvas { display:block; width:100%; height:100%; }
 </style>
 </head>
 <body>
@@ -38,14 +40,42 @@ const W = 480, H = 800;
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 let SCALE = 1;
+// The game art is authored for a W×H stage. On phones the viewport is taller/
+// narrower, so we center that stage inside a full-viewport canvas and let each
+// screen's background paint the leftover "overscan" bands — turning what used to
+// be dead letterbox margins into continuous sky/scene. VX0,VY0,VXW,VYH are the
+// visible canvas rect in stage (logical) coords; OX,OY center the stage.
+// Crucially we center within the SAFE AREA (between the status bar and the
+// nav/gesture bar) so no gameplay hides under the system bars, while the sky
+// still bleeds full-screen behind them. Adapts to any device via env() insets.
+let OX = 0, OY = 0, VX0 = 0, VY0 = 0, VXW = W, VYH = H;
+
+// Probe element to read the OS safe-area insets (CSS px) — needs viewport-fit=cover.
+const insetProbe = document.createElement('div');
+insetProbe.style.cssText =
+  'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;' +
+  'padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);';
+document.body.appendChild(insetProbe);
+function safeInsets(){
+  const s = getComputedStyle(insetProbe);
+  return { top: parseFloat(s.paddingTop) || 0, right: parseFloat(s.paddingRight) || 0,
+           bottom: parseFloat(s.paddingBottom) || 0, left: parseFloat(s.paddingLeft) || 0 };
+}
 
 function resize(){
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const s = Math.min(window.innerWidth / W, window.innerHeight / H) * 0.985;
+  const cw = window.innerWidth, ch = window.innerHeight;
+  const s = Math.min(cw / W, ch / H);   // fit — never crop gameplay
   SCALE = s;
-  cv.width = W * s * dpr; cv.height = H * s * dpr;
-  cv.style.width = (W * s) + 'px'; cv.style.height = (H * s) + 'px';
-  ctx.setTransform(s * dpr, 0, 0, s * dpr, 0, 0);
+  cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
+  cv.style.width = cw + 'px'; cv.style.height = ch + 'px';
+  // center the stage within the safe area, not the raw viewport
+  const ins = safeInsets();
+  const safeW = cw - ins.left - ins.right, safeH = ch - ins.top - ins.bottom;
+  OX = (ins.left + (safeW - W * s) / 2) / s;
+  OY = (ins.top  + (safeH - H * s) / 2) / s;
+  VX0 = -OX; VY0 = -OY; VXW = cw / s; VYH = ch / s;      // full canvas in stage coords (bg bleeds behind bars)
+  ctx.setTransform(s * dpr, 0, 0, s * dpr, OX * s * dpr, OY * s * dpr);
 }
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', () => setTimeout(resize, 60));
@@ -255,7 +285,7 @@ function choosePerk(p){
   mode = 'build'; banner('WAVE ' + wave, '#ffd95e');
 }
 function drawPerkDraft(){
-  ctx.fillStyle = 'rgba(20,28,46,0.64)'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = 'rgba(20,28,46,0.64)'; ctx.fillRect(VX0,VY0,VXW,VYH);
   chunkyText('CHOOSE A BLESSING', W/2, 152, 30, '#ffd95e', '#5a4a12');
   chunkyText('Wave ' + (wave-1) + ' cleared — pick one', W/2, 184, 13, '#dfe6ff', null, '500');
   perkBtns = [];
@@ -1428,7 +1458,7 @@ function chunkyText(txt,x,y,px,fill,ink,weight,align){
 
 /* ---------- environment ---------- */
 function drawSea(){
-  ctx.fillStyle = '#45b0e5'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = '#45b0e5'; ctx.fillRect(VX0,VY0,VXW,VYH);
   // drifting light caustic loops, like sun on shallow water
   ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.20)';
   for (let i=0;i<10;i++){
@@ -2430,7 +2460,7 @@ function buyShop(it){
   else floaters.push({ x:W/2, y:300, text:'Need '+it.cost+'g', t:0, dur:0.9, size:16, color:'#ff8d7e' });
 }
 function drawShop(){
-  ctx.fillStyle = 'rgba(20,28,46,0.62)'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = 'rgba(20,28,46,0.62)'; ctx.fillRect(VX0,VY0,VXW,VYH);
   chunkyText('QUARTERMASTER', W/2, 150, 26, '#ffd95e', '#5a4a12');
   chunkyText('Spend gold to bolster your defense', W/2, 180, 12, '#dfe6ff', null, '500');
   shopBtns = [];
@@ -2512,19 +2542,26 @@ function drawSellButton(){
     chunkyBtn(bx, by, 108, 32, '#52b3f0', '#2f7fb5', '#1d5a8a', 'CLEAR −10', 14);
     return { x:bx, y:by, w:108, h:32, clear:true };
   }
-  const v = SELL_VALUE[g.tier-1];
+  const v = SELL_VALUE[Math.min(g.tier, SELL_VALUE.length)-1] + (g.tier>5 ? (g.tier-5)*150 : 0);   // clamp + scale past tier 5
   const canUp = g.tier < MAX_TIER;
-  const totalW = canUp ? 200 : 96;
+  const isTower = g.type === 'tower';
+  const bw = 92, gap = 7, nb = 1 + (canUp?1:0) + (isTower?1:0), totalW = nb*bw + (nb-1)*gap;
   const bx = Math.max(8, Math.min(W-totalW-8, cx0-totalW/2));
   const def = TYPES[g.type], lx = Math.max(64, Math.min(W-64, cx0));
   chunkyText(def.name + '  L' + g.tier, lx, by-22, 12, '#fff', '#10131f', '700');
   chunkyText(TYPE_ROLE[g.type], lx, by-8, 9, '#dfe6ff', 'rgba(20,30,50,0.7)', '600');
-  chunkyBtn(bx, by, 96, 32, '#ffce5a', '#dba32c', '#9c6f12', 'SELL +'+v, 13);
-  const out = { x:bx, y:by, w:96, h:32, v };
+  let x = bx;
+  chunkyBtn(x, by, bw, 32, '#ffce5a', '#dba32c', '#9c6f12', 'SELL +'+v, 13);
+  const out = { x, y:by, w:bw, h:32, v }; x += bw + gap;
   if (canUp){
-    const cost = UPG_COST[g.tier-1], ok = gold >= cost;
-    chunkyBtn(bx+104, by, 96, 32, ok?'#7ed05f':'#b0ada6', ok?'#56a83c':'#8d8a83', '#2e6326', 'UP −'+cost, 13);
-    out.up = { x:bx+104, y:by, w:96, h:32, cost };
+    const cost = UPG_COST[Math.min(g.tier, UPG_COST.length)-1], ok = gold >= cost;
+    chunkyBtn(x, by, bw, 32, ok?'#7ed05f':'#b0ada6', ok?'#56a83c':'#8d8a83', '#2e6326', 'UP −'+cost, 13);
+    out.up = { x, y:by, w:bw, h:32, cost }; x += bw + gap;
+  }
+  if (isTower){
+    const el = TOWER_ELEMENTS[g.element||'arrow'];
+    chunkyBtn(x, by, bw, 32, el.col, '#3a4364', '#222a44', el.name+' ▸', 12);
+    out.elem = { x, y:by, w:bw, h:32 };
   }
   return out;
 }
@@ -2720,7 +2757,7 @@ function drawTitle(){
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, '#4a7fd0'); g.addColorStop(0.42, '#8fb4e8');
   g.addColorStop(0.66, '#e9c3de'); g.addColorStop(0.86, '#ffd2a0'); g.addColorStop(1, '#ffb583');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = g; ctx.fillRect(VX0,VY0,VXW,VYH);
   // twinkling stars
   for (let i=0;i<26;i++){
     const x = (i*167.3)%W, y = (i*97.7)%(H*0.42);
@@ -2792,7 +2829,7 @@ function drawTitle(){
 }
 function drawOver(){
   uiHits = [];
-  ctx.fillStyle = 'rgba(25,15,40,0.78)'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = 'rgba(25,15,40,0.78)'; ctx.fillRect(VX0,VY0,VXW,VYH);
   chunkyText('The City Has Fallen', W/2, 244, 40, '#ff5e6e', '#3a1020');
   chunkyText('You held for ' + (wave-1) + ' wave' + (wave-1===1?'':'s'), W/2, 304, 21, '#fff', null, '600');
   chunkyText('Best: wave ' + bestWave + '   •   ' + honorRank(), W/2, 338, 16, '#ffd95e', null, '600');
@@ -2857,7 +2894,7 @@ function drawMap(){
 }
 function drawWon(){
   uiHits = [];
-  ctx.fillStyle='rgba(8,26,44,0.66)'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='rgba(8,26,44,0.66)'; ctx.fillRect(VX0,VY0,VXW,VYH);
   const L=LEVELS[curLevel];
   chunkyText('LEVEL CLEARED!', W/2, 212, 30, '#ffd95e', '#3a2a12');
   chunkyText(L.name, W/2, 254, 19, '#fff', '#23344a', '700');
@@ -2936,7 +2973,7 @@ function drawCodex(){
    ============================================================ */
 function toLogical(ev){
   const r = cv.getBoundingClientRect();
-  return { x: (ev.clientX - r.left) / SCALE, y: (ev.clientY - r.top) / SCALE };
+  return { x: (ev.clientX - r.left) / SCALE - OX, y: (ev.clientY - r.top) / SCALE - OY };
 }
 function inRect(p, r){ return p.x>=r.x && p.x<=r.x+r.w && p.y>=r.y && p.y<=r.y+r.h; }
 function cellAt(p){
@@ -3031,6 +3068,16 @@ cv.addEventListener('pointerdown', ev => {
       }
       sellTarget = null; return;
     }
+    if (sellBtnRect.elem && inRect(p, sellBtnRect.elem)){
+      const g = grid[idx(sellTarget.c, sellTarget.r)];
+      if (g){
+        g.element = ELEMENT_ORDER[(ELEMENT_ORDER.indexOf(g.element||'arrow') + 1) % ELEMENT_ORDER.length];
+        const e = TOWER_ELEMENTS[g.element];
+        floaters.push({ x:cellX(sellTarget.c)+CELL/2, y:cellY(sellTarget.r)-6, text:e.name.toUpperCase(), t:0, dur:0.8, size:13, color:e.col });
+        sfx.place && sfx.place();
+      }
+      return;   // keep the popup open so SELL / UP are still available
+    }
     if (!sellBtnRect.hero && inRect(p, sellBtnRect)){
       const g = grid[idx(sellTarget.c, sellTarget.r)];
       if (g && sellBtnRect.clear){
@@ -3089,15 +3136,7 @@ cv.addEventListener('pointerup', ev => {
       if (cell && placeFromTray(hand[dragUnit.i], idx(cell.c, cell.r))) hand[dragUnit.i] = null;   // placed/merged; else stays in tray
     } else {
       const moved = downPos && Math.hypot(p.x-downPos.x, p.y-downPos.y) > 10;
-      if (!moved){
-        const g = grid[idx(dragUnit.c, dragUnit.r)];
-        if (g && g.type === 'tower'){   // quick tap a Watchtower → cycle its element
-          g.element = ELEMENT_ORDER[(ELEMENT_ORDER.indexOf(g.element||'arrow') + 1) % ELEMENT_ORDER.length];
-          const e = TOWER_ELEMENTS[g.element];
-          floaters.push({ x:cellX(dragUnit.c)+CELL/2, y:cellY(dragUnit.r)-6, text:e.name.toUpperCase(), t:0, dur:0.9, size:14, color:e.col });
-          sfx.place && sfx.place();
-        } else { sellTarget = { c:dragUnit.c, r:dragUnit.r }; }   // others → sell popup
-      }
+      if (!moved){ sellTarget = { c:dragUnit.c, r:dragUnit.r }; }   // quick tap → sell / upgrade / element popup
       else if (cell){ dropBoardUnit(dragUnit.c, dragUnit.r, idx(cell.c, cell.r)); }
     }
     dragUnit = null;
@@ -3114,13 +3153,13 @@ function frame(now){
   last = now; time += dt;
 
   if (!assetsReady()){
-    ctx.fillStyle = '#45b0e5'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = '#45b0e5'; ctx.fillRect(VX0,VY0,VXW,VYH);
     chunkyText('Loading…  ' + imgLoaded + '/' + imgCount, W/2, H/2, 20, '#fff', 'rgba(20,60,90,0.7)');
     requestAnimationFrame(frame);
     return;
   }
 
-  ctx.clearRect(0,0,W,H);
+  ctx.clearRect(VX0,VY0,VXW,VYH);
   ctx.save();
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   if (shake > 0){
@@ -3333,7 +3372,7 @@ function drawSeaReal(){
   const im = I('water');
   if (im.complete && im.naturalWidth){
     for (let x=0;x<W;x+=TD) for (let y=0;y<H;y+=TD) ctx.drawImage(im, x, y, TD, TD);
-  } else { ctx.fillStyle = '#45b0e5'; ctx.fillRect(0,0,W,H); }
+  } else { ctx.fillStyle = '#45b0e5'; ctx.fillRect(VX0,VY0,VXW,VYH); }
   // bobbing rocks in open water
   const rf = Math.floor(time*6)%8;
   spr('rocks', 128, 128, rf, 0, 452, 752, 0.55, false, 0.6);
@@ -4104,11 +4143,11 @@ function drawWallet(x, y){
 function menuBg(){
   const g = ctx.createLinearGradient(0,0,0,H);
   g.addColorStop(0,'#3f5aa0'); g.addColorStop(0.45,'#6878bc'); g.addColorStop(0.78,'#a896d4'); g.addColorStop(1,'#e6c6d4');
-  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = g; ctx.fillRect(VX0,VY0,VXW,VYH);
   // soft sun glow up top
   const rg = ctx.createRadialGradient(W/2,-30,10,W/2,-30,W*0.95);
   rg.addColorStop(0,'rgba(255,250,222,0.28)'); rg.addColorStop(1,'rgba(255,250,222,0)');
-  ctx.fillStyle = rg; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = rg; ctx.fillRect(VX0,VY0,VXW,VYH);
   // twinkling stars in the upper sky
   for (let i=0;i<16;i++){
     const x=(i*167.3)%W, y=(i*97.7)%(H*0.4);
