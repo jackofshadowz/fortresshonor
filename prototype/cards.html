@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fortress of Honor — Card Design Options</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Fredoka:wght@500;600;700&family=Orbitron:wght@600;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#1a2030;color:#e8eefc;font-family:'Fredoka',system-ui,sans-serif;padding:28px 18px 80px;}
+  h1{font-family:'Cinzel',serif;font-size:30px;text-align:center;color:#ffd95e;letter-spacing:1px}
+  .sub{text-align:center;color:#9fb0cc;margin:6px 0 26px;font-size:14px}
+  .grid{display:flex;flex-wrap:wrap;gap:26px;justify-content:center;align-items:flex-start}
+  .item{width:250px}
+  .label{text-align:center;margin-top:10px;font-weight:700;font-size:13px;color:#ffd95e}
+  .label small{display:block;color:#8fa0bc;font-weight:500;font-size:11px;margin-top:2px}
+  .card{width:250px;height:350px;border-radius:16px;position:relative;overflow:hidden;user-select:none}
+  .port{width:100%;height:100%;display:block}
+  /* shared art canvas styling */
+  canvas.art{image-rendering:pixelated}
+
+  /* ---------- 1) ARCANE SCROLL (parchment, ornate) ---------- */
+  .s-scroll{background:linear-gradient(160deg,#f3e2bd,#e6cf9e);border:6px solid #b58a4a;box-shadow:inset 0 0 0 2px #7a5a2c, 0 8px 24px rgba(0,0,0,.5)}
+  .s-scroll .top{height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;font-family:'Cinzel',serif}
+  .s-scroll .nm{color:#4a2f12;font-weight:800;font-size:18px}
+  .s-scroll .cost{background:#b58a4a;color:#fff;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;border:2px solid #7a5a2c}
+  .s-scroll .artbox{height:150px;margin:0 12px;background:radial-gradient(circle at 50% 40%,#cfe0b8,#9bbf8a);border:3px solid #7a5a2c;border-radius:8px;display:flex;align-items:center;justify-content:center}
+  .s-scroll .type{font-family:'Cinzel',serif;color:#5a3a18;font-size:12px;text-align:center;margin:8px 0 2px;font-weight:600}
+  .s-scroll .box{margin:4px 12px;background:rgba(255,255,255,.45);border:2px solid #9a743c;border-radius:8px;padding:8px 10px;font-size:12.5px;color:#3a2a14;min-height:60px}
+  .s-scroll .pt{position:absolute;right:14px;bottom:10px;font-family:'Cinzel',serif;font-weight:800;font-size:22px;color:#4a2f12;background:#e6cf9e;border:2px solid #7a5a2c;border-radius:8px;padding:1px 9px}
+
+  /* ---------- 2) HEARTHSTONE GEM (rounded, circular portrait, corner gems) ---------- */
+  .s-gem{background:radial-gradient(circle at 50% 30%,#3a4a72,#1c2440);border:5px solid #c9a24a;box-shadow:0 0 18px rgba(201,162,74,.5),0 8px 24px rgba(0,0,0,.5)}
+  .s-gem .ring{position:absolute;top:24px;left:50%;transform:translateX(-50%);width:150px;height:150px;border-radius:50%;overflow:hidden;border:5px solid #c9a24a;background:#101626;box-shadow:0 0 16px rgba(0,0,0,.6)}
+  .s-gem .nmplate{position:absolute;top:176px;left:50%;transform:translateX(-50%);background:#0d1322;border:2px solid #c9a24a;border-radius:20px;padding:5px 22px;font-weight:800;font-size:17px;color:#ffe6a0;white-space:nowrap}
+  .s-gem .gemc{position:absolute;width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;color:#fff;border:3px solid rgba(255,255,255,.7)}
+  .s-gem .atk{left:10px;bottom:12px;background:#ff7b3f}
+  .s-gem .hp{right:10px;bottom:12px;background:#6ad05f}
+  .s-gem .txt{position:absolute;left:14px;right:14px;bottom:66px;text-align:center;font-size:12px;color:#cfe0f5}
+
+  /* ---------- 3) CLASSIC TCG (rect frame, window, rules box, P/T) ---------- */
+  .s-tcg{background:#23304e;border:3px solid #0d1322;padding:9px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+  .s-tcg .hd{background:linear-gradient(#37496e,#28385a);border:2px solid #0d1322;border-radius:7px;display:flex;justify-content:space-between;align-items:center;padding:5px 10px}
+  .s-tcg .hd b{font-size:15px}
+  .s-tcg .win{height:140px;margin:7px 0;background:#101626;border:2px solid #0d1322;border-radius:6px;display:flex;align-items:center;justify-content:center}
+  .s-tcg .ty{background:#37496e;border:2px solid #0d1322;border-radius:6px;font-size:11px;padding:3px 9px;color:#cfe0f5}
+  .s-tcg .rules{margin-top:7px;background:#1a2540;border:2px solid #0d1322;border-radius:6px;padding:8px;font-size:12px;min-height:72px;color:#dbe6ff}
+  .s-tcg .pt{position:absolute;right:14px;bottom:12px;background:#37496e;border:2px solid #0d1322;border-radius:7px;padding:2px 11px;font-weight:800;font-size:18px}
+
+  /* ---------- 4) NEON HOLO (dark, neon foil) ---------- */
+  .s-neon{background:#0a0e1c;border:2px solid #36f;box-shadow:0 0 22px rgba(80,150,255,.55),inset 0 0 30px rgba(80,150,255,.15)}
+  .s-neon .bar{position:absolute;top:0;left:0;right:0;height:6px;background:linear-gradient(90deg,#36f,#a3f,#3ff,#36f)}
+  .s-neon .nm{font-family:'Orbitron',sans-serif;font-weight:800;font-size:16px;color:#8fd0ff;text-align:center;margin-top:16px;letter-spacing:1px;text-shadow:0 0 8px #36f}
+  .s-neon .artbox{height:150px;margin:10px 16px;border:1px solid #36f;border-radius:8px;background:radial-gradient(circle,#13234a,#0a0e1c);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 20px rgba(80,150,255,.3)}
+  .s-neon .stats{display:flex;justify-content:space-around;margin:8px 12px;font-family:'Orbitron',sans-serif}
+  .s-neon .stat{font-size:13px;color:#8fd0ff}
+  .s-neon .stat b{display:block;font-size:20px;color:#fff;text-shadow:0 0 8px #3ff}
+  .s-neon .txt{margin:4px 16px;font-size:11.5px;color:#9fb6e8;text-align:center}
+
+  /* ---------- 5) MINIMAL FLAT (clean, chips) ---------- */
+  .s-flat{background:#fff;color:#1a2030;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+  .s-flat .top{height:8px}
+  .s-flat .artbox{height:160px;display:flex;align-items:center;justify-content:center;background:#eef2f8}
+  .s-flat .body{padding:14px}
+  .s-flat .nm{font-weight:700;font-size:20px}
+  .s-flat .ty{color:#7a8aa6;font-size:12px;margin:2px 0 10px;font-weight:600}
+  .s-flat .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .s-flat .chip{background:#eef2f8;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700;color:#3a4a6a}
+  .s-flat .txt{margin-top:10px;font-size:12px;color:#6a7a96;line-height:1.4}
+
+  /* ---------- 6) HERALDIC CREST (banner/shield) ---------- */
+  .s-crest{background:linear-gradient(#5a2c2c,#3a1818);border:4px solid #d9b44a}
+  .s-crest .banner{position:absolute;top:0;left:50%;transform:translateX(-50%);background:#d9b44a;color:#3a1818;font-family:'Cinzel',serif;font-weight:800;padding:8px 20px 10px;border-radius:0 0 12px 12px;font-size:16px}
+  .s-crest .shield{width:170px;height:185px;margin:54px auto 0;background:#f3e2bd;border:4px solid #d9b44a;border-radius:14px 14px 50% 50%/14px 14px 36% 36%;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .s-crest .ty{text-align:center;color:#f3d99a;font-family:'Cinzel',serif;font-size:12px;margin-top:8px}
+  .s-crest .stats{display:flex;justify-content:center;gap:18px;margin-top:6px}
+  .s-crest .stats span{color:#fff;font-weight:800;font-size:15px;background:rgba(0,0,0,.25);border:1px solid #d9b44a;border-radius:8px;padding:2px 10px}
+  .s-crest .txt{text-align:center;color:#f0d9b0;font-size:11px;margin:8px 14px 0}
+</style>
+</head>
+<body>
+<h1>⚔ Fortress of Honor — Card Design Directions</h1>
+<p class="sub">Six visual styles, each using the real game art. Tell me which direction (or mix) you like, and I'll build the in-game Codex to match.</p>
+<div class="grid" id="grid"></div>
+
+<script>
+const A = 'assets/';
+// art spec: {src, fw, fh, frame} for sheets, or just {src} for whole images
+const ART = {
+  tower:     { src:A+'tower_b.png' },
+  archery:   { src:A+'archery_b.png' },
+  monastery: { src:A+'monastery_p.png' },
+  lancer:    { src:A+'ally_lancer.png', fw:320, fh:320, frame:1 },
+  skull:     { src:A+'e_skull.png',     fw:192, fh:192, frame:2 },
+  minotaur:  { src:A+'e_minotaur.png',  fw:320, fh:320, frame:1 },
+  troll:     { src:A+'e_troll.png',     fw:384, fh:384, frame:3 },
+};
+function portrait(spec, size){
+  const c = document.createElement('canvas'); c.width=size; c.height=size; c.className='art';
+  const g = c.getContext('2d'); g.imageSmoothingEnabled=false;
+  const im = new Image();
+  im.onload = ()=>{
+    if (spec.fw){ // sheet frame, fit + center
+      const s = size/spec.fw*0.92, dw=spec.fw*s, dh=spec.fh*s;
+      g.drawImage(im, (spec.frame||0)*spec.fw, 0, spec.fw, spec.fh, (size-dw)/2, (size-dh)/2+size*0.04, dw, dh);
+    } else {
+      const sc = Math.min(size*0.8/im.width, size*0.8/im.height), dw=im.width*sc, dh=im.height*sc;
+      g.drawImage(im, (size-dw)/2, (size-dh)/2, dw, dh);
+    }
+  };
+  im.src = spec.src;
+  return c;
+}
+function el(tag, cls, html){ const e=document.createElement(tag); if(cls)e.className=cls; if(html!=null)e.innerHTML=html; return e; }
+
+const CARDS = [
+ { style:'scroll', label:'1 · Arcane Scroll', note:'parchment & ornate, fantasy-classic', art:'tower',
+   build:(c,a)=>{ c.append(mk('div','top',`<span class="nm">Watchtower</span><span class="cost">3</span>`));
+     const ab=mk('div','artbox'); ab.append(portrait(a,140)); c.append(ab);
+     c.append(mk('div','type','Building — Defense')); c.append(mk('div','box','Fires bolts at the foe. Tap to attune: Arrow, Fire, or Freeze.'));
+     c.append(mk('div','pt','6')); } },
+
+ { style:'gem', label:'2 · Hearthstone Gem', note:'rounded, circular portrait, corner gems', art:'skull',
+   build:(c,a)=>{ const r=mk('div','ring'); r.append(portrait(a,150)); c.append(r);
+     c.append(mk('div','nmplate','Skeleton')); c.append(mk('div','txt','Undead. Rises in the second land. Cheap, relentless.'));
+     c.append(mk('div','gemc atk','7')); c.append(mk('div','gemc hp','26')); } },
+
+ { style:'tcg', label:'3 · Classic TCG', note:'framed window, rules box, power/health', art:'lancer',
+   build:(c,a)=>{ c.append(mk('div','hd','<b>Lancer</b><span>⚔</span>'));
+     const w=mk('div','win'); w.append(portrait(a,140)); c.append(w);
+     c.append(mk('div','ty','Defender — Melee · Reach')); c.append(mk('div','rules','Sorties through the gate. Strikes the front rank with a long spear. Levels up individually in your War Party.'));
+     c.append(mk('div','pt','8')); } },
+
+ { style:'neon', label:'4 · Neon Holo', note:'dark, glowing foil — modern/premium', art:'minotaur',
+   build:(c,a)=>{ c.append(mk('div','bar')); c.append(mk('div','nm','MINOTAUR'));
+     const ab=mk('div','artbox'); ab.append(portrait(a,150)); c.append(ab);
+     c.append(mk('div','stats','<div class="stat">PWR<b>24</b></div><div class="stat">HP<b>130</b></div><div class="stat">SLOW<b>R</b></div>'));
+     c.append(mk('div','txt','A heavy that shrugs off frost. Charges the wall.')); } },
+
+ { style:'flat', label:'5 · Minimal Flat', note:'clean, modern, stat chips', art:'monastery',
+   build:(c,a)=>{ c.append(mk('div','top','')); c.firstChild.style.background='#7fc4ff';
+     const ab=mk('div','artbox'); ab.append(portrait(a,150)); c.append(ab);
+     const b=mk('div','body'); b.append(mk('div','nm','Monastery')); b.append(mk('div','ty','Building · Support'));
+     b.append(mk('div','chips','<span class="chip">Frost shots</span><span class="chip">Trains Monks</span>'));
+     b.append(mk('div','txt','Casts slowing magic and ordains monks who heal allies and mend the wall.')); c.append(b); } },
+
+ { style:'crest', label:'6 · Heraldic Crest', note:'shield/banner, medieval pageantry', art:'troll',
+   build:(c,a)=>{ c.append(mk('div','banner','Troll'));
+     const sh=mk('div','shield'); sh.append(portrait(a,160)); c.append(sh);
+     c.append(mk('div','ty','BOSS — DEEP LANDS')); c.append(mk('div','stats','<span>PWR 36</span><span>HP 320</span>'));
+     c.append(mk('div','txt','A mountain of muscle. Windup, then a devastating club.')); } },
+];
+function mk(tag,cls,html){ return el(tag,cls,html); }
+
+const grid = document.getElementById('grid');
+for (const cd of CARDS){
+  const item = el('div','item');
+  const card = el('div','card s-'+cd.style);
+  cd.build(card, ART[cd.art]);
+  item.append(card);
+  item.append(el('div','label', cd.label + '<small>'+cd.note+'</small>'));
+  grid.append(item);
+}
+</script>
+</body>
+</html>
