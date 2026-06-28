@@ -302,7 +302,7 @@ const LEVEL_POS = [[0.22,0.82],[0.40,0.70],[0.30,0.54],[0.55,0.48],[0.70,0.62],[
 let curLevel = 0;              // which level is being played
 let levelWon = false;         // has this run already cleared the level's wave goal?
 let wonStars = 0;             // stars earned on the level just cleared
-let levelMapBtn = null, wonBtns = null, mapNodeRects = null;
+let levelMapBtn = null, wonBtns = null, mapNodeRects = null, buyGoldBtn = null;
 let guardUpBtn = null;         // in-build "Train Archers" prompt on the wall
 let repairWallBtn = null, rebuildBtn = null;   // pay-to-repair prompts (no free rebuild)
 // per-wave chaos: each round may roll a modifier so leveling is less predictable
@@ -437,9 +437,7 @@ function reset(){
   wallMax = CONFIG.economy.wallBase + (META.s.mods.gate ? 25 : 0) + (META.s.mods.bulwark ? 40 : 0); wallHP = wallMax;
   runKills = 0;
   enemies = []; projectiles = []; eprojs = []; particles = []; floaters = []; allies = [];
-  { const gateX = (FIELD_L+FIELD_R)/2; guards = [
-      { x: gateX-78, y: WALL_Y-3, cd:0, slashT:0, face:1, mv:0 },
-      { x: gateX+78, y: WALL_Y-3, cd:0, slashT:0, face:-1, mv:0 } ]; }
+  guards = [];   // no permanent garrison — the wall is manned by archers YOU draft (Archery buildings)
   villagers = [makeVillager(), makeVillager(), makeVillager(), makeVillager(), makePrincess()];
   critters = [makeCritter('chicken'), makeCritter('chicken'), makeCritter('pig')];
   hero = { x:(FIELD_L+FIELD_R)/2, y:GY+26, lvl:(META.s.mods.squire ? 2 : 1), cd:0, slashT:0, sortie:false, down:false };
@@ -1212,10 +1210,13 @@ function updateAllies(dt){
     a.t += dt; if (a.cd > 0) a.cd -= dt;
     if (a.atkT > 0) a.atkT -= dt; if (a.healAnim > 0) a.healAnim -= dt; if (a.shootAnim > 0) a.shootAnim -= dt;
     if (a.kind === 'archer'){
-      // ranged defender: hold in ranks behind the wall and loose arrows at any foe in range (over the wall too)
-      const sx = gateX - 48 + (i%4)*30, sy = WALL_Y + 30 + Math.floor(i/4)*22;
-      if (Math.hypot(sx-a.x, sy-a.y) > 4) moveViaGate(a, sx, sy, 46, dt); else a.moving = false;
-      let best=null, bd=1e9; for (const e of enemies){ if (e.hp<=0) continue; const d=Math.hypot(e.x-a.x, e.y-a.y); if (d<180 && d<bd){ bd=d; best=e; } }
+      // archers MAN THE WALL: climb onto the rampart, spread along it, and loose arrows over it
+      const slots = 6, wlx = FIELD_L+44, span = (FIELD_R-FIELD_L-88);
+      let sx = wlx + ((i % slots) + 0.5) * (span/slots), sy = WALL_Y - 5;
+      if (breached && Math.abs(sx - gateX) < 56) sx += (sx < gateX ? -56 : 56);   // don't stand in the breach gap
+      const dx=sx-a.x, dy=sy-a.y, dd=Math.hypot(dx,dy);
+      if (dd > 3){ a.x += dx/dd*52*dt; a.y += dy/dd*52*dt; a.moving = true; if (Math.abs(dx)>1) a.face = dx<0?-1:1; } else a.moving = false;
+      let best=null, bd=1e9; for (const e of enemies){ if (e.hp<=0) continue; const d=Math.hypot(e.x-a.x, e.y-a.y); if (d<200 && d<bd){ bd=d; best=e; } }
       if (best){ a.face = best.x < a.x ? -1 : 1; if (a.cd<=0){ a.cd=1.2; a.shootAnim=0.5; projectiles.push({ x:a.x, y:a.y-14, tgt:best, tx:best.x, ty:best.y, dmg:a.dmg*1.1, kind:'arrow', spd:480, splash:0, slow:0 }); if (Math.random()<0.4 && sfx.shoot) sfx.shoot(); } }
       for (const e of enemies){ if (e.hp>0 && Math.hypot(e.x-a.x, e.y-a.y) < 20){ a.hp -= e.dps*dt; break; } }   // can be cut down if the enemy reaches them
       a.x = Math.max(FIELD_L+10, Math.min(FIELD_R-10, a.x));
@@ -1235,7 +1236,7 @@ function updateAllies(dt){
       // muster: queue in loose ranks just inside the gate, waiting for the order
       const sx = gateX - 48 + (i%4)*32, sy = WALL_Y + 36 + Math.floor(i/4)*22;
       if (Math.hypot(sx-a.x, sy-a.y) > 3){ moveViaGate(a, sx, sy, 50, dt); } else { a.moving=false; a.face=1; }
-      // monks tend the wounded — heal nearby allies and the champion
+      // monks are SUPPORT: heal wounded allies + the champion, and MEND THE WALL with magic
       if (a.kind === 'monk'){
         a.healT = (a.healT||0) - dt;
         if (a.healT <= 0){
@@ -1243,6 +1244,7 @@ function updateAllies(dt){
           let healed=false;
           for (const o of allies) if (o!==a && o.hp < o.maxhp && Math.hypot(o.x-a.x,o.y-a.y) < 80){ o.hp = Math.min(o.maxhp, o.hp + 6 + a.dmg*0.4); puff(o.x, o.y-8, '#8fe87a'); healed=true; }
           if (hero && !hero.down && hero.hp < hero.maxhp && Math.hypot(hero.x-a.x, hero.y-a.y) < 90){ hero.hp = Math.min(hero.maxhp, hero.hp + 5); puff(hero.x, hero.y-10, '#8fe87a'); healed=true; }
+          if (!breached && wallHP < wallMax){ wallHP = Math.min(wallMax, wallHP + 7 + a.dmg*0.6); puff((FIELD_L+FIELD_R)/2 + (Math.random()-0.5)*120, WALL_Y, '#8fe87a'); healed=true; }
           if (healed) a.healAnim = 1.0;
         }
       }
@@ -1523,16 +1525,7 @@ function drawWall(){
       if (act){ ctx.save(); ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.lineWidth=3; ctx.lineCap='round'; ctx.beginPath(); ctx.arc(gd.x+(flip?-11:11), gd.y-7, 13, flip?Math.PI*0.55:Math.PI*0.35, flip?Math.PI*1.15:Math.PI*0.95); ctx.stroke(); ctx.restore(); }
     }
   }
-  // extra archers pacing the walkway as ambiance — only once the upgrade is owned
-  if (archerUp) for (let k2=0;k2<2;k2++){
-    const ph = time*0.22 + k2*2.4;
-    const seg = k2===0 ? [wl+44, 140] : [wr-190, 140];
-    const ax = seg[0] + (Math.sin(ph)*0.5+0.5)*seg[1];
-    const goingRight = Math.cos(ph) > 0;
-    // walk along the rampart (row 1); only raise the bow to loose an occasional shot (row 6)
-    const shooting = mode==='fight' && Math.sin(time*1.8 + k2*2.7) > 0.74;
-    spr('archer_b', 192, 192, Math.floor(time*8 + k2*3)%6, shooting ? 6 : 1, ax, WALL_Y+1, 0.46, !goingRight, 0.82);
-  }
+  // (the wall is manned by the archers you draft — see updateAllies — not a permanent garrison)
   // damage cracks scale with HP (front face)
   const dmg = 1 - wallHP/wallMax;
   if (dmg > 0.05){
@@ -2254,6 +2247,13 @@ function drawHUD(){
   pillBg(126, 12, 102, 34);
   coinIcon(145, 29, 11);
   chunkyText(Math.floor(gold), 162, 30, 16, '#ffd95e', null, '600', 'left');
+  // quick exchange: spend a gem for gold when you're in a pinch (build phase)
+  if (mode === 'build'){
+    const bx=126, by=50, bw=102, bh=26, ok = META.s.gems >= 1;
+    orr(bx, by, bw, bh, 9, ok ? '#34406040' : '#2a304840', 'rgba(255,255,255,0.3)', 2);
+    gemIcon(bx+15, by+13, 7); chunkyText('→ +80g', bx+bw-9, by+14, 12, ok?'#ffd95e':'#8a8a94', null, '700', 'right');
+    buyGoldBtn = { x:bx, y:by, w:bw, h:bh };
+  } else buyGoldBtn = null;
   // wall pill with hp bar
   pillBg(W-222, 12, 172, 34);
   shieldIcon(W-202, 29, 1.4);
@@ -2788,6 +2788,12 @@ cv.addEventListener('pointerdown', ev => {
   }
   if (mode !== 'build') return;
 
+  // spend a gem for emergency gold (revive / repair / upgrade when you're in a pinch)
+  if (buyGoldBtn && inRect(p, buyGoldBtn)){
+    if (spendGems(1)){ gold += 80; floaters.push({ x:180, y:70, text:'+80g', t:0, dur:0.9, size:14, color:'#ffd95e' }); sfx.merge && sfx.merge(); }
+    else toast('No gems — earn them by clearing levels');
+    return;
+  }
   // tap the wall prompt to train the guards into archers
   if (guardUpBtn && inRect(p, guardUpBtn)){
     if (spendGems(200)){ META.s.mods.wallarchers = true; META.save(); banner('Archers trained!', '#7ed05f'); sfx.fanfare(); }
