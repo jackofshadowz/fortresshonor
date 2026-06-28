@@ -2839,8 +2839,10 @@ function drawMap(){
   const moving = !!mapWalk, f = moving ? Math.floor(time*9)%6 : Math.floor(time*4)%6, row = moving ? 1 : 0;
   spr(heroSprite(), 192, 192, f, row, 0, 30, 0.62, mapWalk && mapNodeXY(mapWalk.to).x < mapNodeXY(mapWalk.from).x, 0.78);
   ctx.restore();
-  chunkyBtn(W/2-80, 724, 160, 44, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BACK', 18);
-  hit(W/2-80, 724, 160, 44, ()=>{ mode='title'; });
+  chunkyBtn(14, 724, 150, 44, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BACK', 17);
+  hit(14, 724, 150, 44, ()=>{ mode='title'; });
+  chunkyBtn(W-164, 724, 150, 44, '#7fc4ff', '#3b80d2', '#234a7e', 'CODEX', 17);
+  hit(W-164, 724, 150, 44, ()=>{ mode='codex'; });
 }
 function drawWon(){
   uiHits = [];
@@ -2860,6 +2862,62 @@ function drawWon(){
   }
   chunkyBtn(W/2-150, y, 300, 46, '#5cb0f0', '#3b80d2', '#1d5a8a', 'WORLD MAP', 18);
   hit(W/2-150, y, 300, 46, ()=>{ saveLevelCity(); mode='map'; });
+}
+/* ---------- CODEX: an MTG-style card for every building, defender and foe ---------- */
+let codexTab = 'build';
+const CARDS_BUILD = [
+  { name:'Watchtower',     role:'shoots foes',       img:'tower_b',     s:0.5,  rar:'#cdd9e8', flav:'Tap to set Arrow / Fire / Freeze.' },
+  { name:'Archery Range',  role:'drafts archers',    img:'archery_b',   s:0.5,  rar:'#7ed05f', flav:'Archers climb the wall to shoot.' },
+  { name:'Barracks',       role:'musters lancers',   img:'barracks_r',  s:0.5,  rar:'#ff9d3f', flav:'Melee that sorties through the gate.' },
+  { name:'Monastery',      role:'magic + monks',     img:'monastery_p', s:0.46, rar:'#7fc4ff', flav:'Frost shots; ordains healer-monks.' },
+  { name:'Gold Mine',      role:'makes gold',        img:'mine',        s:0.6,  rar:'#ffd95e', flav:'Funds the war, build and battle.' },
+];
+const CARDS_DEF = [
+  { name:'Soldier',  role:'melee · champion',  spr:'__hero', fw:192, fn:6, s:0.56, rar:'#ffd95e', flav:'Your hero — grows each upgrade.' },
+  { name:'Lancer',   role:'melee · reach',     spr:'ally_lancer', fw:320, fn:6, s:0.5,  ay:0.58, rar:'#7fc4ff', flav:'Sorties out to skewer the foe.' },
+  { name:'Monk',     role:'support · heal',    spr:'ally_monk',   fw:192, fn:4, s:0.55, ay:0.66, rar:'#c9a2e8', flav:'Heals, mends the wall, swings a mace.' },
+  { name:'Archer',   role:'ranged · wall',     spr:'ally_archer', fw:192, fn:4, s:0.55, ay:0.66, rar:'#7ed05f', flav:'Mans the rampart, looses arrows.' },
+];
+function drawCodexArt(c, ax, ay){
+  if (c.img){ img(c.img, ax, ay+14, c.s); return; }
+  if (c.spr){ const nm = c.spr==='__hero' ? heroSprite() : c.spr; spr(nm, c.fw, c.fw, Math.floor(time*6)%c.fn, c.spr==='__hero'?0:0, ax, ay+16, c.s, false, c.ay||0.76); return; }
+  if (c.foe){
+    const cfg = CONFIG.enemies[c.foe]; if (!cfg) return;
+    ctx.save(); ctx.translate(ax, ay+4);
+    try { (ENEMY_DRAW[c.foe]||function(){})(cfg.r, 0, { x:ax, y:ay, r:cfg.r, wob:2, face:1, atk:false, hp:1, maxhp:1, kind:c.foe, buffs:{}, special:false }); } catch(e){}
+    ctx.restore();
+  }
+}
+function drawCard(x, y, w, h, c, locked){
+  const rar = locked ? '#5a6178' : (c.rar || '#9fb3c8');
+  ctx.save(); ctx.shadowColor = rar; ctx.shadowBlur = locked?0:6;
+  gradPanel(x, y, w, h, 12, locked?'rgba(30,34,52,0.95)':'rgba(42,52,86,0.96)', 'rgba(20,26,44,0.97)', rar, 2.5);
+  ctx.restore();
+  const ax = x+w/2, ay = y+50;
+  ocirc(ax, ay, 30, 'rgba(12,18,32,0.55)', rar, 2);
+  ctx.save(); ctx.beginPath(); ctx.arc(ax, ay, 28, 0, 7); ctx.clip();
+  if (locked){ chunkyText('?', ax, ay+8, 28, '#7a8398', null, '800'); } else drawCodexArt(c, ax, ay);
+  ctx.restore();
+  chunkyText(locked ? '???' : c.name, x+w/2, y+92, 13, '#fff', '#10131f', '700');
+  chunkyText(locked ? ('Reach land ' + ((c.intro||0)+1)) : (c.role||''), x+w/2, y+108, 9, locked?'#8a93a8':'#cfe0f5', null, '600');
+  if (!locked && c.flav) chunkyText(c.flav, x+w/2, y+h-12, 8.5, '#aab7d0', null, '500');
+}
+function drawCodex(){
+  uiHits = []; menuBg(); menuHeader('CODEX');
+  const tabs = [['build','Buildings'],['def','Defenders'],['foe','Foes']];
+  tabs.forEach((t,i)=>{ const tw=(W-28)/3-4, tx=14+i*((W-28)/3); chunkyBtn(tx, 92, tw, 30, codexTab===t[0]?'#ffce5a':'#566089', codexTab===t[0]?'#dba32c':'#3a4364', codexTab===t[0]?'#9c6f12':'#222a44', t[1], 13); hit(tx, 92, tw, 30, ()=>{ codexTab=t[0]; }); });
+  let list;
+  if (codexTab==='build') list = CARDS_BUILD;
+  else if (codexTab==='def') list = CARDS_DEF;
+  else list = Object.keys(ENEMY_NAME).map(k => ({ foe:k, name:ENEMY_NAME[k], role:'land '+((ENEMY_INTRO[k]||0)+1)+' · hp '+CONFIG.enemies[k].hp, intro:ENEMY_INTRO[k]||0, rar:'#ff8d7e' }));
+  const cw = (W-34)/2, ch = 138; let y = 134;
+  for (let i=0;i<list.length;i++){
+    const col = i%2, x = 14 + col*(cw+6);
+    if (col===0 && i>0) y += ch+8;
+    const locked = codexTab==='foe' && (list[i].intro||0) > (META.s.mapPos||0) + 1;   // foes a land+ ahead stay a mystery
+    drawCard(x, y, cw, ch, list[i], locked);
+  }
+  drawMenuToast();
 }
 
 /* ============================================================
@@ -2892,7 +2950,7 @@ cv.addEventListener('pointerdown', ev => {
   downPos = p; downSlot = null;
 
   if (mode === 'title'){ if (handleMenuTap(p)) return; mode = 'map'; return; }
-  if (mode === 'store' || mode === 'badges' || mode === 'heroes' || mode === 'kingdom' || mode === 'gear'){ handleMenuTap(p); return; }
+  if (mode === 'store' || mode === 'badges' || mode === 'heroes' || mode === 'kingdom' || mode === 'gear' || mode === 'codex'){ handleMenuTap(p); return; }
   if (mode === 'over' || mode === 'map' || mode === 'won'){ handleMenuTap(p); return; }
   if (mode === 'perk'){
     for (const b of perkBtns){ if (inRect(p, b)){ choosePerk(b.perk); return; } }
@@ -3065,8 +3123,8 @@ function frame(now){
     requestAnimationFrame(frame);
     return;
   }
-  if (mode === 'store' || mode === 'badges' || mode === 'heroes' || mode === 'kingdom' || mode === 'gear'){
-    (mode === 'store' ? drawStore : mode === 'badges' ? drawBadges : mode === 'heroes' ? drawHeroes : mode === 'gear' ? drawGear : drawKingdom)();
+  if (mode === 'store' || mode === 'badges' || mode === 'heroes' || mode === 'kingdom' || mode === 'gear' || mode === 'codex'){
+    (mode === 'store' ? drawStore : mode === 'badges' ? drawBadges : mode === 'heroes' ? drawHeroes : mode === 'gear' ? drawGear : mode === 'codex' ? drawCodex : drawKingdom)();
     ctx.restore();
     requestAnimationFrame(frame);
     return;
