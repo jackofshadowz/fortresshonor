@@ -109,6 +109,13 @@ const TYPES = {
             gold:true },                                                             // generates gold each wave
 };
 const TYPE_KEYS = Object.keys(TYPES);
+// the Watchtower can be set to an element (tap it in build to cycle) — multipliers over its base stats
+const TOWER_ELEMENTS = {
+  arrow:  { name:'Arrow',  dmg:1.0, rate:1.0, splash:0,  slow:0,   proj:'arrow', burn:0,   col:'#cdd9e8' },
+  fire:   { name:'Fire',   dmg:1.1, rate:0.7, splash:44, slow:0,   proj:'ball',  burn:1.6, col:'#ff8a3c' },
+  freeze: { name:'Freeze', dmg:0.7, rate:1.0, splash:0,  slow:1.5, proj:'bolt',  burn:0,   col:'#7ad0ff' },
+};
+const ELEMENT_ORDER = ['arrow','fire','freeze'];
 
 /* ---------- CONFIG: the balance surface ----------
    Adapted from Fortress Merge's remote-config model (see docs/fortress-merge/).
@@ -357,14 +364,14 @@ function unitCount(){   // total army = units on the board + units waiting in th
 }
 function traySlotRect(i){ return { x:14 + i*72, y:TRAY_Y+8, w:66, h:80 }; }
 function isUnit(g){ return g && g.tier !== undefined && !g.obstacle && !g.rubble; }
-function newUnit(){ return { type: TYPE_KEYS[Math.floor(Math.random()*TYPE_KEYS.length)], tier:1, rarity: Math.random()<CONFIG.rarity.spawnRare?1:0 }; }
+function newUnit(){ const type = TYPE_KEYS[Math.floor(Math.random()*TYPE_KEYS.length)]; const u = { type, tier:1, rarity: Math.random()<CONFIG.rarity.spawnRare?1:0 }; if (type==='tower') u.element='arrow'; return u; }
 function emptyTraySlot(){ for (let i=0;i<TRAY_N;i++) if (!hand[i]) return i; return -1; }
 function fillTray(){   // offer up to 4 buildings each round (no continuous drip)
   for (let i=0;i<TRAY_N;i++) if (!hand[i]) hand[i] = newUnit();
 }
 function mergeInto(ti, t, srcRarity, srcTier){   // feed a same-type building in → next tier (forgiving: uses the higher tier +1)
   const tc = ti%COLS, tr = (ti/COLS)|0, nt = Math.max(t.tier, srcTier || t.tier) + 1;
-  grid[ti] = { type:t.type, tier:nt, pop:0.001, rarity: Math.max(srcRarity||0, t.rarity||0) };
+  grid[ti] = { type:t.type, tier:nt, pop:0.001, rarity: Math.max(srcRarity||0, t.rarity||0), element:t.element };
   const rx = cellX(tc)+CELL/2, ry = cellY(tr)+CELL/2;
   // happy explosion — a burst of gold + white sparks, scaling with the new tier
   const burst = 18 + nt*4;
@@ -378,7 +385,7 @@ function mergeInto(ti, t, srcRarity, srcTier){   // feed a same-type building in
 }
 function placeFromTray(unit, ti){   // drop a tray unit onto board cell ti; place on empty or merge if identical
   const t = grid[ti];
-  if (!t){ grid[ti] = { type:unit.type, tier:unit.tier, pop:0.001, rarity:unit.rarity||0 }; sfx.place && sfx.place(); return true; }
+  if (!t){ grid[ti] = { type:unit.type, tier:unit.tier, pop:0.001, rarity:unit.rarity||0, element:unit.element }; sfx.place && sfx.place(); return true; }
   if (isUnit(t) && t.type===unit.type){ mergeInto(ti, t, unit.rarity, unit.tier); return true; }   // same TYPE upgrades it (+1), any tier
   return false;   // occupied by a different type → reject (stays in tray)
 }
@@ -415,8 +422,8 @@ function reset(){
   runKills = 0;
   enemies = []; projectiles = []; eprojs = []; particles = []; floaters = []; allies = [];
   { const gateX = (FIELD_L+FIELD_R)/2; guards = [
-      { x: gateX-30, y: WALL_Y-3, cd:0, slashT:0, face:1, mv:0 },
-      { x: gateX+30, y: WALL_Y-3, cd:0, slashT:0, face:-1, mv:0 } ]; }
+      { x: gateX-78, y: WALL_Y-3, cd:0, slashT:0, face:1, mv:0 },
+      { x: gateX+78, y: WALL_Y-3, cd:0, slashT:0, face:-1, mv:0 } ]; }
   villagers = [makeVillager(), makeVillager(), makeVillager(), makeVillager(), makePrincess()];
   critters = [makeCritter('chicken'), makeCritter('chicken'), makeCritter('pig')];
   hero = { x:(FIELD_L+FIELD_R)/2, y:GY+26, lvl:(META.s.mods.squire ? 2 : 1), cd:0, slashT:0, sortie:false, down:false };
@@ -950,17 +957,19 @@ function updateFight(dt){
       if (d < range && e.y < bd){ bd = e.y; best = e; } // prioritize closest to wall
     }
     if (best){
+      const el = g.type==='tower' ? TOWER_ELEMENTS[g.element||'arrow'] : null;   // tower element overrides its shot
       if (g.mag === undefined) g.mag = 4 + g.tier;
-      g.cd = 1/(def.rate * RUN.rateMult);
+      g.cd = 1/(def.rate * (el ? el.rate : 1) * RUN.rateMult);
       g.recoil = 0.12;
-      let dmg = def.dmg * TIER_DMG[ti] * metaDmgMult() * RUN.dmgMult * CONFIG.rarity.dmgMult[g.rarity||0];
+      let dmg = def.dmg * (el ? el.dmg : 1) * TIER_DMG[ti] * metaDmgMult() * RUN.dmgMult * CONFIG.rarity.dmgMult[g.rarity||0];
       const crit = RUN.critChance > 0 && Math.random() < RUN.critChance;
       if (crit) dmg *= 2;
+      const proj = el ? el.proj : def.proj;
       projectiles.push({ x:t.x, y:t.y-18, tgt:best, tx:best.x, ty:best.y,
-        dmg, crit, splash:def.splash + RUN.splashBonus, slow:def.slow + RUN.slowBonus,
-        burn:RUN.burnDur, poison:RUN.poisonDur, stunChance:RUN.stunChance,
-        kind:def.proj, spd: def.proj==='ball' ? 330 : 480 });
-      if (def.proj!=='arrow' || Math.random()<0.4) sfx.shoot();
+        dmg, crit, splash:(el ? el.splash : def.splash) + RUN.splashBonus, slow:(el ? el.slow : def.slow) + RUN.slowBonus,
+        burn:(el ? el.burn : 0) + RUN.burnDur, poison:RUN.poisonDur, stunChance:RUN.stunChance,
+        kind:proj, spd: proj === 'ball' ? 330 : 480 });
+      if (proj!=='arrow' || Math.random()<0.4) sfx.shoot();
       g.mag--;
       if (g.mag <= 0) g.reload = 1.5;   // magazine empty → reload pause (no DPS while reloading)
     }
@@ -1468,8 +1477,9 @@ function drawWall(){
     const seg = k2===0 ? [wl+44, 140] : [wr-190, 140];
     const ax = seg[0] + (Math.sin(ph)*0.5+0.5)*seg[1];
     const goingRight = Math.cos(ph) > 0;
-    const row = mode==='fight' ? 6 : 1;
-    spr('archer_b', 192, 192, Math.floor(time*8 + k2*3)%6, row, ax, WALL_Y+1, 0.46, !goingRight, 0.82);
+    // walk along the rampart (row 1); only raise the bow to loose an occasional shot (row 6)
+    const shooting = mode==='fight' && Math.sin(time*1.8 + k2*2.7) > 0.74;
+    spr('archer_b', 192, 192, Math.floor(time*8 + k2*3)%6, shooting ? 6 : 1, ax, WALL_Y+1, 0.46, !goingRight, 0.82);
   }
   // damage cracks scale with HP (front face)
   const dmg = 1 - wallHP/wallMax;
@@ -2795,7 +2805,15 @@ cv.addEventListener('pointerup', ev => {
       if (cell && placeFromTray(hand[dragUnit.i], idx(cell.c, cell.r))) hand[dragUnit.i] = null;   // placed/merged; else stays in tray
     } else {
       const moved = downPos && Math.hypot(p.x-downPos.x, p.y-downPos.y) > 10;
-      if (!moved){ sellTarget = { c:dragUnit.c, r:dragUnit.r }; }   // quick tap → sell popup
+      if (!moved){
+        const g = grid[idx(dragUnit.c, dragUnit.r)];
+        if (g && g.type === 'tower'){   // quick tap a Watchtower → cycle its element
+          g.element = ELEMENT_ORDER[(ELEMENT_ORDER.indexOf(g.element||'arrow') + 1) % ELEMENT_ORDER.length];
+          const e = TOWER_ELEMENTS[g.element];
+          floaters.push({ x:cellX(dragUnit.c)+CELL/2, y:cellY(dragUnit.r)-6, text:e.name.toUpperCase(), t:0, dur:0.9, size:14, color:e.col });
+          sfx.place && sfx.place();
+        } else { sellTarget = { c:dragUnit.c, r:dragUnit.r }; }   // others → sell popup
+      }
       else if (cell){ dropBoardUnit(dragUnit.c, dragUnit.r, idx(cell.c, cell.r)); }
     }
     dragUnit = null;
@@ -3257,6 +3275,11 @@ function drawBuildings(dt){
     if (g.rarity){
       const gx = cellX(c)+CELL-13, gy = cellY(r)+12;
       ocirc(gx, gy, 6, CONFIG.rarity.col[g.rarity], '#161c2e', 2.5); glint(gx-2, gy-2.5, 1.7);
+    }
+    // Watchtower element badge (tap to cycle Arrow/Fire/Freeze) — colour shows the element
+    if (g.type==='tower'){
+      const el = TOWER_ELEMENTS[g.element||'arrow'], gx = cellX(c)+12, gy = cellY(r)+12;
+      ocirc(gx, gy, 6.5, el.col, '#161c2e', 2.2); glint(gx-2, gy-2.5, 1.6);
     }
     // burning when badly damaged in a siege
     if (mode==='fight' && g.hp !== undefined && g.hp < g.maxhp*0.6){
