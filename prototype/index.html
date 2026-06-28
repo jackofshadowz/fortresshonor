@@ -1283,6 +1283,7 @@ function drawAllies(){
     } else {
       if (a.healAnim > 0) spr('ally_monk_heal', 192, 192, Math.min(10, Math.floor((1.0-a.healAnim)/1.0*11)), 0, a.x, a.y+4, 0.52, a.face<0, 0.66);
       else spr('ally_monk', 192, 192, Math.floor(time*8 + a.t*4)%4, 0, a.x, a.y+4, 0.52, a.face<0, 0.66);
+      if (a.atkT > 0) drawMaceSwing(a.x, a.y, a.face, (0.4-a.atkT)/0.4);   // war-monk: mace out in melee
     }
     if (a.hp < a.maxhp){ const w=18; orr(a.x-w/2-1, a.y-23, w+2, 5, 2, 'rgba(38,35,58,0.9)', null); ctx.fillStyle='#7ee860'; rr(a.x-w/2, a.y-22, Math.max(2, w*a.hp/a.maxhp), 3, 1.5); ctx.fill(); }
   }
@@ -1313,6 +1314,18 @@ function puff(x, y, col){
 }
 function banner(text, color){
   floaters.push({ x:W/2, y:250, text, t:0, dur:1.5, size:42, color, banner:true });
+}
+// a war-monk's spiked mace swinging (prog 0..1) — gives the otherwise-unarmed monk a weapon in melee
+function drawMaceSwing(x, y, face, prog){
+  const f = face < 0 ? -1 : 1;
+  ctx.save(); ctx.translate(x + f*7, y-13); ctx.rotate(f * (-0.8 + prog*1.9));
+  ctx.strokeStyle='rgba(255,255,255,0.55)'; ctx.lineWidth=3; ctx.lineCap='round';
+  ctx.beginPath(); ctx.arc(0, 0, 17, -1.5, 0.5); ctx.stroke();                       // swoosh
+  ctx.strokeStyle='#8a6a3c'; ctx.lineWidth=2.6;
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-15); ctx.stroke();                 // haft
+  for (let s=0;s<6;s++){ const a=s/6*Math.PI*2; ctx.strokeStyle='#aeb8c6'; ctx.lineWidth=1.6; ctx.beginPath(); ctx.moveTo(Math.cos(a)*4,-18+Math.sin(a)*4); ctx.lineTo(Math.cos(a)*6.5,-18+Math.sin(a)*6.5); ctx.stroke(); }   // spikes
+  ocirc(0, -18, 4.5, '#9aa4b4', '#3a4250', 2);                                        // mace head
+  ctx.restore();
 }
 
 /* ============================================================
@@ -3548,6 +3561,7 @@ function drawHero(){
       spr(m.atkSpr, m.fw, m.fw, Math.min(m.afn-1, Math.floor((0.16-k.slashT)/0.16*m.afn)), 0, k.x, k.y+6, m.sc, k.face < 0, m.ay);
     } else {
       spr(m.spr, m.fw, m.fw, Math.floor(time*9 + i*2) % m.fn, 0, k.x, k.y+6, m.sc, k.face < 0, m.ay);
+      if (m.id === 'monk' && k.slashT > 0) drawMaceSwing(k.x, k.y, k.face, (0.16-k.slashT)/0.16);   // war-monk mace
     }
     // little level pip so you can see each member's rank
     chunkyText('L'+partyLvl(k.member), k.x, k.y-22, 9, '#ffd95e', '#2a2030', '700');
