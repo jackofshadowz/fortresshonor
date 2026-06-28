@@ -874,11 +874,16 @@ function updateFight(dt){
         wallHP -= e.dps * dt;
         if (Math.random() < dt*2.2){ puff(e.x, WALL_Y, '#e8d9b0'); sfx.thud(); shake = Math.max(shake, 3); }
       }
-    } else if (e.y < WALL_Y + 16){
-      // pour through the broken gate
-      const dx = gateX - e.x;
-      e.x += Math.sign(dx) * Math.min(Math.abs(dx), e.spd*1.2*dt);
-      e.y += sp;
+    } else if (e.y < WALL_Y + 18){
+      // BREACHED: only the gap is open — funnel to it and pour through; never phase through intact wall
+      const gapHalf = 50, aligned = Math.abs(e.x - gateX) <= gapHalf;
+      if (e.y < WALL_Y - e.r - 2 && !aligned){
+        const dx = gateX - e.x; e.x += Math.sign(dx) * Math.min(Math.abs(dx), e.spd*1.4*dt);
+        e.y = Math.min(e.y + sp*0.5, WALL_Y - e.r - 2);   // hold at the wall until lined up with the breach
+      } else {
+        const dx = gateX - e.x; e.x += Math.sign(dx) * Math.min(Math.abs(dx), e.spd*0.7*dt);
+        e.y += sp;                                          // lined up → through the breach
+      }
     } else {
       // raze the city building by building, Age-of-Empires style
       let bt = null, bd = 1e9;
@@ -1089,17 +1094,22 @@ function wallGuards(dt){
     }
   }
 }
-// move a unit toward (tx,ty), funnelling through the gate when it must cross the wall (no phasing)
+// move a unit toward (tx,ty), funnelling through the gate opening when it must cross the wall (no phasing)
 function moveViaGate(a, tx, ty, sp, dt){
-  const gateX = (FIELD_L+FIELD_R)/2;
-  let gx = tx, gy = ty;
-  if ((a.y > WALL_Y) !== (ty > WALL_Y)){            // target is on the far side of the wall → route through the door
-    gx = gateX;
-    gy = Math.abs(a.x - gateX) > 16 ? (a.y > WALL_Y ? WALL_Y + 20 : WALL_Y - 20)   // first reach the doorway
-                                    : (a.y > WALL_Y ? WALL_Y - 24 : WALL_Y + 24);  // then step through it
+  const gateX = (FIELD_L+FIELD_R)/2, gapHalf = 24;
+  const crossing = (a.y > WALL_Y) !== (ty > WALL_Y);
+  if (crossing && Math.abs(a.x - gateX) > gapHalf){
+    // not lined up with the doorway: slide along our side of the wall toward it, hugging the wall
+    const wy = a.y > WALL_Y ? WALL_Y + 16 : WALL_Y - 16;
+    const dx = gateX - a.x, dy = wy - a.y;
+    a.x += Math.sign(dx) * Math.min(Math.abs(dx), sp*dt);
+    a.y += Math.sign(dy) * Math.min(Math.abs(dy), sp*0.7*dt);
+    a.moving = true; a.face = dx < 0 ? -1 : 1;
+  } else {
+    // lined up (or not crossing) → head straight for the target, passing through the doorway
+    const dx = tx-a.x, dy = ty-a.y, d = Math.hypot(dx,dy)||1;
+    a.x += dx/d*sp*dt; a.y += dy/d*sp*dt; a.moving = true; if (Math.abs(dx) > 1) a.face = dx < 0 ? -1 : 1;
   }
-  const dx = gx-a.x, dy = gy-a.y, d = Math.hypot(dx,dy)||1;
-  a.x += dx/d*sp*dt; a.y += dy/d*sp*dt; a.moving = true; if (Math.abs(dx) > 1) a.face = dx < 0 ? -1 : 1;
 }
 // barracks/monastery melee allies — hold at the gate, then sortie through the door and fight; can fall
 function updateAllies(dt){
@@ -3228,7 +3238,7 @@ function drawBombardier(r, step, e){
 function drawGolem(r, step, e){
   // stone golem — generated sheet, 4 walk frames
   const f = Math.floor(time*6 + (e.wob||0)*5) % 4;
-  spr('golem', 168, 96, f, 0, 0, e.r*0.95, 1.18*r/24, e.face < 0, 0.95);
+  spr('golem', 224, 96, f, 0, 0, e.r*0.95, 1.18*r/24, e.face < 0, 0.95);
 }
 // generic animated-sprite enemy from the Enemy Pack (fw×fh sheet, `frames` cols, row 0)
 function spriteEnemy(name, fw, fh, frames, baseS, ay){
