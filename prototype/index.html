@@ -322,6 +322,7 @@ let levelWon = false;         // has this run already cleared the level's wave g
 let wonStars = 0;             // stars earned on the level just cleared
 let levelMapBtn = null, wonBtns = null, mapNodeRects = null, buyGoldBtn = null;
 let gateOpen = 0;             // 0 = shut, 1 = open; the door swings open only while units pass through
+let mapWalk = null;          // {from, to, t} — the hero walking between map nodes before entering a land
 let guardUpBtn = null;         // in-build "Train Archers" prompt on the wall
 let repairWallBtn = null, rebuildBtn = null;   // pay-to-repair prompts (no free rebuild)
 // per-wave chaos: each round may roll a modifier so leveling is less predictable
@@ -491,6 +492,7 @@ function saveLevelCity(){
 }
 function startLevel(id){
   curLevel = id; levelWon = false; runMode = 'normal';
+  META.s.mapPos = id; META.save();   // the hero now stands on this land
   reset();   // fresh board, run boons, etc.
   const L = META.s.levels[id];
   if (L && L.city && L.city.length){          // returning to a level → restore the city you built here
@@ -2800,26 +2802,43 @@ function drawOver(){
   chunkyBtn(W/2+10, 592, 150, 44, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BADGES', 17);
   hit(W/2+10, 592, 150, 44, ()=>{ mode='badges'; });
 }
+function mapNodeXY(i){ const X0=30, Y0=132, MW=W-60, MH=548, p=LEVEL_POS[i]; return { x:X0+p[0]*MW, y:Y0+p[1]*MH }; }
 function drawMap(){
   uiHits = [];
   drawSea(); drawClouds();
   chunkyText('WORLD MAP', W/2, 64, 28, '#fff', '#3a2a12');
-  chunkyText('Choose a land to defend', W/2, 96, 14, '#dbe6f2', '#23344a', '600');
-  const X0=30, Y0=132, MW=W-60, MH=548;
+  chunkyText(mapWalk ? 'Marching to ' + LEVELS[mapWalk.to].name + '…' : 'Walk your hero to a land to defend', W/2, 96, 14, '#dbe6f2', '#23344a', '600');
   ctx.save(); ctx.strokeStyle='rgba(255,255,255,0.4)'; ctx.lineWidth=5; ctx.setLineDash([4,11]); ctx.lineCap='round';
   ctx.beginPath();
-  for (let i=0;i<LEVELS.length;i++){ const p=LEVEL_POS[i], x=X0+p[0]*MW, y=Y0+p[1]*MH; i?ctx.lineTo(x,y):ctx.moveTo(x,y); }
+  for (let i=0;i<LEVELS.length;i++){ const n=mapNodeXY(i); i?ctx.lineTo(n.x,n.y):ctx.moveTo(n.x,n.y); }
   ctx.stroke(); ctx.setLineDash([]); ctx.restore();
   for (let i=0;i<LEVELS.length;i++){
-    const L=LEVELS[i], p=LEVEL_POS[i], x=X0+p[0]*MW, y=Y0+p[1]*MH, sv=META.s.levels[i]||{}, unlocked=levelUnlocked(i), r=27;
-    ocirc(x, y, r, unlocked ? (sv.beaten?'#7ed05f':'#ffd95e') : '#79839a', '#241b2e', 3.5);
-    if (unlocked) chunkyText(String(i+1), x, y+1, 20, '#241b2e', null, '800');
-    else { ctx.save(); ctx.fillStyle='#cdd4e0'; rr(x-6,y-2,12,10,2); ctx.fill(); ctx.strokeStyle='#cdd4e0'; ctx.lineWidth=2.4; ctx.beginPath(); ctx.arc(x,y-2,5,Math.PI,0); ctx.stroke(); ctx.restore(); }
-    chunkyText(L.name, x, y-r-9, 12, '#fff', '#23344a', '700');
-    if (sv.beaten) for (let s=0;s<3;s++) star(x-13+s*13, y+r+10, 5, s<(sv.stars||0)?'#ffd95e':'#46506a', '#241b2e');
-    else if (unlocked) chunkyText(L.waves+' waves', x, y+r+13, 10, '#dbe6f2', null, '600');
-    if (unlocked) hit(x-r-5, y-r-5, (r+5)*2, (r+5)*2, ()=>startLevel(i));
+    const L=LEVELS[i], n=mapNodeXY(i), sv=META.s.levels[i]||{}, unlocked=levelUnlocked(i), r=27;
+    ocirc(n.x, n.y, r, unlocked ? (sv.beaten?'#7ed05f':'#ffd95e') : '#79839a', '#241b2e', 3.5);
+    if (unlocked) chunkyText(String(i+1), n.x, n.y+1, 20, '#241b2e', null, '800');
+    else { ctx.save(); ctx.fillStyle='#cdd4e0'; rr(n.x-6,n.y-2,12,10,2); ctx.fill(); ctx.strokeStyle='#cdd4e0'; ctx.lineWidth=2.4; ctx.beginPath(); ctx.arc(n.x,n.y-2,5,Math.PI,0); ctx.stroke(); ctx.restore(); }
+    chunkyText(L.name, n.x, n.y-r-9, 12, '#fff', '#23344a', '700');
+    if (sv.beaten) for (let s=0;s<3;s++) star(n.x-13+s*13, n.y+r+10, 5, s<(sv.stars||0)?'#ffd95e':'#46506a', '#241b2e');
+    else if (unlocked) chunkyText(L.waves+' waves', n.x, n.y+r+13, 10, '#dbe6f2', null, '600');
+    // tap an unlocked land: walk the hero there first (RPG-style), then enter
+    if (unlocked && !mapWalk) hit(n.x-r-5, n.y-r-5, (r+5)*2, (r+5)*2, ()=>{
+      if (i === META.s.mapPos) startLevel(i);
+      else mapWalk = { from: META.s.mapPos, to: i, t: 0 };
+    });
   }
+  // the travelling hero on the world map
+  let hp;
+  if (mapWalk){
+    mapWalk.t = Math.min(1, mapWalk.t + 0.018);
+    const a = mapNodeXY(mapWalk.from), b2 = mapNodeXY(mapWalk.to), e = mapWalk.t<0.5 ? 2*mapWalk.t*mapWalk.t : 1-Math.pow(-2*mapWalk.t+2,2)/2;
+    hp = { x: a.x+(b2.x-a.x)*e, y: a.y+(b2.y-a.y)*e };
+    if (mapWalk.t >= 1){ const dest = mapWalk.to; META.s.mapPos = dest; META.save(); mapWalk = null; startLevel(dest); return; }
+  } else hp = mapNodeXY(META.s.mapPos);
+  ctx.save(); ctx.translate(hp.x, hp.y - 30);
+  ctx.fillStyle='rgba(20,30,50,0.25)'; ctx.beginPath(); ctx.ellipse(0, 32, 13, 4, 0, 0, 7); ctx.fill();
+  const moving = !!mapWalk, f = moving ? Math.floor(time*9)%6 : Math.floor(time*4)%6, row = moving ? 1 : 0;
+  spr(heroSprite(), 192, 192, f, row, 0, 30, 0.62, mapWalk && mapNodeXY(mapWalk.to).x < mapNodeXY(mapWalk.from).x, 0.78);
+  ctx.restore();
   chunkyBtn(W/2-80, 724, 160, 44, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BACK', 18);
   hit(W/2-80, 724, 160, 44, ()=>{ mode='title'; });
 }
@@ -3713,6 +3732,7 @@ const META = (function(){
     lastSeen: 0, lastFreeGem: 0,
     badges: {}, seenBadges: {},
     levels: {},                            // campaign progress: { [id]: {beaten, stars, best, city} }
+    mapPos: 0,                             // which land the hero is standing on in the world map
     bestWave: 0,
     stats: { runs:0, kills:0, bossKills:0, fullClears:0, gemsEarned:0 },
   };
