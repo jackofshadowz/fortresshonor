@@ -317,6 +317,15 @@ const LEVELS = [
 ];
 // map node positions (fractions of the play area), drawn as a winding trail
 const LEVEL_POS = [[0.22,0.82],[0.40,0.70],[0.30,0.54],[0.55,0.48],[0.70,0.62],[0.74,0.36],[0.84,0.20]];
+// difficulty modes — scale enemy toughness and the rewards to match
+const DIFFS = ['easy','normal','hard','brutal'];
+const DIFF = {
+  easy:   { label:'Relaxed', col:'#7ed05f', hp:0.7,  dps:0.8,  reward:0.8 },
+  normal: { label:'Normal',  col:'#ffd95e', hp:1.0,  dps:1.0,  reward:1.0 },
+  hard:   { label:'Hard',    col:'#ff9c3f', hp:1.45, dps:1.25, reward:1.45 },
+  brutal: { label:'Brutal',  col:'#ff5e4d', hp:2.0,  dps:1.5,  reward:1.9 },
+};
+function diff(){ return DIFF[META.s.difficulty] || DIFF.normal; }
 let curLevel = 0;              // which level is being played
 let levelWon = false;         // has this run already cleared the level's wave goal?
 let wonStars = 0;             // stars earned on the level just cleared
@@ -784,7 +793,7 @@ function enemyPowerDps(){ return 1 + Math.min(basePower()*0.012, 0.9); }  // and
 function buildWave(w){
   const q = [];
   const wc = CONFIG.wave;
-  const hpS = (1 + wc.hpLin*(w-1) + wc.hpQuad*(w-1)*(w-1)) * enemyPowerHp();
+  const hpS = (1 + wc.hpLin*(w-1) + wc.hpQuad*(w-1)*(w-1)) * enemyPowerHp() * diff().hp;
   if (runMode === 'boss') return bossRushWave(w, hpS);
   const m = waveMod || { key:'none' };
   const count = Math.max(1, Math.round((wc.baseCount + Math.floor(w*wc.perWave)) * (m.count||1)));
@@ -808,7 +817,7 @@ function buildWave(w){
     if (Math.random() < 0.04){ const nxt = ENEMY_POOL.filter(p => ENEMY_INTRO[p.k] === L+1); if (nxt.length){ kind = nxt[(Math.random()*nxt.length)|0].k; special = true; } }
     if (m.elite) special = true;   // ELITE wave — every attacker is a champion
     const e = makeEnemy(kind, hpS*(m.hp||1), t);
-    e.dps *= enemyPowerDps();   // foes hit harder as your stronghold grows
+    e.dps *= enemyPowerDps() * diff().dps;   // foes hit harder as your stronghold grows + by difficulty
     if (special){ e.special = true; e.hp = e.maxhp = e.hp*1.4; e.gold = Math.round(e.gold*2); }   // tougher + richer
     if (m.dps) e.dps *= m.dps;
     if (m.spd) e.spd *= m.spd;
@@ -851,7 +860,7 @@ function waveCleared(){
   const flawless = !breached && wallHP >= wallMax;
   metaOnWaveCleared(flawless);
   ANALYTICS.log('wave_clear', { wave, flawless });
-  const bonus = Math.round((CONFIG.economy.waveBonusBase + CONFIG.economy.waveBonusPerWave*wave) * RUN.waveBonusMult);
+  const bonus = Math.round((CONFIG.economy.waveBonusBase + CONFIG.economy.waveBonusPerWave*wave) * RUN.waveBonusMult * diff().reward);
   gold += bonus;
   floaters.push({ x:W/2, y:300, text:'+'+bonus+' gold', t:0, dur:1.4, size:24, color:'#ffd95e' });
   // the village treasury COMPOUNDS while uncollected (12%/wave) + the wave's tax — hoarding outgrows collecting, but raiders can plunder it
@@ -879,7 +888,7 @@ function waveCleared(){
     wonStars = (!breached && wallHP >= wallMax) ? 3 : (wallHP > 0 ? 2 : 1);
     L.stars = Math.max(L.stars||0, wonStars);
     L.best = Math.max(L.best||0, wave-1);
-    const reward = 30 + curLevel*15; gold += reward; META.s.gems += 2 + curLevel; META.save();
+    const reward = Math.round((30 + curLevel*15) * diff().reward); gold += reward; META.s.gems += Math.round((2 + curLevel) * diff().reward); META.save();
     mode = 'won'; sfx.cheer();
     return;
   }
@@ -2808,6 +2817,8 @@ function drawMap(){
   drawSea(); drawClouds();
   chunkyText('WORLD MAP', W/2, 64, 28, '#fff', '#3a2a12');
   chunkyText(mapWalk ? 'Marching to ' + LEVELS[mapWalk.to].name + '…' : 'Walk your hero to a land to defend', W/2, 96, 14, '#dbe6f2', '#23344a', '600');
+  { const d = diff(); chunkyBtn(W/2-90, 108, 180, 28, d.col, '#3a4364', '#222a44', 'Difficulty: ' + d.label, 12);
+    hit(W/2-90, 108, 180, 28, ()=>{ if (mapWalk) return; const i=DIFFS.indexOf(META.s.difficulty); META.s.difficulty=DIFFS[(i+1)%DIFFS.length]; META.save(); sfx.place&&sfx.place(); }); }
   ctx.save(); ctx.strokeStyle='rgba(255,255,255,0.4)'; ctx.lineWidth=5; ctx.setLineDash([4,11]); ctx.lineCap='round';
   ctx.beginPath();
   for (let i=0;i<LEVELS.length;i++){ const n=mapNodeXY(i); i?ctx.lineTo(n.x,n.y):ctx.moveTo(n.x,n.y); }
@@ -3791,6 +3802,7 @@ const META = (function(){
     badges: {}, seenBadges: {},
     levels: {},                            // campaign progress: { [id]: {beaten, stars, best, city} }
     mapPos: 0,                             // which land the hero is standing on in the world map
+    difficulty: 'normal',                  // easy | normal | hard | brutal
     bestWave: 0,
     stats: { runs:0, kills:0, bossKills:0, fullClears:0, gemsEarned:0 },
   };
