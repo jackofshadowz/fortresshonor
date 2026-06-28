@@ -44,12 +44,7 @@
    Fight phase: waves march on the wall; towers defend.
    ============================================================ */
 
-const W = 480;
-// H is the stage height. It is no longer a fixed 800 — resize() stretches it to
-// match the device's safe-area aspect so the game FILLS the screen (no letterbox).
-// W stays fixed (the art is authored at 480 wide); only the vertical extent grows,
-// which the camera fills with more of the island/sky scene and the bottom UI follows.
-let H = 800;
+const W = 480, H = 800;   // the game is authored for this fixed stage; it is fit-and-centered, never stretched
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 let SCALE = 1;
@@ -62,7 +57,7 @@ let SCALE = 1;
 // nav/gesture bar) so no gameplay hides under the system bars, while the sky
 // still bleeds full-screen behind them. Adapts to any device via env() insets.
 let OX = 0, OY = 0, VX0 = 0, VY0 = 0, VXW = W, VYH = H;
-let TRAY_Y = 706;   // screen-space bottom UI band — resize() pins it to the bottom of the (taller) stage (declared before resize() runs)
+const TRAY_Y = 706;   // screen-space bottom UI band (fixed in the 800-tall design)
 
 // Probe element to read the OS safe-area insets (CSS px) — needs viewport-fit=cover.
 const insetProbe = document.createElement('div');
@@ -81,15 +76,16 @@ function resize(){
   const cw = window.innerWidth, ch = window.innerHeight;
   const ins = safeInsets();
   const safeW = cw - ins.left - ins.right, safeH = ch - ins.top - ins.bottom;
-  // The stage spans the whole SAFE AREA: scale to fill its width (art is 480 wide),
-  // then grow H so the stage also fills the safe height — no letterbox, no crop.
-  const s = safeW / W;
+  // Fit the fixed 800-tall design into the safe area at the LARGEST scale that
+  // crops nothing (max-fill on the limiting axis — width on tall phones), then
+  // center it. Whatever margin remains is painted by each screen's own background
+  // (sky/clouds), which bleeds full-screen behind the system bars.
+  const s = Math.min(safeW / W, safeH / H);
   SCALE = s;
-  H = Math.round(Math.max(800, Math.min(1180, safeH / s)));   // taller stage on tall phones (clamped sane)
-  TRAY_Y = Math.round(H - 94);                                // bottom UI band rides the new floor
   cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
   cv.style.width = cw + 'px'; cv.style.height = ch + 'px';
-  OX = ins.left / s; OY = ins.top / s;                  // stage origin sits at the safe-area corner
+  OX = (ins.left + (safeW - W * s) / 2) / s;            // center the design in the safe area
+  OY = (ins.top  + (safeH - H * s) / 2) / s;
   VX0 = -OX; VY0 = -OY; VXW = cw / s; VYH = ch / s;     // full canvas in stage coords (bg bleeds behind bars)
   ctx.setTransform(s * dpr, 0, 0, s * dpr, OX * s * dpr, OY * s * dpr);
 }
@@ -4526,57 +4522,74 @@ function drawGear(){
   }
   drawMenuToast();
 }
+let heroesTab = 'champ';
+function metaPanel(x, y, w, h, accent, glow, sel){   // shared premium card: foil-tinted gradient panel + glow
+  ctx.save(); ctx.shadowColor = accent; ctx.shadowBlur = glow;
+  gradPanel(x, y, w, h, 16, sel ? 'rgba(70,58,28,0.94)' : 'rgba(46,56,98,0.98)', 'rgba(19,24,44,0.99)', accent, sel ? 3.5 : 2.8);
+  ctx.restore();
+}
 function drawHeroes(){
   uiHits = []; menuBg(); menuHeader('HEROES');
-  chunkyBtn(W-104, 50, 92, 34, '#7fc4ff', '#3b80d2', '#2a5a9e', 'GEAR', 15);
-  hit(W-104, 50, 92, 34, ()=>{ mode='gear'; });
-  chunkyText('Choose your champion — each grants a run-long boon', W/2, 104, 11, '#dfe6ff', null, '500');
-  let y = 124;
-  for (const h of HEROES){
-    const owned = META.s.heroes.owned.includes(h.id), sel = META.s.heroes.sel === h.id;
-    const col = RARITY_COL[h.rarity] || '#9fb3c8';
+  // big segmented tabs: Champions | War Party | Gear
+  const tabs = [['champ','CHAMPIONS'],['party','WAR PARTY'],['gear','GEAR']], tw=(W-28)/3-6;
+  tabs.forEach((t,i)=>{ const tx=14+i*((W-28)/3), on=(t[0]==='gear'?false:heroesTab===t[0]);
+    chunkyBtn(tx, 94, tw, 40, on?'#ffce5a':'#3b466a', on?'#dba32c':'#2a3450', on?'#9c6f12':'#1a2138', t[1], 12);
+    hit(tx, 94, tw, 40, ()=>{ if (t[0]==='gear'){ mode='gear'; } else heroesTab=t[0]; }); });
+
+  if (heroesTab === 'champ'){
+    chunkyText('Your selected champion grants a run-long boon', W/2, 152, 11, '#dfe6ff', null, '500');
+    let y = 166;
     const HSPR = { commander:'warrior_b', markswoman:'archer_b', trader:'pawn_y', pyromancer:'warrior_r', frostweaver:'pawn_b' };
-    ctx.save(); ctx.shadowColor = sel ? '#ffd95e' : col; ctx.shadowBlur = sel ? 12 : 7;
-    gradPanel(14, y, W-28, 74, 14, sel ? 'rgba(74,64,30,0.55)' : 'rgba(50,62,100,0.96)', 'rgba(26,32,54,0.96)', sel ? '#ffd95e' : col, sel ? 3.5 : 3);
-    ctx.restore();
-    const mx = 54, my = y+37;
-    ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = owned ? 8 : 3; ocirc(mx, my, 28, 'rgba(14,20,36,0.92)', owned ? col : '#5a6488', 3); ctx.restore();
-    ctx.save(); ctx.beginPath(); ctx.arc(mx, my, 26, 0, 7); ctx.clip();
-    const mg = ctx.createLinearGradient(0, my-26, 0, my+26); mg.addColorStop(0, hexA(col,0.32)); mg.addColorStop(1, 'rgba(0,0,0,0.22)'); ctx.fillStyle = mg; ctx.fillRect(mx-26, my-26, 52, 52);
-    if (!owned){ ctx.globalAlpha = 0.5; ctx.filter = 'grayscale(0.7) brightness(0.55)'; }
-    spr(HSPR[h.id] || 'warrior_b', 192, 192, Math.floor(time*6)%6, 0, mx, my+27, 0.46, false, 0.78);
-    ctx.filter = 'none'; ctx.globalAlpha = 1; ctx.restore();
-    if (!owned){ ocirc(mx+19, my+19, 9, 'rgba(16,18,28,0.92)', '#cfd6e2', 2); orr(mx+15.5, my+18.5, 7, 6, 1.6, '#cfd6e2', '#6a7488', 1.4); ctx.strokeStyle='#cfd6e2'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(mx+19, my+17.5, 2.6, Math.PI, 0); ctx.stroke(); }
-    const lvl = heroLvl(h.id);
-    chunkyText(h.name + (owned ? '   Lv' + lvl : ''), 88, y+22, 16, '#fff', '#10131f', '700', 'left');
-    chunkyText(h.eff(owned ? lvl : 1), 88, y+44, 12, '#cfe0f5', null, '500', 'left');
-    chunkyText(h.rarity.toUpperCase(), 88, y+62, 9, col, null, '600', 'left');
-    const bx = W-122, bw = 104;
-    if (owned){
-      if (sel) chunkyText('SELECTED', bx+bw/2, y+18, 12, '#ffd95e', null, '700');
-      else { chunkyBtn(bx, y+8, bw, 26, '#5cc04c', '#41973a', '#2e6326', 'SELECT', 13); hit(bx, y+8, bw, 26, ()=>{ META.s.heroes.sel = h.id; META.save(); sfx.place(); }); }
-      const lc = heroLvlCost(h.id);
-      chunkyBtn(bx, y+40, bw, 26, '#7fc4ff', '#3b80d2', '#234a7e', 'LVL UP '+lc+'◆', 12);
-      hit(bx, y+40, bw, 26, ()=>{ if (spendGems(lc)){ META.s.heroes.lvl[h.id] = lvl+1; META.save(); toast(h.name+' Lv'+(lvl+1)+'!'); sfx.merge(); } else toast('Need '+lc+' gems'); });
-    } else {
-      chunkyBtn(bx, y+22, bw, 32, '#ffce5a', '#dba32c', '#9c6f12', h.cost+'◆', 15);
-      hit(bx, y+22, bw, 32, ()=>{ if (spendGems(h.cost)){ META.s.heroes.owned.push(h.id); META.s.heroes.sel = h.id; META.s.heroes.lvl[h.id] = 1; META.save(); toast(h.name+' recruited!'); sfx.fanfare(); } else toast('Need '+h.cost+' gems'); });
+    for (const h of HEROES){
+      const owned = META.s.heroes.owned.includes(h.id), sel = META.s.heroes.sel === h.id;
+      const col = RARITY_COL[h.rarity] || '#9fb3c8', CH = 92, lvl = heroLvl(h.id);
+      metaPanel(14, y, W-28, CH, sel?'#ffd95e':col, sel?16:9, sel);
+      if (sel) cardShine(18, y+4, W-36, CH-8, 14, h.id.length*0.3);
+      // big medallion
+      const mx = 62, my = y+CH/2;
+      ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = owned?10:3; ocirc(mx, my, 34, 'rgba(12,18,34,0.95)', owned?col:'#5a6488', 3); ctx.restore();
+      ctx.save(); ctx.beginPath(); ctx.arc(mx, my, 31, 0, 7); ctx.clip();
+      const mg = ctx.createLinearGradient(0, my-31, 0, my+31); mg.addColorStop(0, hexA(col,0.34)); mg.addColorStop(1, 'rgba(0,0,0,0.25)'); ctx.fillStyle = mg; ctx.fillRect(mx-31, my-31, 62, 62);
+      if (!owned){ ctx.globalAlpha = 0.5; ctx.filter = 'grayscale(0.7) brightness(0.55)'; }
+      spr(HSPR[h.id] || 'warrior_b', 192, 192, Math.floor(time*6)%6, 0, mx, my+33, 0.56, false, 0.78);
+      ctx.filter = 'none'; ctx.globalAlpha = 1; ctx.restore();
+      if (!owned){ ocirc(mx+22, my+22, 10, 'rgba(16,18,28,0.92)', '#cfd6e2', 2); orr(mx+18, my+21.5, 8, 7, 1.8, '#cfd6e2', '#6a7488', 1.5); }
+      chunkyText(h.name + (owned ? '   Lv' + lvl : ''), 106, y+28, 18, '#fff', '#10131f', '800', 'left');
+      chunkyText(h.eff(owned ? lvl : 1), 106, y+52, 12, '#cfe0f5', null, '500', 'left');
+      chunkyText(h.rarity.toUpperCase(), 106, y+72, 9.5, col, null, '700', 'left');
+      const bx = W-126, bw = 110;
+      if (owned){
+        if (sel) chunkyText('✓ SELECTED', bx+bw/2, y+24, 13, '#ffd95e', null, '800');
+        else { chunkyBtn(bx, y+12, bw, 30, '#5cc04c', '#41973a', '#2e6326', 'SELECT', 14); hit(bx, y+12, bw, 30, ()=>{ META.s.heroes.sel = h.id; META.save(); sfx.place(); }); }
+        const lc = heroLvlCost(h.id);
+        chunkyBtn(bx, y+50, bw, 30, '#7fc4ff', '#3b80d2', '#234a7e', 'LVL UP '+lc+'◆', 13);
+        hit(bx, y+50, bw, 30, ()=>{ if (spendGems(lc)){ META.s.heroes.lvl[h.id] = lvl+1; META.save(); toast(h.name+' Lv'+(lvl+1)+'!'); sfx.merge(); } else toast('Need '+lc+' gems'); });
+      } else {
+        chunkyBtn(bx, y+31, bw, 36, '#ffce5a', '#dba32c', '#9c6f12', 'RECRUIT '+h.cost+'◆', 13);
+        hit(bx, y+31, bw, 36, ()=>{ if (spendGems(h.cost)){ META.s.heroes.owned.push(h.id); META.s.heroes.sel = h.id; META.s.heroes.lvl[h.id] = 1; META.save(); toast(h.name+' recruited!'); sfx.fanfare(); } else toast('Need '+h.cost+' gems'); });
+      }
+      y += CH + 10;
     }
-    y += 82;
-  }
-  // --- WAR PARTY: the mixed sortie squad, each member leveled individually ---
-  chunkyText('WAR PARTY — your sortie squad', W/2, y+4, 12, '#ffd95e', '#3a2a12', '700'); y += 20;
-  for (const m of PARTY){
-    const lvl = partyLvl(m.id), cost = partyUpCost(m.id);
-    orr(14, y, W-28, 46, 12, 'rgba(50,62,100,0.92)', 'rgba(255,255,255,0.15)', 2);
-    if (m.spr) spr(m.spr, m.fw, m.fw, Math.floor(time*6)%m.fn, 0, 44, y+42, m.sc*0.72, false, m.ay);
-    else spr(heroSprite(), 192, 192, Math.floor(time*6)%6, 0, 44, y+40, 0.4, false, 0.76);
-    chunkyText(m.name + '  Lv' + lvl, 84, y+19, 14, '#fff', '#10131f', '700', 'left');
-    chunkyText('melee dmg ' + Math.round(partyDmg(m.id)) + (m.id==='monk' ? '  · heals + mends wall' : m.id==='lancer' ? '  · reach' : '  · the champion'), 84, y+36, 10, '#cfe0f5', null, '600', 'left');
-    const bx = W-122;
-    chunkyBtn(bx, y+10, 106, 26, '#7fc4ff', '#3b80d2', '#234a7e', 'LVL UP ' + cost + '◆', 12);
-    hit(bx, y+10, 106, 26, ()=>{ if (spendGems(cost)){ META.s.party[m.id] = lvl+1; META.save(); toast(m.name+' Lv'+(lvl+1)+'!'); sfx.merge(); } else toast('Need '+cost+' gems'); });
-    y += 52;
+  } else {
+    chunkyText('Your mixed sortie squad — level each member', W/2, 152, 11, '#dfe6ff', null, '500');
+    let y = 170;
+    for (const m of PARTY){
+      const lvl = partyLvl(m.id), cost = partyUpCost(m.id), col = m.rar || '#7fc4ff', CH = 96;
+      metaPanel(14, y, W-28, CH, col, 9, false);
+      const mx = 64, my = y+CH/2;
+      ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 9; ocirc(mx, my, 36, 'rgba(12,18,34,0.95)', col, 3); ctx.restore();
+      ctx.save(); ctx.beginPath(); ctx.arc(mx, my, 33, 0, 7); ctx.clip();
+      if (m.spr) spr(m.spr, m.fw, m.fw, Math.floor(time*6)%m.fn, 0, mx, my+30, (m.sc||0.5)*1.05, false, m.ay||0.66);
+      else spr(heroSprite(), 192, 192, Math.floor(time*6)%6, 0, mx, my+34, 0.6, false, 0.76);
+      ctx.restore();
+      chunkyText(m.name + '   Lv' + lvl, 110, y+28, 18, '#fff', '#10131f', '800', 'left');
+      chunkyText('melee dmg ' + Math.round(partyDmg(m.id)), 110, y+52, 12, '#cfe0f5', null, '600', 'left');
+      chunkyText(m.id==='monk' ? 'heals allies · mends wall' : m.id==='lancer' ? 'reach · sorties out' : 'the champion · leads', 110, y+72, 10, col, null, '700', 'left');
+      const bx = W-126;
+      chunkyBtn(bx, y+CH/2-18, 110, 36, '#7fc4ff', '#3b80d2', '#234a7e', 'LVL UP '+cost+'◆', 13);
+      hit(bx, y+CH/2-18, 110, 36, ()=>{ if (spendGems(cost)){ META.s.party[m.id] = lvl+1; META.save(); toast(m.name+' Lv'+(lvl+1)+'!'); sfx.merge(); } else toast('Need '+cost+' gems'); });
+      y += CH + 12;
+    }
   }
   drawMenuToast();
 }
