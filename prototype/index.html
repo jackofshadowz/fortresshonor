@@ -118,7 +118,7 @@ const TYPE_KEYS = Object.keys(TYPES);
 const CONFIG = {
   economy: { startGold:30, wallBase:100, rerollCost:15,
              waveBonusBase:25, waveBonusPerWave:8, waveWallRegen:12 },
-  tiers:   { dmg:[1, 2.6, 7, 18, 45], range:[240, 330, 430, 560, 720],
+  tiers:   { dmg:[1, 2.6, 7, 18, 45], range:[150, 195, 245, 300, 360],
              sell:[3, 9, 24, 60, 150], max:5 },
   rarity:  { spawnRare:0.16, dmgMult:[1, 1.4, 1.9],            // Common / Rare / Epic
              col:['', '#ffd95e', '#c9a2e8'], name:['', 'RARE', 'EPIC'] },
@@ -942,7 +942,8 @@ function updateFight(dt){
     if (g.reload > 0){ g.reload -= dt; if (g.reload <= 0) g.mag = 4 + g.tier; continue; }   // out of ammo — reloading the magazine
     g.cd = (g.cd||0) - dt;
     if (g.cd > 0) continue;
-    const range = TIER_RANGE[g.tier-1] * RUN.rangeMult;
+    const ti = Math.min(g.tier, 5) - 1;   // tiers can climb past 5 via continual merge — clamp the lookup
+    const range = TIER_RANGE[ti] * RUN.rangeMult;
     let best = null, bd = 1e9;
     for (const e of enemies){
       const d = Math.hypot(e.x-t.x, e.y-t.y);
@@ -952,7 +953,7 @@ function updateFight(dt){
       if (g.mag === undefined) g.mag = 4 + g.tier;
       g.cd = 1/(def.rate * RUN.rateMult);
       g.recoil = 0.12;
-      let dmg = def.dmg * TIER_DMG[g.tier-1] * metaDmgMult() * RUN.dmgMult * CONFIG.rarity.dmgMult[g.rarity||0];
+      let dmg = def.dmg * TIER_DMG[ti] * metaDmgMult() * RUN.dmgMult * CONFIG.rarity.dmgMult[g.rarity||0];
       const crit = RUN.critChance > 0 && Math.random() < RUN.critChance;
       if (crit) dmg *= 2;
       projectiles.push({ x:t.x, y:t.y-18, tgt:best, tx:best.x, ty:best.y,
@@ -968,11 +969,6 @@ function updateFight(dt){
   // producer buildings muster their unit (archery->archers, barracks->lancers, monastery->monks); mines make gold
   for (const t of towers()){
     const g = t.g, def = TYPES[g.type];
-    if (def.gold){   // GOLD MINE: trickle gold during the wave, scaling with tier
-      g.goldT = (g.goldT||0) - dt;
-      if (g.goldT <= 0){ g.goldT = Math.max(1.2, 3 - g.tier*0.3); const amt = 1 + g.tier; gold += amt; floaters.push({ x:t.x, y:t.y-14, text:'+'+amt, t:0, dur:0.9, size:13, color:'#ffd95e' }); }
-      continue;
-    }
     if (!def.produces) continue;
     g.allyCd = (g.allyCd==null ? 11 : g.allyCd) - dt;   // initial delay before the first muster
     if (g.allyCd <= 0 && allies.length < armyCap()){
@@ -987,6 +983,11 @@ function updateFight(dt){
     const dx = p.tx-p.x, dy = p.ty-p.y, d = Math.hypot(dx,dy);
     if (d < 14){
       p.dead = true;
+      // single-shot ranged attacks can miss (splash/AoE always lands)
+      if (!p.splash && Math.random() < 0.14){
+        floaters.push({ x:p.tx, y:p.ty-14, text:'miss', t:0, dur:0.5, size:11, color:'#cfd8e6' });
+        continue;
+      }
       if (p.crit) floaters.push({ x:p.tx, y:p.ty-16, text:'CRIT!', t:0, dur:0.6, size:14, color:'#ffd95e' });
       if (p.splash){
         sfx.boom(); shake = Math.max(shake, 4);
@@ -1113,6 +1114,19 @@ function wallGuards(dt){
     }
   }
 }
+// gold mines fund the town's treasury, even between waves — output scales with tier
+function tickMines(dt){
+  for (let i=0;i<ROWS*COLS;i++){
+    const g = grid[i]; if (!g || g.type !== 'mine') continue;
+    g.goldT = (g.goldT||0) - dt;
+    if (g.goldT <= 0){
+      g.goldT = Math.max(1.6, 3.6 - g.tier*0.35);
+      const amt = 1 + g.tier; gold += amt;
+      const c = i % COLS, r = (i/COLS)|0;
+      floaters.push({ x:cellX(c)+CELL/2, y:cellY(r)+6, text:'+'+amt, t:0, dur:0.9, size:13, color:'#ffd95e' });
+    }
+  }
+}
 // move a unit toward (tx,ty), funnelling through the gate opening when it must cross the wall (no phasing)
 function moveViaGate(a, tx, ty, sp, dt){
   const gateX = (FIELD_L+FIELD_R)/2, gapHalf = 24;
@@ -1189,8 +1203,8 @@ function drawAllies(){
       if (a.shootAnim > 0) spr('ally_archer_shoot', 192, 192, Math.min(7, Math.floor((0.5-a.shootAnim)/0.5*8)), 0, a.x, a.y+4, 0.52, a.face<0, 0.68);
       else spr('ally_archer', 192, 192, Math.floor(time*8 + a.t*4)%4, 0, a.x, a.y+4, 0.52, a.face<0, 0.68);
     } else if (a.kind==='lancer'){
-      if (a.atkT > 0) spr('ally_lancer_atk', 320, 320, Math.min(2, Math.floor((0.4-a.atkT)/0.4*3)), 0, a.x, a.y+4, 0.50, a.face<0, 0.72);
-      else spr('ally_lancer', 320, 320, Math.floor(time*10 + a.t*4)%6, 0, a.x, a.y+4, 0.50, a.face<0, 0.72);
+      if (a.atkT > 0) spr('ally_lancer_atk', 320, 320, Math.min(2, Math.floor((0.4-a.atkT)/0.4*3)), 0, a.x, a.y+4, 0.50, a.face<0, 0.58);
+      else spr('ally_lancer', 320, 320, Math.floor(time*10 + a.t*4)%6, 0, a.x, a.y+4, 0.50, a.face<0, 0.58);
     } else {
       if (a.healAnim > 0) spr('ally_monk_heal', 192, 192, Math.min(10, Math.floor((1.0-a.healAnim)/1.0*11)), 0, a.x, a.y+4, 0.52, a.face<0, 0.66);
       else spr('ally_monk', 192, 192, Math.floor(time*8 + a.t*4)%4, 0, a.x, a.y+4, 0.52, a.face<0, 0.66);
@@ -1803,6 +1817,13 @@ function drawBuildings(dt){
     }
     if (g.pop !== undefined){ g.pop += dt*4; if (g.pop>=1) delete g.pop; }
     if (g.recoil) g.recoil = Math.max(0, g.recoil - dt);
+    // coverage ring for shooter buildings (so you can see — and place around — their limited range)
+    if (mode==='build' && TYPES[g.type] && TYPES[g.type].shoots){
+      const rcx = cellX(c)+CELL/2, rcy = cellY(r)+CELL/2, rng = TIER_RANGE[Math.min(g.tier,5)-1] * (RUN ? RUN.rangeMult : 1);
+      ctx.save(); ctx.beginPath(); ctx.arc(rcx, rcy, rng, 0, 7);
+      ctx.fillStyle='rgba(122,196,255,0.05)'; ctx.fill();
+      ctx.strokeStyle='rgba(122,196,255,0.30)'; ctx.lineWidth=1.5; ctx.setLineDash([5,7]); ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+    }
     const pop = g.pop !== undefined ? 1 + Math.sin(Math.min(g.pop,1)*Math.PI)*0.18 : 1;
     ctx.save();
     ctx.translate(cellX(c)+CELL/2, cellY(r)+CELL/2);
@@ -2819,6 +2840,7 @@ function frame(now){
   }
 
   if (mode === 'fight') updateFight(dt);
+  if (mode === 'build' || mode === 'fight') tickMines(dt);   // gold mines fund the town in build AND battle
   updateVillagers(dt);
   updateHero(dt);
   if (mode === 'clear'){
@@ -3217,6 +3239,13 @@ function drawBuildings(dt){
     }
     if (g.pop !== undefined){ g.pop += dt*4; if (g.pop>=1) delete g.pop; }
     if (g.recoil) g.recoil = Math.max(0, g.recoil - dt);
+    // coverage ring for shooter buildings (so you can see — and place around — their limited range)
+    if (mode==='build' && TYPES[g.type] && TYPES[g.type].shoots){
+      const rcx = cellX(c)+CELL/2, rcy = cellY(r)+CELL/2, rng = TIER_RANGE[Math.min(g.tier,5)-1] * (RUN ? RUN.rangeMult : 1);
+      ctx.save(); ctx.beginPath(); ctx.arc(rcx, rcy, rng, 0, 7);
+      ctx.fillStyle='rgba(122,196,255,0.05)'; ctx.fill();
+      ctx.strokeStyle='rgba(122,196,255,0.30)'; ctx.lineWidth=1.5; ctx.setLineDash([5,7]); ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+    }
     const pop = g.pop !== undefined ? 1 + Math.sin(Math.min(g.pop,1)*Math.PI)*0.18 : 1;
     ctx.save();
     ctx.translate(cellX(c)+CELL/2, cellY(r)+CELL/2);
