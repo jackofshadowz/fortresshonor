@@ -89,7 +89,25 @@ const sfx = {
   fanfare(){ [523,659,784,1047].forEach((f,i)=>beep(f,.16,'triangle',.06,i*.09)); },
   defeat(){ [392,330,262,196].forEach((f,i)=>beep(f,.22,'triangle',.06,i*.14)); },
   sell(){ beep(600,.05,'square',.035); beep(400,.06,'square',.03,.06); },
+  hurt(){ beep(240,.14,'sawtooth',.06); beep(150,.2,'sawtooth',.05,.07); },        // a pained grunt (breach / hero down)
+  cheer(){ [523,659,784,1047,1319].forEach((f,i)=>beep(f,.2,'triangle',.06,i*.07)); [784,1047].forEach((f,i)=>beep(f,.34,'triangle',.05,.42+i*.12)); }, // victory
+  roar(){ beep(72,.4,'sawtooth',.09); beep(54,.5,'sawtooth',.07,.05); beep(110,.3,'sawtooth',.05,.02); },   // a monster's bellow
 };
+// gentle looping background score — a soft I-V-vi-IV pad with a light arpeggio (gated by mute)
+const BGM_CHORDS = [[262,330,392],[392,494,587],[440,523,659],[349,440,523]];
+let bgmOn = false, bgmStep = 0, bgmTimer = 0;
+function bgmTick(){
+  if (!bgmOn) return;
+  const a = audio();
+  if (a && !muted && document.visibilityState !== 'hidden'){
+    const ch = BGM_CHORDS[bgmStep % BGM_CHORDS.length];
+    ch.forEach(f => beep(f, 2.8, 'sine', 0.020));                       // soft sustained pad
+    ch.forEach((f,i) => beep(f*2, 0.16, 'triangle', 0.010, 0.5+i*0.35)); // sparkle arpeggio
+    bgmStep++;
+  }
+  bgmTimer = setTimeout(bgmTick, 2700);
+}
+function startBGM(){ if (bgmOn) return; bgmOn = true; bgmTick(); }
 
 /* ---------- palette ---------- */
 const INK = '#3a3548';                 // shared deep ink for characters & UI
@@ -847,7 +865,7 @@ function waveCleared(){
     L.stars = Math.max(L.stars||0, wonStars);
     L.best = Math.max(L.best||0, wave-1);
     const reward = 30 + curLevel*15; gold += reward; META.s.gems += 2 + curLevel; META.save();
-    mode = 'won';
+    mode = 'won'; sfx.cheer();
     return;
   }
   mode = 'clear'; clearT = 0;
@@ -906,6 +924,8 @@ function updateFight(dt){
         e.x = Math.max(ISL.cx - hw, Math.min(ISL.cx + hw, e.x));
       } else {
         e.atk = true;
+        // grow bolder — creep toward the wall while shooting so they can't camp out of range forever (no stalemate)
+        if (!breached && e.y < WALL_Y - 96) e.y += sp * 0.22;
         e.shotT = (e.shotT === undefined ? 1 + Math.random() : e.shotT) - dt;
         if (e.shotT <= 0){
           e.shotT = e.kind === 'gnoll' ? 1.9 : 2.4;
@@ -998,7 +1018,7 @@ function updateFight(dt){
     wallHP = 0; breached = true;
     banner('BREACH!', '#ff5e4d');
     for (let k=0;k<3;k++) puff(gateX + (k-1)*16, WALL_Y, '#9a6a3c');
-    sfx.boom(); shake = 14;
+    sfx.boom(); sfx.hurt(); shake = 14;
   }
 
   wallGuards(dt);
@@ -1221,14 +1241,16 @@ function updateAllies(dt){
     a.t += dt; if (a.cd > 0) a.cd -= dt;
     if (a.atkT > 0) a.atkT -= dt; if (a.healAnim > 0) a.healAnim -= dt; if (a.shootAnim > 0) a.shootAnim -= dt;
     if (a.kind === 'archer'){
-      // archers MAN THE WALL: climb onto the rampart, spread along it, and loose arrows over it
+      // archers MAN THE WALL: patrol along the rampart toward the nearest foe and loose arrows (long range, to out-range enemy archers)
+      const RANGE = 240, sy = WALL_Y - 5;
+      let best=null, bd=1e9; for (const e of enemies){ if (e.hp<=0) continue; const d=Math.hypot(e.x-a.x, e.y-a.y); if (d<bd){ bd=d; best=e; } }
       const slots = 6, wlx = FIELD_L+44, span = (FIELD_R-FIELD_L-88);
-      let sx = wlx + ((i % slots) + 0.5) * (span/slots), sy = WALL_Y - 5;
-      if (breached && Math.abs(sx - gateX) < 56) sx += (sx < gateX ? -56 : 56);   // don't stand in the breach gap
-      const dx=sx-a.x, dy=sy-a.y, dd=Math.hypot(dx,dy);
-      if (dd > 3){ a.x += dx/dd*52*dt; a.y += dy/dd*52*dt; a.moving = true; if (Math.abs(dx)>1) a.face = dx<0?-1:1; } else a.moving = false;
-      let best=null, bd=1e9; for (const e of enemies){ if (e.hp<=0) continue; const d=Math.hypot(e.x-a.x, e.y-a.y); if (d<200 && d<bd){ bd=d; best=e; } }
-      if (best){ a.face = best.x < a.x ? -1 : 1; if (a.cd<=0){ a.cd=1.2; a.shootAnim=0.5; projectiles.push({ x:a.x, y:a.y-14, tgt:best, tx:best.x, ty:best.y, dmg:a.dmg*1.1, kind:'arrow', spd:480, splash:0, slow:0 }); if (Math.random()<0.4 && sfx.shoot) sfx.shoot(); } }
+      let homeX = wlx + ((i % slots) + 0.5) * (span/slots);
+      let tx = (best && bd < 320) ? Math.max(FIELD_L+22, Math.min(FIELD_R-22, best.x)) : homeX;   // slide along the wall to line up the shot
+      if (breached && Math.abs(tx - gateX) < 56) tx += (tx < gateX ? -56 : 56);   // don't stand in the breach gap
+      const dx=tx-a.x, dy=sy-a.y, dd=Math.hypot(dx,dy);
+      if (dd > 3){ a.x += dx/dd*62*dt; a.y += dy/dd*62*dt; a.moving = true; if (Math.abs(dx)>1) a.face = dx<0?-1:1; } else a.moving = false;
+      if (best && bd < RANGE){ a.face = best.x < a.x ? -1 : 1; if (a.cd<=0){ a.cd=1.1; a.shootAnim=0.5; projectiles.push({ x:a.x, y:a.y-14, tgt:best, tx:best.x, ty:best.y, dmg:a.dmg*1.1, kind:'arrow', spd:520, splash:0, slow:0 }); if (Math.random()<0.4 && sfx.shoot) sfx.shoot(); } }
       for (const e of enemies){ if (e.hp>0 && Math.hypot(e.x-a.x, e.y-a.y) < 20){ a.hp -= e.dps*dt; break; } }   // can be cut down if the enemy reaches them
       a.x = Math.max(FIELD_L+10, Math.min(FIELD_R-10, a.x));
       a.y = Math.max(FIELD_TOP+10, Math.min(GY+ROWS*CELL, a.y));
@@ -2806,6 +2828,7 @@ let downSlot = null, downPos = null;
 
 cv.addEventListener('pointerdown', ev => {
   audio(); if (AC && AC.state === 'suspended') AC.resume();
+  startBGM();   // kick off the background score on the first interaction
   const p = toLogical(ev);
   ptr.x = p.x; ptr.y = p.y; ptr.down = true;
   downPos = p; downSlot = null;
