@@ -11,11 +11,13 @@
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html,body {
-    height:100%; overflow:hidden; background:
-      radial-gradient(120% 90% at 50% 30%, #55bdef 0%, #3da3d8 55%, #2b86b8 100%);
+    height:100%; height:100dvh; overflow:hidden;
+    background-color:#2b86b8;   /* solid fallback so iOS never shows a white bar */
+    background-image: radial-gradient(120% 90% at 50% 30%, #55bdef 0%, #3da3d8 55%, #2b86b8 100%);
+    background-attachment:fixed;
     touch-action:none; -webkit-user-select:none; user-select:none;
   }
-  #wrap { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
+  #wrap { position:fixed; inset:0; height:100dvh; display:flex; align-items:center; justify-content:center; }
   canvas { display:block; border-radius:14px; box-shadow:0 20px 60px rgba(10,50,80,.45), 0 0 0 1px rgba(255,255,255,.18); }
 </style>
 </head>
@@ -45,7 +47,10 @@ function resize(){
   cv.style.width = (W * s) + 'px'; cv.style.height = (H * s) + 'px';
   ctx.setTransform(s * dpr, 0, 0, s * dpr, 0, 0);
 }
-window.addEventListener('resize', resize); resize();
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', () => setTimeout(resize, 60));
+if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);   // iOS toolbar show/hide
+resize();
 
 /* ---------- layout ---------- */
 const COLS = 7, ROWS = 4, CELL = 58;
@@ -338,7 +343,8 @@ const ANALYTICS = {
 /* ---------- Fortress-Merge-style core: a generator recruits units into a TRAY; drag them to the board and fuse identicals ---------- */
 let dragUnit = null;            // {from:'tray',i} | {from:'board',c,r}
 const TRAY_N = 4;               // exactly 4 buildings are offered per round
-function popCap(){ return 12 + (META.s.mods.squire ? 2 : 0); }   // army population cap (the core balance knob)
+function popCap(){ return 12 + (META.s.mods.squire ? 2 : 0); }   // building population cap (the core balance knob)
+function armyCap(){ return 3 + Math.floor(townLevel()/3); }      // mustered soldiers the city can SUPPLY (grows with the town)
 function unitCount(){   // total army = units on the board + units waiting in the tray
   let n = 0;
   for (let i=0;i<ROWS*COLS;i++) if (isUnit(grid[i])) n++;
@@ -942,8 +948,8 @@ function updateFight(dt){
     const g = t.g, akind = g.type==='cannon' ? 'lancer' : g.type==='frost' ? 'monk' : null;
     if (!akind) continue;
     g.allyCd = (g.allyCd||1) - dt;
-    if (g.allyCd <= 0 && allies.length < 8){
-      g.allyCd = Math.max(5, 11 - g.tier*1.1);   // muster slowly (a bit faster at higher tier)
+    if (g.allyCd <= 0 && allies.length < armyCap()){
+      g.allyCd = Math.max(8, 15 - g.tier*1.2);   // long recharge — a few defenders, not a swarm
       allies.push({ x:t.x+(Math.random()-0.5)*18, y:t.y+12, kind:akind, hp:18+g.tier*12, maxhp:18+g.tier*12, dmg:4+g.tier*2.2, cd:0, face:1, t:0, moving:false });
     }
   }
@@ -1108,8 +1114,8 @@ function updateAllies(dt){
 function drawAllies(){
   for (const a of allies){
     ctx.fillStyle='rgba(20,50,30,0.25)'; ctx.beginPath(); ctx.ellipse(a.x, a.y+10, 9, 3, 0, 0, 7); ctx.fill();
-    if (a.kind==='lancer') spr('ally_lancer', 320, 320, Math.floor(time*10 + a.t*4)%6, 0, a.x, a.y+8, 0.16, a.face<0, 0.8);
-    else spr('ally_monk', 192, 192, Math.floor(time*8 + a.t*4)%4, 0, a.x, a.y+8, 0.28, a.face<0, 0.8);
+    if (a.kind==='lancer') spr('ally_lancer', 320, 320, Math.floor(time*10 + a.t*4)%6, 0, a.x, a.y+4, 0.28, a.face<0, 0.72);
+    else spr('ally_monk', 192, 192, Math.floor(time*8 + a.t*4)%4, 0, a.x, a.y+4, 0.46, a.face<0, 0.66);
     if (a.hp < a.maxhp){ const w=18; orr(a.x-w/2-1, a.y-23, w+2, 5, 2, 'rgba(38,35,58,0.9)', null); ctx.fillStyle='#7ee860'; rr(a.x-w/2, a.y-22, Math.max(2, w*a.hp/a.maxhp), 3, 1.5); ctx.fill(); }
   }
 }
