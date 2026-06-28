@@ -814,9 +814,10 @@ function updateFight(dt){
     if (hasBuff(e, 'stun')) continue;        // stunned — no movement, no attack this frame
     const sp = e.spd * (hasBuff(e,'slow') ? CONFIG.buffs.slow.speedMult : 1) * dt;
     const px0 = e.x;
-    if (e.kind === 'archer'){
-      // stands off and rains arrows on the wall (or the city, once it's open)
-      const standY = (breached ? WALL_Y + 54 : WALL_Y - 124) - (e.wob*7);
+    if (e.kind === 'archer' || e.kind === 'gnoll'){
+      // ranged skirmishers: stand WELL back and pelt the wall (or the city, once it's open)
+      const off = e.kind === 'gnoll' ? 150 : 200;   // hang back at range, not at the wall
+      const standY = (breached ? WALL_Y + 54 : WALL_Y - off) - (e.wob*7);
       if (e.y < standY){
         e.y += sp;
         e.x += Math.sin(time*3 + e.wob) * 8 * dt;
@@ -826,7 +827,7 @@ function updateFight(dt){
         e.atk = true;
         e.shotT = (e.shotT === undefined ? 1 + Math.random() : e.shotT) - dt;
         if (e.shotT <= 0){
-          e.shotT = 2.4;
+          e.shotT = e.kind === 'gnoll' ? 1.9 : 2.4;
           const tx = e.x + (Math.random()-0.5)*40;
           const ty = breached ? GY + 20 + Math.random()*ROWS*CELL*0.7 : WALL_Y - 4;
           eprojs.push({ kind:'arrow', sx:e.x, sy:e.y-14, tx, ty, t:0, dur:0.55, arc:30 });
@@ -1103,20 +1104,33 @@ function moveViaGate(a, tx, ty, sp, dt){
 // barracks/monastery melee allies — hold at the gate, then sortie through the door and fight; can fall
 function updateAllies(dt){
   const gateX = (FIELD_L+FIELD_R)/2;
-  const charge = hero && (hero.sortie || breached);   // hold at the gate until SORTIE (or a breach)
   allies.forEach((a, i) => {
     a.t += dt; if (a.cd > 0) a.cd -= dt;
+    if (a.atkT > 0) a.atkT -= dt; if (a.healAnim > 0) a.healAnim -= dt;
+    // lancers sortie on the order; monks are SUPPORT — they only wade into melee if the wall is breached (last stand)
+    const charge = a.kind === 'monk' ? breached : (hero && (hero.sortie || breached));
     if (charge){
       let best=null, bd=1e9;
       for (const e of enemies){ if (e.hp<=0) continue; const d=Math.hypot(e.x-a.x, e.y-a.y); if (d<bd){ bd=d; best=e; } }
       if (best){
         if (bd > 24){ moveViaGate(a, best.x, best.y, 52, dt); }
-        else { a.moving=false; a.face = best.x < a.x ? -1 : 1; if (a.cd<=0){ a.cd=0.7; hitEnemy(best, a.dmg, 0); puff(best.x, best.y-6, '#fff'); } a.hp -= best.dps*dt; }
+        else { a.moving=false; a.face = best.x < a.x ? -1 : 1; if (a.cd<=0){ a.cd=0.7; a.atkT=0.4; hitEnemy(best, a.dmg, 0); puff(best.x, best.y-6, '#fff'); } a.hp -= best.dps*dt; }
       } else a.moving=false;
     } else {
       // muster: queue in loose ranks just inside the gate, waiting for the order
       const sx = gateX - 48 + (i%4)*32, sy = WALL_Y + 36 + Math.floor(i/4)*22;
       if (Math.hypot(sx-a.x, sy-a.y) > 3){ moveViaGate(a, sx, sy, 50, dt); } else { a.moving=false; a.face=1; }
+      // monks tend the wounded — heal nearby allies and the champion
+      if (a.kind === 'monk'){
+        a.healT = (a.healT||0) - dt;
+        if (a.healT <= 0){
+          a.healT = 1.4;
+          let healed=false;
+          for (const o of allies) if (o!==a && o.hp < o.maxhp && Math.hypot(o.x-a.x,o.y-a.y) < 80){ o.hp = Math.min(o.maxhp, o.hp + 6 + a.dmg*0.4); puff(o.x, o.y-8, '#8fe87a'); healed=true; }
+          if (hero && !hero.down && hero.hp < hero.maxhp && Math.hypot(hero.x-a.x, hero.y-a.y) < 90){ hero.hp = Math.min(hero.maxhp, hero.hp + 5); puff(hero.x, hero.y-10, '#8fe87a'); healed=true; }
+          if (healed) a.healAnim = 1.0;
+        }
+      }
     }
     a.x = Math.max(FIELD_L+10, Math.min(FIELD_R-10, a.x));
     a.y = Math.max(FIELD_TOP+10, Math.min(GY+ROWS*CELL, a.y));
@@ -1131,8 +1145,13 @@ function updateAllies(dt){
 function drawAllies(){
   for (const a of allies){
     ctx.fillStyle='rgba(20,50,30,0.25)'; ctx.beginPath(); ctx.ellipse(a.x, a.y+10, 9, 3, 0, 0, 7); ctx.fill();
-    if (a.kind==='lancer') spr('ally_lancer', 320, 320, Math.floor(time*10 + a.t*4)%6, 0, a.x, a.y+4, 0.50, a.face<0, 0.72);
-    else spr('ally_monk', 192, 192, Math.floor(time*8 + a.t*4)%4, 0, a.x, a.y+4, 0.52, a.face<0, 0.66);
+    if (a.kind==='lancer'){
+      if (a.atkT > 0) spr('ally_lancer_atk', 320, 320, Math.min(2, Math.floor((0.4-a.atkT)/0.4*3)), 0, a.x, a.y+4, 0.50, a.face<0, 0.72);
+      else spr('ally_lancer', 320, 320, Math.floor(time*10 + a.t*4)%6, 0, a.x, a.y+4, 0.50, a.face<0, 0.72);
+    } else {
+      if (a.healAnim > 0) spr('ally_monk_heal', 192, 192, Math.min(10, Math.floor((1.0-a.healAnim)/1.0*11)), 0, a.x, a.y+4, 0.52, a.face<0, 0.66);
+      else spr('ally_monk', 192, 192, Math.floor(time*8 + a.t*4)%4, 0, a.x, a.y+4, 0.52, a.face<0, 0.66);
+    }
     if (a.hp < a.maxhp){ const w=18; orr(a.x-w/2-1, a.y-23, w+2, 5, 2, 'rgba(38,35,58,0.9)', null); ctx.fillStyle='#7ee860'; rr(a.x-w/2, a.y-22, Math.max(2, w*a.hp/a.maxhp), 3, 1.5); ctx.fill(); }
   }
 }
@@ -2862,7 +2881,7 @@ function I(name){
  'ic_skull','ic_skullfire','ic_heart','ic_swords9',
  'pre_pagoda','pre_temple','pre_keep','pre_cathedral','pre_palace',
  'e_skull','e_thief','e_gnoll','e_minotaur','e_troll',
- 'ally_lancer','ally_monk'].forEach(I);
+ 'ally_lancer','ally_monk','ally_lancer_atk','ally_monk_heal'].forEach(I);
 // prestige wonders: real grand-building art (SevenKingdoms CC0)
 const PRE_SPR = { p_statue:'pre_pagoda', p_fountain:'pre_temple', p_garden:'pre_keep', p_cathedral:'pre_cathedral', p_throne:'pre_palace' };
 // real fantasy item icons (Shikashi CC0) for store upgrades + gear
