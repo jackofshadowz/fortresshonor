@@ -506,16 +506,27 @@ function makeCritter(kind){
 let hero = null, heroSel = false, breached = false;
 const HERO_COST = l => 30 + 30*l;
 function heroReviveCost(){ return 40 + 15*wave; }   // in-run gold to revive a fallen champion
+// the SORTIE WAR PARTY — a fixed, mixed roster; each member is leveled individually with gems
+const PARTY = [
+  { id:'soldier', name:'Soldier', base:10 },                                                              // lead melee (drawn as the chibi champion)
+  { id:'lancer',  name:'Lancer',  base:8, spr:'ally_lancer', fw:320, fn:6, sc:0.52, atkSpr:'ally_lancer_atk', afn:3, ay:0.58 },
+  { id:'monk',    name:'Monk',    base:5, spr:'ally_monk',   fw:192, fn:4, sc:0.54, ay:0.66 },
+];
+const PARTY_BY_ID = {}; for (const p of PARTY) PARTY_BY_ID[p.id] = p;
+function partyLvl(id){ return (META.s.party && META.s.party[id]) || 1; }
+function partyDmg(id){ const m = PARTY_BY_ID[id]; return (m ? m.base : 8) * (1 + (partyLvl(id)-1)*0.35); }
+function partyUpCost(id){ return 4 + partyLvl(id)*3; }
 let knights = [];
 function updateHero(dt){
   if (!hero) return;
-  // squad size grows with hero level (extra levels past 4 buy damage)
-  const want = hero.down ? 0 : Math.min(hero.lvl, 4);
-  while (knights.length < want) knights.push({ x: ISL.cx-36+knights.length*24, y: GY+20, cd:0, slashT:0, face:1, mv:false });
+  // the war party is a fixed mixed roster (Soldier / Lancer / Monk)
+  const want = hero.down ? 0 : PARTY.length;
+  while (knights.length < want){ const m = PARTY[knights.length]; knights.push({ member:m.id, x: ISL.cx-36+knights.length*24, y: GY+20, cd:0, slashT:0, face:1, mv:false }); }
   while (knights.length > want) knights.pop();
   if (mode === 'title') return;
-  const gateX2 = ISL.cx, dmg = 6 + 2*hero.lvl;
+  const gateX2 = ISL.cx;
   knights.forEach((k, i) => {
+    const dmg = partyDmg(k.member) * (k.member==='soldier' ? (1 + (hero.lvl-1)*0.12) : 1);   // per-member damage; soldier also rides the in-run HERO UP level
     k.cd -= dt; k.slashT = Math.max(0, k.slashT - dt); k.mv = false;
     let best = null, bd = 1e9;
     if (mode === 'fight' && (hero.sortie || breached)){
@@ -3525,10 +3536,21 @@ function drawHero(){
   if (!hero || mode === 'title') return;
   const hspr = heroSprite();
   knights.forEach((k, i) => {
-    const row = k.slashT > 0 ? 2 : (k.mv ? 1 : 0);
-    const f = k.slashT > 0 ? (5 - Math.floor(k.slashT/0.16*5)) % 6 : Math.floor(time*8 + i*2)%6;
-    const ksc = (i===0 ? 0.56 : 0.42) * (1 + (hero.lvl-1)*0.05);   // the champion is bigger and grows with each upgrade
-    spr(hspr, 192, 192, f, row, k.x, k.y+8, ksc, k.face < 0, 0.76);
+    const m = PARTY_BY_ID[k.member];
+    // shadow
+    ctx.fillStyle='rgba(20,40,25,0.22)'; ctx.beginPath(); ctx.ellipse(k.x, k.y+12, 10, 3.5, 0, 0, 7); ctx.fill();
+    if (!m || m.id === 'soldier'){
+      // the SOLDIER is the chibi champion (warrior skin), bigger + grows with HERO UP level
+      const row = k.slashT > 0 ? 2 : (k.mv ? 1 : 0);
+      const f = k.slashT > 0 ? (5 - Math.floor(k.slashT/0.16*5)) % 6 : Math.floor(time*8 + i*2)%6;
+      spr(hspr, 192, 192, f, row, k.x, k.y+8, 0.56 * (1 + (hero.lvl-1)*0.05), k.face < 0, 0.76);
+    } else if (k.slashT > 0 && m.atkSpr){
+      spr(m.atkSpr, m.fw, m.fw, Math.min(m.afn-1, Math.floor((0.16-k.slashT)/0.16*m.afn)), 0, k.x, k.y+6, m.sc, k.face < 0, m.ay);
+    } else {
+      spr(m.spr, m.fw, m.fw, Math.floor(time*9 + i*2) % m.fn, 0, k.x, k.y+6, m.sc, k.face < 0, m.ay);
+    }
+    // little level pip so you can see each member's rank
+    chunkyText('L'+partyLvl(k.member), k.x, k.y-22, 9, '#ffd95e', '#2a2030', '700');
   });
   badge(hero.x-14, hero.y+4, hero.lvl);
   if (hero.down){
@@ -3622,6 +3644,7 @@ const META = (function(){
     mods: {},
     village: { granary:0, warehouse:0 },   // City/Meta: leveled idle upgrades
     heroes: { owned:['commander'], sel:'commander', lvl:{ commander:1 } },   // Hero spine: roster + levels
+    party: { soldier:1, lancer:1, monk:1 },   // the sortie WAR PARTY: each member leveled individually (gems)
     gear: { owned:[], equip:{ weapon:null, armor:null, trinket:null } },     // Hero spine: equippable gear
     lastSeen: 0, lastFreeGem: 0,
     badges: {}, seenBadges: {},
@@ -4237,6 +4260,20 @@ function drawHeroes(){
       hit(bx, y+22, bw, 32, ()=>{ if (spendGems(h.cost)){ META.s.heroes.owned.push(h.id); META.s.heroes.sel = h.id; META.s.heroes.lvl[h.id] = 1; META.save(); toast(h.name+' recruited!'); sfx.fanfare(); } else toast('Need '+h.cost+' gems'); });
     }
     y += 82;
+  }
+  // --- WAR PARTY: the mixed sortie squad, each member leveled individually ---
+  chunkyText('WAR PARTY — your sortie squad', W/2, y+4, 12, '#ffd95e', '#3a2a12', '700'); y += 20;
+  for (const m of PARTY){
+    const lvl = partyLvl(m.id), cost = partyUpCost(m.id);
+    orr(14, y, W-28, 46, 12, 'rgba(50,62,100,0.92)', 'rgba(255,255,255,0.15)', 2);
+    if (m.spr) spr(m.spr, m.fw, m.fw, Math.floor(time*6)%m.fn, 0, 44, y+42, m.sc*0.72, false, m.ay);
+    else spr(heroSprite(), 192, 192, Math.floor(time*6)%6, 0, 44, y+40, 0.4, false, 0.76);
+    chunkyText(m.name + '  Lv' + lvl, 84, y+19, 14, '#fff', '#10131f', '700', 'left');
+    chunkyText('melee dmg ' + Math.round(partyDmg(m.id)) + (m.id==='monk' ? '  · heals + mends wall' : m.id==='lancer' ? '  · reach' : '  · the champion'), 84, y+36, 10, '#cfe0f5', null, '600', 'left');
+    const bx = W-122;
+    chunkyBtn(bx, y+10, 106, 26, '#7fc4ff', '#3b80d2', '#234a7e', 'LVL UP ' + cost + '◆', 12);
+    hit(bx, y+10, 106, 26, ()=>{ if (spendGems(cost)){ META.s.party[m.id] = lvl+1; META.save(); toast(m.name+' Lv'+(lvl+1)+'!'); sfx.merge(); } else toast('Need '+cost+' gems'); });
+    y += 52;
   }
   drawMenuToast();
 }
