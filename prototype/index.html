@@ -3975,7 +3975,13 @@ function heroSprite(){ const h = metaEquip('hero'); return (h && h.sprite) || 'w
 function bannerColor(){ const b = metaEquip('banner'); return b ? { color:b.color, ink:b.ink } : { color:'#ff5e6e', ink:'#9c2433' }; }
 function rerollCost(){ return META.s.mods.quarter ? 10 : CONFIG.economy.rerollCost; }
 function metaDmgMult(){ return META.s.mods.fletcher ? 1.12 : 1; }
-function metaTerrainWash(){ const t = metaEquip('terrain'); if (t && t.wash){ ctx.fillStyle = t.wash; ctx.fillRect(IX0-40, IY0-20, ICOLS*TD+80, IROWS*TD+60); } }  // tints the island in world space (runs inside the camera)
+const THEME_WASH = { verdant:null, stone:'rgba(138,148,120,0.17)', swamp:'rgba(86,116,58,0.24)', snow:'rgba(205,228,255,0.27)', ember:'rgba(202,92,40,0.19)' };
+function metaTerrainWash(){   // tints the island in world space (runs inside the camera)
+  let wash = null;
+  if (mode !== 'title' && mode !== 'map' && LEVELS[curLevel]) wash = THEME_WASH[LEVELS[curLevel].theme];   // the land's biome tint
+  if (!wash){ const t = metaEquip('terrain'); if (t && t.wash) wash = t.wash; }                            // else the equipped cosmetic
+  if (wash){ ctx.fillStyle = wash; ctx.fillRect(IX0-40, IY0-20, ICOLS*TD+80, IROWS*TD+60); }
+}
 
 /* ---------- run economy & badges ---------- */
 let runKills = 0;
