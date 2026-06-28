@@ -309,12 +309,13 @@ let repairWallBtn = null, rebuildBtn = null;   // pay-to-repair prompts (no free
 // per-wave chaos: each round may roll a modifier so leveling is less predictable
 let waveMod = { key:'none' };
 // newcomers unlock over levels (common from minWave); before that a small chance of a tough "special"
-const NEW_ENEMIES = [
-  { kind:'skull',    minWave:3,  weight:0.16, rareFrom:1, rareChance:0.035 },
-  { kind:'thief',    minWave:4,  weight:0.12, rareFrom:2, rareChance:0.030 },
-  { kind:'gnoll',    minWave:5,  weight:0.16, rareFrom:3, rareChance:0.030 },
-  { kind:'minotaur', minWave:8,  weight:0.12, rareFrom:5, rareChance:0.020 },
-  { kind:'troll',    minWave:12, weight:0.08, rareFrom:8, rareChance:0.015 },
+// each foe is INTRODUCED at a level on the map (so new units appear as you travel — kept special)
+const ENEMY_INTRO = { grunt:0, runner:0, archer:1, brute:1, raider:2, sapper:2, skull:2, gnoll:3, thief:3, bombardier:4, minotaur:4, golem:5, troll:6 };
+const ENEMY_NAME  = { grunt:'Goblin', runner:'Scout', archer:'Archer', brute:'Ogre', raider:'Raider', sapper:'Sapper', skull:'Skeleton', gnoll:'Gnoll', thief:'Thief', bombardier:'Bombardier', minotaur:'Minotaur', golem:'Stone Golem', troll:'Troll', boss:'Dark Knight' };
+// weighted spawn pool (filtered by what the current land has unlocked)
+const ENEMY_POOL = [
+  {k:'runner',w:0.9},{k:'archer',w:0.7},{k:'skull',w:0.8},{k:'gnoll',w:0.6},{k:'sapper',w:0.5},
+  {k:'raider',w:0.6},{k:'thief',w:0.5},{k:'brute',w:0.5},{k:'bombardier',w:0.35},{k:'minotaur',w:0.4},{k:'golem',w:0.3},{k:'troll',w:0.25},
 ];
 const WAVE_MODS = [
   { key:'swarm',     label:'SWARM',      color:'#5cb0f0', count:1.7, hp:0.62 },
@@ -472,6 +473,9 @@ function startLevel(id){
     for (const u of L.city) grid[u.i] = { type:u.type, tier:u.tier, rarity:u.rarity||0, element:u.element, pop:0.001 };
   }
   banner(LEVELS[id].name + ' — ' + LEVELS[id].waves + ' waves', '#ffd95e');
+  // herald the foes this land introduces, so new units feel like an event
+  const newFoes = Object.keys(ENEMY_INTRO).filter(k => ENEMY_INTRO[k] === id && k!=='grunt' && k!=='runner');
+  if (newFoes.length) floaters.push({ x:W/2, y:332, text:'New foe — ' + newFoes.map(k=>ENEMY_NAME[k]).join(', '), t:0, dur:3.4, size:16, color:'#ff9c6a' });
 }
 
 /* ---------- villagers — the base feels alive ---------- */
@@ -760,21 +764,16 @@ function buildWave(w){
   const gap = Math.max(wc.gapMin, wc.gapBase - w*wc.gapPerWave) * (m.gap||1);   // chaos can compress the assault
   let t = 0.8;
   for (let i=0;i<count;i++){
-    let kind = 'grunt';
-    const roll = Math.random();
-    if (w>=2 && roll<0.25) kind = 'runner';
-    if (w>=3 && roll>0.82) kind = 'brute';
-    if (w>=4 && roll>=0.55 && roll<0.67) kind = 'raider';
-    if (w>=2 && roll>=0.44 && roll<0.55) kind = 'sapper';  // dynamite barrels — they blow the wall
-    if (w>=2 && roll>=0.25 && roll<0.38) kind = 'archer';
-    if (w>=5 && roll>=0.40 && roll<0.46) kind = 'bombardier';
-    if (w>=6 && roll>=0.67 && roll<0.73) kind = 'golem';
-    // newcomers earned over levels — common once their wave arrives, a RARE early "special" before then
-    let special = false;
-    for (const ne of NEW_ENEMIES){
-      if (w >= ne.minWave){ if (Math.random() < ne.weight){ kind = ne.kind; break; } }
-      else if (w >= ne.rareFrom && Math.random() < ne.rareChance){ kind = ne.kind; special = true; break; }
+    const L = curLevel || 0;
+    let kind = 'grunt', special = false;
+    // pick from the pool this LAND has unlocked; the chance of a non-grunt grows through the waves
+    const avail = ENEMY_POOL.filter(p => L >= (ENEMY_INTRO[p.k] || 0));
+    if (avail.length && Math.random() < Math.min(0.78, 0.30 + w*0.05)){
+      let tot = 0; for (const p of avail) tot += p.w; let rr = Math.random()*tot;
+      for (const p of avail){ rr -= p.w; if (rr <= 0){ kind = p.k; break; } }
     }
+    // a rare, tougher SCOUT from the NEXT land — a taste of what's ahead
+    if (Math.random() < 0.04){ const nxt = ENEMY_POOL.filter(p => ENEMY_INTRO[p.k] === L+1); if (nxt.length){ kind = nxt[(Math.random()*nxt.length)|0].k; special = true; } }
     const e = makeEnemy(kind, hpS*(m.hp||1), t);
     e.dps *= enemyPowerDps();   // foes hit harder as your stronghold grows
     if (special){ e.special = true; e.hp = e.maxhp = e.hp*1.4; e.gold = Math.round(e.gold*2); }   // early specials are tougher + richer
