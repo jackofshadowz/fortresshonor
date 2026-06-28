@@ -285,8 +285,24 @@ function randPiece(){
 }
 
 /* ---------- game state ---------- */
-let mode = 'title';            // title | build | fight | clear | perk | over | store | badges | heroes | kingdom | gear
+let mode = 'title';            // title | map | build | fight | clear | perk | over | won | store | badges | heroes | kingdom | gear
 let runMode = 'normal';        // 'normal' (Siege) | 'boss' (Boss Rush) — chosen on the title
+// ---- campaign: discrete levels you travel to on a world map; each can be replayed/continued endlessly ----
+const LEVELS = [
+  { id:0, name:'Greenfield',  waves:5,  theme:'verdant' },
+  { id:1, name:'Oakvale',     waves:6,  theme:'verdant' },
+  { id:2, name:'Stonebrook',  waves:7,  theme:'stone'   },
+  { id:3, name:'Mirefen',     waves:8,  theme:'swamp'   },
+  { id:4, name:'Frostmere',   waves:9,  theme:'snow'    },
+  { id:5, name:'Emberfall',   waves:10, theme:'ember'   },
+  { id:6, name:'Dragonspire', waves:12, theme:'ember'   },
+];
+// map node positions (fractions of the play area), drawn as a winding trail
+const LEVEL_POS = [[0.22,0.82],[0.40,0.70],[0.30,0.54],[0.55,0.48],[0.70,0.62],[0.74,0.36],[0.84,0.20]];
+let curLevel = 0;              // which level is being played
+let levelWon = false;         // has this run already cleared the level's wave goal?
+let wonStars = 0;             // stars earned on the level just cleared
+let levelMapBtn = null, wonBtns = null, mapNodeRects = null;
 let guardUpBtn = null;         // in-build "Train Archers" prompt on the wall
 let repairWallBtn = null, rebuildBtn = null;   // pay-to-repair prompts (no free rebuild)
 // per-wave chaos: each round may roll a modifier so leveling is less predictable
@@ -434,6 +450,29 @@ function reset(){
   idleEarned = 0; shopOpen = false;
   ANALYTICS.log('run_start', { mode: runMode });
   banner('WAVE ' + wave, '#ffd95e');
+}
+
+/* ---------- campaign: levels, persistence, world map ---------- */
+function levelUnlocked(id){ return id===0 || (META.s.levels[id-1] && META.s.levels[id-1].beaten); }
+function serializeCity(){
+  const out = [];
+  for (let i=0;i<ROWS*COLS;i++){ const g = grid[i]; if (isUnit(g)) out.push({ i, type:g.type, tier:g.tier, rarity:g.rarity||0, element:g.element }); }
+  return out;
+}
+function saveLevelCity(){
+  const L = META.s.levels[curLevel] || (META.s.levels[curLevel] = {});
+  L.city = serializeCity(); L.best = Math.max(L.best||0, wave-1);
+  META.save();
+}
+function startLevel(id){
+  curLevel = id; levelWon = false; runMode = 'normal';
+  reset();   // fresh board, run boons, etc.
+  const L = META.s.levels[id];
+  if (L && L.city && L.city.length){          // returning to a level → restore the city you built here
+    grid = Array(ROWS*COLS).fill(null);
+    for (const u of L.city) grid[u.i] = { type:u.type, tier:u.tier, rarity:u.rarity||0, element:u.element, pop:0.001 };
+  }
+  banner(LEVELS[id].name + ' — ' + LEVELS[id].waves + ' waves', '#ffd95e');
 }
 
 /* ---------- villagers — the base feels alive ---------- */
@@ -789,6 +828,19 @@ function waveCleared(){
   grid = grid.map(g => g && g.rubble ? null : g);             // villagers clear the rubble
   projectiles = [];
   sfx.fanfare();
+  saveLevelCity();   // persist your city after every wave, so returning to this level keeps your build
+  // LEVEL CLEARED? (campaign waves goal met, first time this run)
+  if (!levelWon && runMode === 'normal' && wave > LEVELS[curLevel].waves){
+    levelWon = true;
+    const L = META.s.levels[curLevel] || (META.s.levels[curLevel] = {});
+    L.beaten = true;
+    wonStars = (!breached && wallHP >= wallMax) ? 3 : (wallHP > 0 ? 2 : 1);
+    L.stars = Math.max(L.stars||0, wonStars);
+    L.best = Math.max(L.best||0, wave-1);
+    const reward = 30 + curLevel*15; gold += reward; META.s.gems += 2 + curLevel; META.save();
+    mode = 'won';
+    return;
+  }
   mode = 'clear'; clearT = 0;
 }
 
@@ -2640,12 +2692,56 @@ function drawOver(){
   gemIcon(W/2-72, 408, 9);  chunkyText('+'+lastEarn.gems, W/2-56, 409, 18, '#9fe8ff', null, '600', 'left');
   honorIcon(W/2+28, 408, 9); chunkyText('+'+lastEarn.honor, W/2+44, 409, 18, '#ffd95e', null, '600', 'left');
   drawWallet(W/2-95, 448);
-  chunkyBtn(W/2-105, 492, 210, 54, '#ff9c3f', '#d9742a', '#9c4f12', 'TRY AGAIN', 23);
-  hit(W/2-105, 492, 210, 54, ()=>reset());
-  chunkyBtn(W/2-160, 560, 150, 46, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 20);
-  hit(W/2-160, 560, 150, 46, ()=>{ mode='store'; storeTab='cos'; });
-  chunkyBtn(W/2+10, 560, 150, 46, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BADGES', 18);
-  hit(W/2+10, 560, 150, 46, ()=>{ mode='badges'; });
+  chunkyBtn(W/2-105, 478, 210, 50, '#ff9c3f', '#d9742a', '#9c4f12', 'RETRY LEVEL', 21);
+  hit(W/2-105, 478, 210, 50, ()=>startLevel(curLevel));
+  chunkyBtn(W/2-105, 536, 210, 46, '#5cb0f0', '#3b80d2', '#1d5a8a', 'WORLD MAP', 19);
+  hit(W/2-105, 536, 210, 46, ()=>{ mode='map'; });
+  chunkyBtn(W/2-160, 592, 150, 44, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 19);
+  hit(W/2-160, 592, 150, 44, ()=>{ mode='store'; storeTab='cos'; });
+  chunkyBtn(W/2+10, 592, 150, 44, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BADGES', 17);
+  hit(W/2+10, 592, 150, 44, ()=>{ mode='badges'; });
+}
+function drawMap(){
+  uiHits = [];
+  drawSea(); drawClouds();
+  chunkyText('WORLD MAP', W/2, 64, 28, '#fff', '#3a2a12');
+  chunkyText('Choose a land to defend', W/2, 96, 14, '#dbe6f2', '#23344a', '600');
+  const X0=30, Y0=132, MW=W-60, MH=548;
+  ctx.save(); ctx.strokeStyle='rgba(255,255,255,0.4)'; ctx.lineWidth=5; ctx.setLineDash([4,11]); ctx.lineCap='round';
+  ctx.beginPath();
+  for (let i=0;i<LEVELS.length;i++){ const p=LEVEL_POS[i], x=X0+p[0]*MW, y=Y0+p[1]*MH; i?ctx.lineTo(x,y):ctx.moveTo(x,y); }
+  ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+  for (let i=0;i<LEVELS.length;i++){
+    const L=LEVELS[i], p=LEVEL_POS[i], x=X0+p[0]*MW, y=Y0+p[1]*MH, sv=META.s.levels[i]||{}, unlocked=levelUnlocked(i), r=27;
+    ocirc(x, y, r, unlocked ? (sv.beaten?'#7ed05f':'#ffd95e') : '#79839a', '#241b2e', 3.5);
+    if (unlocked) chunkyText(String(i+1), x, y+1, 20, '#241b2e', null, '800');
+    else { ctx.save(); ctx.fillStyle='#cdd4e0'; rr(x-6,y-2,12,10,2); ctx.fill(); ctx.strokeStyle='#cdd4e0'; ctx.lineWidth=2.4; ctx.beginPath(); ctx.arc(x,y-2,5,Math.PI,0); ctx.stroke(); ctx.restore(); }
+    chunkyText(L.name, x, y-r-9, 12, '#fff', '#23344a', '700');
+    if (sv.beaten) for (let s=0;s<3;s++) star(x-13+s*13, y+r+10, 5, s<(sv.stars||0)?'#ffd95e':'#46506a', '#241b2e');
+    else if (unlocked) chunkyText(L.waves+' waves', x, y+r+13, 10, '#dbe6f2', null, '600');
+    if (unlocked) hit(x-r-5, y-r-5, (r+5)*2, (r+5)*2, ()=>startLevel(i));
+  }
+  chunkyBtn(W/2-80, 724, 160, 44, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BACK', 18);
+  hit(W/2-80, 724, 160, 44, ()=>{ mode='title'; });
+}
+function drawWon(){
+  uiHits = [];
+  ctx.fillStyle='rgba(8,26,44,0.66)'; ctx.fillRect(0,0,W,H);
+  const L=LEVELS[curLevel];
+  chunkyText('LEVEL CLEARED!', W/2, 212, 30, '#ffd95e', '#3a2a12');
+  chunkyText(L.name, W/2, 254, 19, '#fff', '#23344a', '700');
+  for (let s=0;s<3;s++) star(W/2-44+s*44, 322, 18, s<wonStars?'#ffd95e':'#46506a', '#241b2e');
+  chunkyText('+'+(30+curLevel*15)+' gold    +'+(2+curLevel)+' gems', W/2, 374, 14, '#9fe8ff', null, '600');
+  chunkyBtn(W/2-150, 430, 300, 56, '#7ed05f', '#56a83c', '#2e6326', 'KEEP DEFENDING', 20);
+  hit(W/2-150, 430, 300, 56, ()=>{ mode='clear'; clearT=0; });   // continue endlessly on this land
+  const nextId = (curLevel+1 < LEVELS.length) ? curLevel+1 : -1;
+  let y = 498;
+  if (nextId >= 0 && levelUnlocked(nextId)){
+    chunkyBtn(W/2-150, y, 300, 50, '#ff9c3f', '#d9742a', '#9c4f12', 'NEXT LAND', 19);
+    hit(W/2-150, y, 300, 50, ()=>startLevel(nextId)); y += 62;
+  }
+  chunkyBtn(W/2-150, y, 300, 46, '#5cb0f0', '#3b80d2', '#1d5a8a', 'WORLD MAP', 18);
+  hit(W/2-150, y, 300, 46, ()=>{ saveLevelCity(); mode='map'; });
 }
 
 /* ============================================================
@@ -2676,9 +2772,9 @@ cv.addEventListener('pointerdown', ev => {
   ptr.x = p.x; ptr.y = p.y; ptr.down = true;
   downPos = p; downSlot = null;
 
-  if (mode === 'title'){ if (handleMenuTap(p)) return; reset(); return; }
+  if (mode === 'title'){ if (handleMenuTap(p)) return; mode = 'map'; return; }
   if (mode === 'store' || mode === 'badges' || mode === 'heroes' || mode === 'kingdom' || mode === 'gear'){ handleMenuTap(p); return; }
-  if (mode === 'over'){ handleMenuTap(p); return; }
+  if (mode === 'over' || mode === 'map' || mode === 'won'){ handleMenuTap(p); return; }
   if (mode === 'perk'){
     for (const b of perkBtns){ if (inRect(p, b)){ choosePerk(b.perk); return; } }
     return;
@@ -2856,6 +2952,7 @@ function frame(now){
     requestAnimationFrame(frame);
     return;
   }
+  if (mode === 'map'){ drawMap(); ctx.restore(); requestAnimationFrame(frame); return; }
 
   if (mode === 'fight') updateFight(dt);
   if (mode === 'build' || mode === 'fight') tickMines(dt);   // gold mines fund the town in build AND battle
@@ -2930,6 +3027,7 @@ function frame(now){
   if (mode === 'perk') drawPerkDraft();
   if (mode === 'build' && shopOpen) drawShop();
   if (mode === 'over') drawOver();
+  if (mode === 'won') drawWon();
 
   ctx.restore();
   requestAnimationFrame(frame);
@@ -3506,6 +3604,7 @@ const META = (function(){
     gear: { owned:[], equip:{ weapon:null, armor:null, trinket:null } },     // Hero spine: equippable gear
     lastSeen: 0, lastFreeGem: 0,
     badges: {}, seenBadges: {},
+    levels: {},                            // campaign progress: { [id]: {beaten, stars, best, city} }
     bestWave: 0,
     stats: { runs:0, kills:0, bossKills:0, fullClears:0, gemsEarned:0 },
   };
