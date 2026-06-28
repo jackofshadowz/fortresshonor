@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fortress of Honor — Card Detail Studies (3–6)</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=Fredoka:wght@500;600;700&family=Orbitron:wght@500;700;900&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#161b29;color:#e8eefc;font-family:'Fredoka',system-ui,sans-serif;padding:24px 18px 90px}
+  h1{font-family:'Cinzel',serif;font-size:26px;text-align:center;color:#ffd95e}
+  .intro{text-align:center;color:#9fb0cc;font-size:13px;margin:6px 0 20px}
+  h2{font-family:'Cinzel',serif;color:#ffd95e;border-bottom:2px solid #2c3650;margin:30px auto 16px;max-width:840px;padding-bottom:6px;font-size:20px}
+  .row{display:flex;gap:24px;justify-content:center;flex-wrap:wrap}
+  .item{width:240px}
+  .vlabel{text-align:center;margin-top:9px;font-weight:700;font-size:12px;color:#cfe0f5}
+  .vlabel small{display:block;color:#8fa0bc;font-weight:500;font-size:10.5px}
+  .card{width:240px;height:340px;position:relative;overflow:hidden;border-radius:14px}
+  canvas.art{image-rendering:pixelated;display:block}
+
+  /* ============ 3 · CLASSIC TCG ============ */
+  .tcg{padding:10px;font-family:'Fredoka'}
+  .tcg .frame{position:absolute;inset:0;border-radius:14px}
+  .tcg .inner{position:relative;height:100%;display:flex;flex-direction:column;padding:11px 12px}
+  .tcg .title{display:flex;justify-content:space-between;align-items:center;border-radius:8px;padding:5px 10px;font-weight:700;font-size:15px}
+  .tcg .orb{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff;box-shadow:inset 0 -2px 4px rgba(0,0,0,.4),0 1px 2px rgba(0,0,0,.5)}
+  .tcg .win{height:128px;margin:8px 0 0;border-radius:7px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+  .tcg .setdot{position:absolute;right:7px;bottom:6px;width:14px;height:14px;border-radius:50%;opacity:.85}
+  .tcg .typ{margin-top:7px;border-radius:7px;font-size:11px;padding:4px 10px;font-weight:600}
+  .tcg .rules{margin-top:7px;border-radius:7px;padding:8px 10px;font-size:12px;flex:1;line-height:1.35}
+  .tcg .pt{position:absolute;right:13px;bottom:11px;border-radius:8px;padding:2px 12px;font-weight:900;font-size:19px;font-family:'Cinzel',serif}
+  .tcg .coll{position:absolute;left:14px;bottom:14px;font-size:8px;opacity:.6;font-family:'IBM Plex Mono',monospace}
+  /* 3a gilded rare */
+  .tcg.gild .frame{background:linear-gradient(150deg,#f4d77a,#b6862f 45%,#7a541c 70%,#d9b04a);box-shadow:inset 0 0 0 2px #5a3c12,0 8px 22px rgba(0,0,0,.55)}
+  .tcg.gild .inner{margin:6px;border-radius:9px;background:linear-gradient(#2a3450,#1b2238)}
+  .tcg.gild .title{background:linear-gradient(#3a4straight,#33405f,#283452);border:1px solid #f4d77a;color:#ffe6a0}
+  .tcg.gild .title{background:linear-gradient(#33405f,#283452);border:1px solid #f4d77a;color:#ffe6a0}
+  .tcg.gild .win{border:2px solid #b6862f;background:radial-gradient(circle at 50% 35%,#2d3c5e,#10friends);background:radial-gradient(circle at 50% 35%,#2d3c5e,#101626)}
+  .tcg.gild .typ{background:#33405f;border:1px solid #b6862f;color:#ffe6a0}
+  .tcg.gild .rules{background:#1a2238;border:1px solid #4a567a;color:#dbe6ff}
+  .tcg.gild .pt{background:linear-gradient(#f4d77a,#b6862f);color:#3a2a10;border:1px solid #5a3c12}
+  .tcg.gild .orb{background:radial-gradient(circle at 35% 30%,#ff9d6a,#c0431d)}
+  /* 3b iron common */
+  .tcg.iron .frame{background:linear-gradient(150deg,#7e8aa2,#3a4considerable);background:linear-gradient(150deg,#7e8aa2,#3a445f);box-shadow:inset 0 0 0 2px #20283c,0 8px 22px rgba(0,0,0,.5)}
+  .tcg.iron .inner{margin:5px;border-radius:9px;background:#1d2438}
+  .tcg.iron .title{background:#2a3masculine;background:#2a344e;border:1px solid #5a6party;border:1px solid #5a6580;color:#e8eefc}
+  .tcg.iron .win{border:2px solid #4a546e;background:radial-gradient(circle at 50% 35%,#26314c,#141a2a)}
+  .tcg.iron .typ{background:#2a344e;border:1px solid #4a546e;color:#cfe0f5}
+  .tcg.iron .rules{background:#161d30;border:1px solid #39435f;color:#cfd9ee}
+  .tcg.iron .pt{background:#3a445f;color:#fff;border:1px solid #20283c}
+  .tcg.iron .orb{background:radial-gradient(circle at 35% 30%,#8fd0ff,#2f6fb5)}
+  /* 3c foil legendary */
+  .tcg.foil .frame{background:conic-gradient(from 0deg,#ff6,#6ff,#a6f,#f6a,#ff6);box-shadow:0 0 18px rgba(160,120,255,.6),inset 0 0 0 2px #2a1a4a}
+  .tcg.foil .inner{margin:6px;border-radius:9px;background:linear-gradient(#211a3a,#140f26)}
+  .tcg.foil .title{background:linear-gradient(90deg,#3a2a6a,#5a2a6a);border:1px solid #c9a2ff;color:#ffe6ff}
+  .tcg.foil .win{border:2px solid #a06fff;background:radial-gradient(circle at 50% 35%,#2a1f52,#140f26)}
+  .tcg.foil .typ{background:#2a1f52;border:1px solid #a06fff;color:#e6d6ff}
+  .tcg.foil .rules{background:#1a1438;border:1px solid #6a4fae;color:#e6d6ff}
+  .tcg.foil .pt{background:linear-gradient(#ffd95e,#c98a2a);color:#3a2a10;border:1px solid #2a1a4a}
+  .tcg.foil .orb{background:radial-gradient(circle at 35% 30%,#d9a2ff,#7a2fb5)}
+
+  /* ============ 4 · NEON HOLO ============ */
+  .neon{background:#070b18;font-family:'Orbitron',sans-serif}
+  .neon .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(80,150,255,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(80,150,255,.08) 1px,transparent 1px);background-size:18px 18px}
+  .neon .scan{position:absolute;inset:0;background:repeating-linear-gradient(transparent 0 3px,rgba(0,0,0,.18) 3px 4px);pointer-events:none}
+  .neon .brk{position:absolute;width:18px;height:18px;border:2px solid currentColor}
+  .neon .nm{position:relative;text-align:center;font-weight:900;font-size:15px;margin-top:18px;letter-spacing:2px}
+  .neon .win{position:relative;height:140px;margin:12px 16px;border:1px solid currentColor;border-radius:6px;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle,rgba(40,80,160,.25),transparent)}
+  .neon .stripe{position:absolute;top:0;bottom:0;left:-40%;width:40%;background:linear-gradient(110deg,transparent,rgba(255,255,255,.18),transparent);transform:skewX(-18deg)}
+  .neon .stats{position:relative;display:flex;justify-content:space-around;margin:10px 14px}
+  .neon .st b{display:block;font-size:20px;color:#fff}
+  .neon .st{font-size:10px;opacity:.8;text-align:center}
+  .neon .txt{position:relative;text-align:center;font-size:10px;margin:4px 16px;font-family:'Fredoka';opacity:.85}
+  .neon .rb{position:absolute;top:10px;right:12px;font-size:9px;border:1px solid currentColor;border-radius:4px;padding:1px 6px}
+  .neon.cyan{color:#49c6ff;border:2px solid #49c6ff;box-shadow:0 0 20px rgba(73,198,255,.5)}
+  .neon.viol{color:#c06bff;border:2px solid #c06bff;box-shadow:0 0 20px rgba(192,107,255,.5)}
+  .neon.amber{color:#ffb14a;border:2px solid #ffb14a;box-shadow:0 0 20px rgba(255,177,74,.5)}
+
+  /* ============ 5 · MINIMAL FLAT ============ */
+  .flat{font-family:'Fredoka'}
+  .flat .accent{height:7px}
+  .flat .art{display:flex;align-items:center;justify-content:center}
+  .flat .body{padding:14px 15px}
+  .flat .nm{font-weight:700;font-size:20px;line-height:1}
+  .flat .ty{font-size:11px;font-weight:600;margin:3px 0 11px;text-transform:uppercase;letter-spacing:.5px}
+  .flat .stat{display:flex;gap:7px}
+  .flat .chip{border-radius:9px;padding:5px 11px;font-size:12px;font-weight:700}
+  .flat .big{display:flex;gap:18px;margin:6px 0}
+  .flat .big div{font-size:11px;font-weight:600;opacity:.7}
+  .flat .big b{display:block;font-size:26px;font-weight:800;opacity:1}
+  .flat .txt{margin-top:9px;font-size:11.5px;line-height:1.4}
+  /* 5a light */
+  .flat.light{background:#fff;color:#1a2233}
+  .flat.light .art{background:#f0f3f9;height:150px}
+  .flat.light .ty{color:#8a97b0}
+  .flat.light .chip{background:#eef2f8;color:#37496e}
+  .flat.light .txt{color:#6a7894}
+  /* 5b dark */
+  .flat.dark{background:#1c2740;color:#eef3ff}
+  .flat.dark .art{background:#141d31;height:150px}
+  .flat.dark .ty{color:#7f93b8}
+  .flat.dark .chip{background:#28365a;color:#bcd2f5}
+  .flat.dark .txt{color:#9fb2d6}
+  /* 5c swiss (left accent + mono stats) */
+  .flat.swiss{background:#f7f8fb;color:#10friends;color:#141a26;font-family:'IBM Plex Mono',monospace}
+  .flat.swiss .left{position:absolute;left:0;top:0;bottom:0;width:8px}
+  .flat.swiss .art{background:#fff;height:150px;margin-left:8px}
+  .flat.swiss .body{margin-left:8px}
+  .flat.swiss .nm{font-weight:700;font-size:18px}
+  .flat.swiss .ty{color:#8a97b0}
+  .flat.swiss .big b{font-family:'IBM Plex Mono'}
+  .flat.swiss .txt{color:#5a6680}
+
+  /* ============ 6 · HERALDIC CREST ============ */
+  .crest{font-family:'Cinzel',serif}
+  .crest .ribbon{position:absolute;top:0;left:50%;transform:translateX(-50%);padding:9px 22px 11px;font-weight:800;font-size:15px;border-radius:0 0 10px 10px;z-index:2}
+  .crest .ribbon:before,.crest .ribbon:after{content:'';position:absolute;top:0;width:0;height:0;border-style:solid}
+  .crest .shield{width:172px;height:188px;margin:52px auto 0;border-radius:16px 16px 50% 50%/16px 16px 40% 40%;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+  .crest .ty{text-align:center;font-size:11px;margin-top:9px;letter-spacing:.5px}
+  .crest .stats{display:flex;justify-content:center;gap:14px;margin-top:7px;font-family:'Fredoka'}
+  .crest .stats span{font-weight:800;font-size:14px;border-radius:8px;padding:2px 11px}
+  .crest .txt{text-align:center;font-size:10.5px;margin:8px 16px 0;font-family:'Fredoka';line-height:1.4}
+  .crest .seal{position:absolute;right:12px;bottom:12px;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;z-index:2}
+  /* 6a crimson */
+  .crest.crim{background:radial-gradient(circle at 50% 25%,#6e2f2f,#3a1616);border:4px solid #e0bd5a}
+  .crest.crim .ribbon{background:#e0bd5a;color:#3a1616}
+  .crest.crim .shield{background:linear-gradient(#f3e6c4,#e3cf9e);border:4px solid #e0bd5a}
+  .crest.crim .ty{color:#f3d99a}.crest.crim .txt{color:#f0dcb6}
+  .crest.crim .stats span{background:rgba(0,0,0,.28);color:#fff;border:1px solid #e0bd5a}
+  .crest.crim .seal{background:#b53a24;color:#fff;border:2px solid #e0bd5a}
+  /* 6b azure */
+  .crest.azu{background:radial-gradient(circle at 50% 25%,#26426e,#15233f);border:4px solid #cfe0f5}
+  .crest.azu .ribbon{background:#cfe0f5;color:#15233f}
+  .crest.azu .shield{background:linear-gradient(#eaf2ff,#cfe0f5);border:4px solid #8fb4e0}
+  .crest.azu .ty{color:#cfe0f5}.crest.azu .txt{color:#cfe0f5}
+  .crest.azu .stats span{background:rgba(0,0,0,.25);color:#fff;border:1px solid #8fb4e0}
+  .crest.azu .seal{background:#3b80d2;color:#fff;border:2px solid #cfe0f5}
+  /* 6c royal (gold heavy + laurel) */
+  .crest.roy{background:radial-gradient(circle at 50% 25%,#4a3a12,#241a06);border:4px solid #ffd95e}
+  .crest.roy .ribbon{background:linear-gradient(#ffe89a,#d9a82a);color:#3a2a06}
+  .crest.roy .shield{background:linear-gradient(#fff6dc,#f0d99a);border:5px solid #ffd95e;box-shadow:0 0 16px rgba(255,217,94,.5)}
+  .crest.roy .ty{color:#ffe89a}.crest.roy .txt{color:#f3e2b0}
+  .crest.roy .stats span{background:rgba(0,0,0,.3);color:#ffe89a;border:1px solid #ffd95e}
+  .crest.roy .seal{background:#d9a82a;color:#3a2a06;border:2px solid #fff6dc}
+</style>
+</head>
+<body>
+<h1>⚔ Card Detail Studies — Styles 3, 4, 5, 6</h1>
+<p class="intro">Three variations of each direction, more detailed, using real game art. Tell me a row + variation (e.g. “6c Royal”), or mix elements across rows.</p>
+<div id="root"></div>
+
+<script>
+const A='assets/';
+const ART={
+  tower:{src:A+'tower_b.png'}, archery:{src:A+'archery_b.png'}, monastery:{src:A+'monastery_p.png'}, mine:{src:A+'mine.png'},
+  lancer:{src:A+'ally_lancer.png',fw:320,fh:320,frame:1}, archer:{src:A+'ally_archer.png',fw:192,fh:192,frame:1},
+  skull:{src:A+'e_skull.png',fw:192,fh:192,frame:2}, minotaur:{src:A+'e_minotaur.png',fw:320,fh:320,frame:1}, troll:{src:A+'e_troll.png',fw:384,fh:384,frame:3},
+};
+function portrait(spec,size){
+  const c=document.createElement('canvas');c.width=size;c.height=size;c.className='art';
+  const g=c.getContext('2d');g.imageSmoothingEnabled=false;const im=new Image();
+  im.onload=()=>{ if(spec.fw){const s=size/spec.fw*0.94,dw=spec.fw*s,dh=spec.fh*s;g.drawImage(im,(spec.frame||0)*spec.fw,0,spec.fw,spec.fh,(size-dw)/2,(size-dh)/2+size*0.04,dw,dh);}
+    else{const sc=Math.min(size*0.82/im.width,size*0.82/im.height),dw=im.width*sc,dh=im.height*sc;g.drawImage(im,(size-dw)/2,(size-dh)/2,dw,dh);} };
+  im.src=spec.src;return c;
+}
+function E(t,c,h){const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;}
+function P(box,art,size){box.append(portrait(ART[art],size));return box;}
+
+function tcg(variant,art,name,cost,type,rules,pt,coll){
+  const card=E('div','card tcg '+variant);
+  card.append(E('div','frame'));
+  const inner=E('div','inner');
+  inner.append(E('div','title',`<span>${name}</span><span class="orb">${cost}</span>`));
+  const win=P(E('div','win'),art,118); win.append(E('div','setdot')); win.lastChild.style.background='#ffd95e'; inner.append(win);
+  inner.append(E('div','typ',type));
+  inner.append(E('div','rules',rules));
+  card.append(inner);
+  card.append(E('div','pt',pt));
+  card.append(E('div','coll',coll));
+  return card;
+}
+function neon(variant,art,name,stats,txt,rar){
+  const card=E('div','card neon '+variant);
+  card.append(E('div','grid'));
+  card.append(E('div','rb',rar));
+  card.append(E('div','nm',name));
+  const win=P(E('div','win'),art,140); win.append(E('div','stripe')); card.append(win);
+  card.append(E('div','stats',stats.map(s=>`<div class="st">${s[0]}<b>${s[1]}</b></div>`).join('')));
+  card.append(E('div','txt',txt));
+  card.append(E('div','scan'));
+  return card;
+}
+function flat(variant,art,name,type,accent,chips,txt){
+  const card=E('div','card flat '+variant);
+  if(variant==='swiss'){const l=E('div','left');l.style.background=accent;card.append(l);}
+  else {const a=E('div','accent');a.style.background=accent;card.append(a);}
+  card.append(P(E('div','art'),art,150));
+  const b=E('div','body');
+  b.append(E('div','nm',name));
+  b.append(E('div','ty',type));
+  b.append(E('div','big',chips.map(c=>`<div>${c[0]}<b>${c[1]}</b></div>`).join('')));
+  b.append(E('div','txt',txt));
+  card.append(b);
+  return card;
+}
+function crest(variant,art,name,type,stats,txt,seal){
+  const card=E('div','card crest '+variant);
+  card.append(E('div','ribbon',name));
+  card.append(P(E('div','shield'),art,158));
+  card.append(E('div','ty',type));
+  card.append(E('div','stats',stats.map(s=>`<span>${s}</span>`).join('')));
+  card.append(E('div','txt',txt));
+  card.append(E('div','seal',seal));
+  return card;
+}
+function section(title, items){
+  const root=document.getElementById('root');
+  root.append(E('h2',null,title));
+  const row=E('div','row');
+  for(const it of items){const w=E('div','item');w.append(it.card);w.append(E('div','vlabel',it.label+'<small>'+it.note+'</small>'));row.append(w);}
+  root.append(row);
+}
+
+section('3 · Classic TCG', [
+  {card:tcg('gild','lancer','Lancer',3,'Defender — Melee · Reach','Sorties through the gate to skewer the front rank. Levels up in your War Party.','8','FoH · 014/120 ★'),label:'3a · Gilded Rare',note:'gold frame, mana orb, set dot, P/T'},
+  {card:tcg('iron','skull','Skeleton',1,'Foe — Undead','Cheap and relentless; rises in the second land. Resists nothing — bury it.','7','FoH · 031/120'),label:'3b · Iron Common',note:'steel frame, restrained'},
+  {card:tcg('foil','troll','Troll',9,'Foe — Boss','Winds up, then a devastating club. Shrugs off slows.','36','FoH · 100/120 ✦'),label:'3c · Foil Legendary',note:'rainbow foil edge + glow'},
+]);
+section('4 · Neon Holo', [
+  {card:neon('cyan','tower','WATCHTOWER',[['PWR','6'],['RATE','1.7'],['RNG','360']],'Attune: Arrow / Fire / Freeze.','BUILDING'),label:'4a · Cyan Cyber',note:'grid + scanlines + holo swipe'},
+  {card:neon('viol','minotaur','MINOTAUR',[['PWR','24'],['HP','130'],['SLOW','R']],'Heavy. Shrugs off frost; charges the wall.','ELITE'),label:'4b · Violet',note:'same system, magenta foil'},
+  {card:neon('amber','archer','ARCHER',[['PWR','11'],['RNG','240'],['ROLE','WALL']],'Mans the rampart; out-ranges enemy bowmen.','DEFENDER'),label:'4c · Amber',note:'warm variant for defenders'},
+]);
+section('5 · Minimal Flat', [
+  {card:flat('light','monastery','Monastery','Building · Support','#7fc4ff',[['HEAL','+6'],['WALL','mend'],['SLOW','1.2']],'Casts frost magic and ordains monks who heal allies and mend the wall.'),label:'5a · Light',note:'big numerals, type accent'},
+  {card:flat('dark','archery','Archery Range','Building · Ranged','#7ed05f',[['UNIT','Archer'],['RNG','240']],'Drafts archers who climb the wall and loose arrows over it.'),label:'5b · Dark',note:'same, dark theme'},
+  {card:flat('swiss','mine','Gold Mine','Building · Economy','#ffd95e',[['GOLD','+n'],['TIER','×']],'Funds the war effort each wave; output scales with tier.'),label:'5c · Swiss/Mono',note:'left stripe, monospace stats'},
+]);
+section('6 · Heraldic Crest', [
+  {card:crest('crim','troll','Troll','BOSS — DEEP LANDS',['PWR 36','HP 320'],'A mountain of muscle. Windup, then a crushing club.','☠'),label:'6a · Crimson',note:'ribbon + wax seal + shield'},
+  {card:crest('azu','lancer','Lancer','DEFENDER — REACH',['PWR 8','RCH ✦'],'Spear of the war party; first through the gate on a sortie.','⚔'),label:'6b · Azure',note:'allied/blue treatment'},
+  {card:crest('roy','tower','Watchtower','BUILDING — ROYAL',['PWR 6','RNG 360'],'The keep’s ranged ward. Attune to Arrow, Fire or Freeze.','♛'),label:'6c · Royal Gold',note:'gilded, premium'},
+]);
+</script>
+</body>
+</html>
