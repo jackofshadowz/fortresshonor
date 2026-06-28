@@ -895,6 +895,7 @@ function buildWave(w){
 }
 function makeEnemy(kind, hpS, at){
   const base = CONFIG.enemies[kind];
+  if (META.s.seen && !META.s.seen[kind]) META.s.seen[kind] = 1;   // Codex discovers this foe
   // emerge from the treeline at the island's top — never out on the water
   const sy = IY0 + 36 + Math.random()*60;   // emerge at the far northern treeline — a long march to the wall
   const hw = islandHalfW(sy, 34);
@@ -2972,18 +2973,34 @@ function drawCodexArt(c, ax, ay){
   }
 }
 function drawCard(x, y, w, h, c, locked){
-  const rar = locked ? '#5a6178' : (c.rar || '#9fb3c8');
-  ctx.save(); ctx.shadowColor = rar; ctx.shadowBlur = locked?0:6;
-  gradPanel(x, y, w, h, 12, locked?'rgba(30,34,52,0.95)':'rgba(42,52,86,0.96)', 'rgba(20,26,44,0.97)', rar, 2.5);
+  // ---- 3C "Foil Legendary": rainbow foil border, dark interior, art window, type line, rules box ----
+  ctx.save();
+  if (!locked){ ctx.shadowColor = 'rgba(160,120,255,0.7)'; ctx.shadowBlur = 11; }
+  let border;
+  if (locked){ border = '#3a4258'; }
+  else { border = ctx.createLinearGradient(x, y, x+w, y+h);
+    ['#ffe06a','#6ff3ff','#a06fff','#ff7be0','#ffe06a'].forEach((col,i,a)=>border.addColorStop(i/(a.length-1), col)); }
+  orr(x, y, w, h, 13, border, null);   // foil frame
   ctx.restore();
-  const ax = x+w/2, ay = y+50;
-  ocirc(ax, ay, 30, 'rgba(12,18,32,0.55)', rar, 2);
-  ctx.save(); ctx.beginPath(); ctx.arc(ax, ay, 28, 0, 7); ctx.clip();
-  if (locked){ chunkyText('?', ax, ay+8, 28, '#7a8398', null, '800'); } else drawCodexArt(c, ax, ay);
+  // dark interior
+  gradPanel(x+5, y+5, w-10, h-10, 9, 'rgba(34,26,62,0.99)', 'rgba(18,13,34,1)', null, 0);
+  // title plate
+  orr(x+9, y+9, w-18, 21, 6, 'rgba(58,42,110,0.92)', locked?'#4a5170':'#c9a2ff', 1.5);
+  chunkyText(locked ? '? ? ?' : c.name, x+w/2, y+23, 12, '#fff', '#10131f', '700');
+  // art window
+  const aw = w-22, ax = x+11, ay = y+34, ah = 64;
+  orr(ax, ay, aw, ah, 7, 'rgba(16,11,30,0.95)', locked?'#4a5170':'#a06fff', 2);
+  ctx.save(); rr(ax+2, ay+2, aw-4, ah-4, 6); ctx.clip();
+  if (locked) chunkyText('?', x+w/2, ay+ah/2+11, 30, '#4a5170', null, '800'); else drawCodexArt(c, x+w/2, ay+ah/2-2);
   ctx.restore();
-  chunkyText(locked ? '???' : c.name, x+w/2, y+92, 13, '#fff', '#10131f', '700');
-  chunkyText(locked ? ('Reach land ' + ((c.intro||0)+1)) : (c.role||''), x+w/2, y+108, 9, locked?'#8a93a8':'#cfe0f5', null, '600');
-  if (!locked && c.flav) chunkyText(c.flav, x+w/2, y+h-12, 8.5, '#aab7d0', null, '500');
+  // type line
+  chunkyText(locked ? 'Undiscovered' : (c.role||''), x+w/2, y+112, 9, locked?'#7a8398':'#e6d6ff', null, '600');
+  // rules / flavour box
+  orr(x+9, y+120, w-18, h-130, 6, 'rgba(24,17,52,0.92)', locked?'#39435f':'#6a4fae', 1.5);
+  if (locked) chunkyText('Meet this foe in battle', x+w/2, y+h-18, 8.5, '#8a93a8', null, '500');
+  else if (c.flav) chunkyText(c.flav, x+w/2, y+h-18, 8.5, '#d6c6ff', null, '500');
+  // foil rarity gem (bottom-right)
+  if (!locked){ const gx=x+w-16, gy=y+h-16; ocirc(gx, gy, 6, c.rar||'#ffd95e', '#1a1030', 2); glint(gx-2, gy-2.5, 1.6); }
 }
 function drawCodex(){
   uiHits = []; menuBg(); menuHeader('CODEX');
@@ -2993,11 +3010,11 @@ function drawCodex(){
   if (codexTab==='build') list = CARDS_BUILD;
   else if (codexTab==='def') list = CARDS_DEF;
   else list = Object.keys(ENEMY_NAME).map(k => ({ foe:k, name:ENEMY_NAME[k], role:'land '+((ENEMY_INTRO[k]||0)+1)+' · hp '+CONFIG.enemies[k].hp, intro:ENEMY_INTRO[k]||0, rar:'#ff8d7e' }));
-  const cw = (W-34)/2, ch = 138; let y = 134;
+  const cw = (W-34)/2, ch = 156; let y = 134;
   for (let i=0;i<list.length;i++){
     const col = i%2, x = 14 + col*(cw+6);
     if (col===0 && i>0) y += ch+8;
-    const locked = codexTab==='foe' && (list[i].intro||0) > (META.s.mapPos||0) + 1;   // foes a land+ ahead stay a mystery
+    const locked = codexTab==='foe' && !(META.s.seen && META.s.seen[list[i].foe]);   // foes stay a mystery until encountered
     drawCard(x, y, cw, ch, list[i], locked);
   }
   drawMenuToast();
@@ -3877,6 +3894,7 @@ const META = (function(){
     levels: {},                            // campaign progress: { [id]: {beaten, stars, best, city} }
     mapPos: 0,                             // which land the hero is standing on in the world map
     difficulty: 'normal',                  // easy | normal | hard | brutal
+    seen: {},                              // foe kinds encountered — the Codex grows as you meet them
     bestWave: 0,
     stats: { runs:0, kills:0, bossKills:0, fullClears:0, gemsEarned:0 },
   };
