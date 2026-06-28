@@ -122,8 +122,8 @@ const CONFIG = {
              sell:[3, 9, 24, 60, 150], max:5 },
   rarity:  { spawnRare:0.16, dmgMult:[1, 1.4, 1.9],            // Common / Rare / Epic
              col:['', '#ffd95e', '#c9a2e8'], name:['', 'RARE', 'EPIC'] },
-  wave:    { baseCount:8, perWave:3.2, gapBase:1.3, gapPerWave:0.07, gapMin:0.3,
-             hpLin:0.55, hpQuad:0.045, bossEvery:5 },
+  wave:    { baseCount:11, perWave:4.2, gapBase:1.15, gapPerWave:0.07, gapMin:0.26,
+             hpLin:0.72, hpQuad:0.06, bossEvery:5 },
   enemies: {
     grunt:  { hp:15,  spd:38, dps:5,  r:18, gold:2,  col:'#7ec850' },
     runner: { hp:9,   spd:82, dps:4,  r:13, gold:2,  col:'#ff7ba6' },
@@ -686,10 +686,18 @@ function bossRushWave(w, hpS){
   if (w % 3 === 0) q.push(makeEnemy('boss', hpS*1.15, t + 3.2));
   return q;
 }
+// how strong the player's stronghold is right now — sum of building tiers + town + champion
+function basePower(){
+  let p = 0;
+  for (let i=0;i<ROWS*COLS;i++){ const g = grid[i]; if (g && g.tier) p += g.tier; }
+  return p + townLevel() + (hero ? hero.lvl : 0);
+}
+function enemyPowerHp(){ return 1 + Math.min(basePower()*0.02, 1.6); }    // tougher foes as your base grows (cap +160%)
+function enemyPowerDps(){ return 1 + Math.min(basePower()*0.012, 0.9); }  // and far more dangerous (cap +90%)
 function buildWave(w){
   const q = [];
   const wc = CONFIG.wave;
-  const hpS = 1 + wc.hpLin*(w-1) + wc.hpQuad*(w-1)*(w-1);
+  const hpS = (1 + wc.hpLin*(w-1) + wc.hpQuad*(w-1)*(w-1)) * enemyPowerHp();
   if (runMode === 'boss') return bossRushWave(w, hpS);
   const m = waveMod || { key:'none' };
   const count = Math.max(1, Math.round((wc.baseCount + Math.floor(w*wc.perWave)) * (m.count||1)));
@@ -712,6 +720,7 @@ function buildWave(w){
       else if (w >= ne.rareFrom && Math.random() < ne.rareChance){ kind = ne.kind; special = true; break; }
     }
     const e = makeEnemy(kind, hpS*(m.hp||1), t);
+    e.dps *= enemyPowerDps();   // foes hit harder as your stronghold grows
     if (special){ e.special = true; e.hp = e.maxhp = e.hp*1.4; e.gold = Math.round(e.gold*2); }   // early specials are tougher + richer
     if (m.dps) e.dps *= m.dps;
     if (m.spd) e.spd *= m.spd;
@@ -3168,7 +3177,9 @@ function drawBuilding(x, y, type, tier, recoil, noBadge){
   // each line KEEPS its building identity (Archery stays Archery, Monastery stays Monastery) —
   // it just grows and gains stars/glow/banner each tier (FM-style). A skin only adds a glow.
   const sprite = LINE_SPRITE[type] || 'tower_b';
-  const scale = (LINE_BASESCALE[sprite] || 0.30) * Math.min(0.82 + tier*0.12, 1.7);   // bigger every tier (capped)
+  // most buildings grow with tier; the mine keeps a steady footprint (only its output scales)
+  const grow = type==='mine' ? 1.04 : Math.min(0.82 + tier*0.12, 1.7);
+  const scale = (LINE_BASESCALE[sprite] || 0.30) * grow;
   const glow = (skin && skin.glow) || tier>=3;
   ctx.save(); ctx.translate(0, recoil ? recoil*8 : 0);
   if (glow) aura(cx, baseY-34, 40 + tier*6, tier>=4 ? '#ffe08a' : TYPES[type].trim);
