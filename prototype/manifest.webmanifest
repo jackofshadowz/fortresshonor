@@ -1,0 +1,15 @@
+{
+  "name": "Fortress of Honor",
+  "short_name": "Fortress",
+  "description": "Merge buildings, raise a war party, and defend your fortress across the lands.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#2b86b8",
+  "theme_color": "#2b86b8",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

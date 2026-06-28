@@ -3,8 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Fortress of Honor — Prototype</title>
+<title>Fortress of Honor</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏰</text></svg>">
+<!-- installable PWA -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2b86b8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fortress">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -36,7 +44,12 @@
    Fight phase: waves march on the wall; towers defend.
    ============================================================ */
 
-const W = 480, H = 800;
+const W = 480;
+// H is the stage height. It is no longer a fixed 800 — resize() stretches it to
+// match the device's safe-area aspect so the game FILLS the screen (no letterbox).
+// W stays fixed (the art is authored at 480 wide); only the vertical extent grows,
+// which the camera fills with more of the island/sky scene and the bottom UI follows.
+let H = 800;
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 let SCALE = 1;
@@ -4553,6 +4566,10 @@ function drawTitleMenu(){
   hit(W/2+64, 662, 104, 46, ()=>{ mode='kingdom'; });
   if (hasNewBadge()){ ocirc(W/2+164, 660, 8, '#ff5e4d', '#fff', 2.5); }
 }
+</script>
+<script>
+  // register the service worker so the game installs + runs offline
+  if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 </script>
 </body>
 </html>
