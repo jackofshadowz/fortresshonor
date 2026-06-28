@@ -3107,6 +3107,7 @@ function I(name){
  'ic_skull','ic_skullfire','ic_heart','ic_swords9',
  'pre_pagoda','pre_temple','pre_keep','pre_cathedral','pre_palace',
  'e_skull','e_thief','e_gnoll','e_minotaur','e_troll',
+ 'e_skull_atk','e_thief_atk','e_gnoll_atk','e_minotaur_atk','e_troll_atk',
  'ally_lancer','ally_monk','ally_lancer_atk','ally_monk_heal','ally_archer','ally_archer_shoot','mine'].forEach(I);
 // prestige wonders: real grand-building art (SevenKingdoms CC0)
 const PRE_SPR = { p_statue:'pre_pagoda', p_fountain:'pre_temple', p_garden:'pre_keep', p_cathedral:'pre_cathedral', p_throne:'pre_palace' };
@@ -3477,22 +3478,24 @@ function drawGolem(r, step, e){
   spr('golem', 224, 96, f, 0, 0, e.r*0.95, 1.18*r/24, e.face < 0, 0.95);
 }
 // generic animated-sprite enemy from the Enemy Pack (fw×fh sheet, `frames` cols, row 0)
-function spriteEnemy(name, fw, fh, frames, baseS, ay){
+function spriteEnemy(name, fw, fh, frames, baseS, ay, atk){
   ay = ay || 0.66;   // Enemy-Pack art sits high in its frame; anchor near the character's feet so it doesn't float
   return function(r, step, e){
-    const f = Math.floor(time*8 + (e.wob||0)*4) % frames;
-    spr(name, fw, fh, f, 0, 0, e.r*0.6, baseS * r/18, e.face < 0, ay);
+    const striking = e.atk && atk;                    // playing the Attack sheet while striking the wall/foe
+    const sheet = striking ? atk.name : name, fn = striking ? atk.fn : frames;
+    const f = Math.floor(time*9 + (e.wob||0)*4) % fn;
+    spr(sheet, fw, fh, f, 0, 0, e.r*0.6, baseS * r/18, e.face < 0, ay);
     if (e.special){ star(0, -e.r*2.2, 6, '#ffd95e', '#a8761c'); }   // rare-early special marker
   };
 }
 const ENEMY_DRAW = { grunt:drawGoblin, runner:drawScout, brute:drawOgre,
                      raider:drawRaider, sapper:drawSapper, boss:drawDarkKnight,
                      archer:drawArcherE, bombardier:drawBombardier, golem:drawGolem,
-                     skull:    spriteEnemy('e_skull',    192, 192, 6,  0.62),
-                     thief:    spriteEnemy('e_thief',    192, 192, 6,  0.60),
-                     gnoll:    spriteEnemy('e_gnoll',    192, 192, 8,  0.64),
-                     minotaur: spriteEnemy('e_minotaur', 320, 320, 8,  0.52),
-                     troll:    spriteEnemy('e_troll',    384, 384, 10, 0.54) };
+                     skull:    spriteEnemy('e_skull',    192, 192, 6,  0.62, 0.66, {name:'e_skull_atk',    fn:7}),
+                     thief:    spriteEnemy('e_thief',    192, 192, 6,  0.60, 0.66, {name:'e_thief_atk',    fn:6}),
+                     gnoll:    spriteEnemy('e_gnoll',    192, 192, 8,  0.64, 0.66, {name:'e_gnoll_atk',    fn:8}),
+                     minotaur: spriteEnemy('e_minotaur', 320, 320, 8,  0.52, 0.66, {name:'e_minotaur_atk', fn:12}),
+                     troll:    spriteEnemy('e_troll',    384, 384, 10, 0.54, 0.66, {name:'e_troll_atk',    fn:6}) };
 function drawEprojs(){
   for (const q of eprojs){
     const k = Math.min(1, q.t/q.dur);
