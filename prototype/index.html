@@ -97,12 +97,16 @@ const WALL_FILL = '#f6eed8', WALL_SHADE = '#e2d4b2', WALL_INK = '#75664c';
 
 /* ---------- building catalogue ---------- */
 const TYPES = {
-  archer: { name:'Archer Tower', roof:'#5cc04c', roofD:'#41973a', ink:'#2e6326', trim:'#a9e386',
-            dmg:3.2, rate:2.2, splash:0, slow:0, proj:'arrow' },
-  cannon: { name:'Cannon Keep', roof:'#ff9d3f', roofD:'#e07527', ink:'#99500f', trim:'#ffcf9a',
-            dmg:11, rate:0.65, splash:48, slow:0, proj:'ball' },
-  frost:  { name:'Frost Spire', roof:'#57a9f2', roofD:'#3b80d2', ink:'#2a5a9e', trim:'#bfe4ff',
-            dmg:4.5, rate:1.3, splash:0, slow:1.2, proj:'bolt' },
+  tower:  { name:'Watchtower', roof:'#8aa0b8', roofD:'#5f7488', ink:'#3a4a5e', trim:'#cdd9e8',
+            dmg:6, rate:1.7, splash:0, slow:0, proj:'bolt', shoots:true },          // the dedicated SHOOTER
+  archer: { name:'Archery Range', roof:'#5cc04c', roofD:'#41973a', ink:'#2e6326', trim:'#a9e386',
+            produces:'archer' },                                                     // musters ranged archers
+  cannon: { name:'Barracks', roof:'#ff9d3f', roofD:'#e07527', ink:'#99500f', trim:'#ffcf9a',
+            produces:'lancer' },                                                     // musters melee lancers
+  frost:  { name:'Monastery', roof:'#57a9f2', roofD:'#3b80d2', ink:'#2a5a9e', trim:'#bfe4ff',
+            dmg:4.5, rate:1.1, splash:0, slow:1.2, proj:'bolt', shoots:true, produces:'monk' }, // magic shots + monks
+  mine:   { name:'Gold Mine', roof:'#e8c04a', roofD:'#c79a2a', ink:'#8a6a12', trim:'#ffe9a0',
+            gold:true },                                                             // generates gold each wave
 };
 const TYPE_KEYS = Object.keys(TYPES);
 
@@ -924,10 +928,11 @@ function updateFight(dt){
 
   for (const t of towers()){
     const g = t.g;
+    const def = TYPES[g.type];
+    if (!def.shoots) continue;   // only Watchtowers (and Monasteries' magic) fire; producers/mines don't
     if (g.reload > 0){ g.reload -= dt; if (g.reload <= 0) g.mag = 4 + g.tier; continue; }   // out of ammo — reloading the magazine
     g.cd = (g.cd||0) - dt;
     if (g.cd > 0) continue;
-    const def = TYPES[g.type];
     const range = TIER_RANGE[g.tier-1] * RUN.rangeMult;
     let best = null, bd = 1e9;
     for (const e of enemies){
@@ -951,14 +956,19 @@ function updateFight(dt){
     }
   }
 
-  // barracks muster lancers, monasteries muster monks — melee allies that sortie out to fight
+  // producer buildings muster their unit (archery->archers, barracks->lancers, monastery->monks); mines make gold
   for (const t of towers()){
-    const g = t.g, akind = g.type==='cannon' ? 'lancer' : g.type==='frost' ? 'monk' : null;
-    if (!akind) continue;
+    const g = t.g, def = TYPES[g.type];
+    if (def.gold){   // GOLD MINE: trickle gold during the wave, scaling with tier
+      g.goldT = (g.goldT||0) - dt;
+      if (g.goldT <= 0){ g.goldT = Math.max(1.2, 3 - g.tier*0.3); const amt = 1 + g.tier; gold += amt; floaters.push({ x:t.x, y:t.y-14, text:'+'+amt, t:0, dur:0.9, size:13, color:'#ffd95e' }); }
+      continue;
+    }
+    if (!def.produces) continue;
     g.allyCd = (g.allyCd==null ? 11 : g.allyCd) - dt;   // initial delay before the first muster
     if (g.allyCd <= 0 && allies.length < armyCap()){
       g.allyCd = Math.max(11, 20 - g.tier*1.3);   // long recharge — a few defenders, not a swarm
-      allies.push({ x:t.x+(Math.random()-0.5)*18, y:t.y+12, kind:akind, hp:18+g.tier*12, maxhp:18+g.tier*12, dmg:4+g.tier*2.2, cd:0, face:1, t:0, moving:false });
+      allies.push({ x:t.x+(Math.random()-0.5)*18, y:t.y+12, kind:def.produces, hp:18+g.tier*12, maxhp:18+g.tier*12, dmg:4+g.tier*2.2, cd:0, face:1, t:0, moving:false });
     }
   }
   updateAllies(dt);
@@ -1116,7 +1126,18 @@ function updateAllies(dt){
   const gateX = (FIELD_L+FIELD_R)/2;
   allies.forEach((a, i) => {
     a.t += dt; if (a.cd > 0) a.cd -= dt;
-    if (a.atkT > 0) a.atkT -= dt; if (a.healAnim > 0) a.healAnim -= dt;
+    if (a.atkT > 0) a.atkT -= dt; if (a.healAnim > 0) a.healAnim -= dt; if (a.shootAnim > 0) a.shootAnim -= dt;
+    if (a.kind === 'archer'){
+      // ranged defender: hold in ranks behind the wall and loose arrows at any foe in range (over the wall too)
+      const sx = gateX - 48 + (i%4)*30, sy = WALL_Y + 30 + Math.floor(i/4)*22;
+      if (Math.hypot(sx-a.x, sy-a.y) > 4) moveViaGate(a, sx, sy, 46, dt); else a.moving = false;
+      let best=null, bd=1e9; for (const e of enemies){ if (e.hp<=0) continue; const d=Math.hypot(e.x-a.x, e.y-a.y); if (d<180 && d<bd){ bd=d; best=e; } }
+      if (best){ a.face = best.x < a.x ? -1 : 1; if (a.cd<=0){ a.cd=1.2; a.shootAnim=0.5; projectiles.push({ x:a.x, y:a.y-14, tgt:best, tx:best.x, ty:best.y, dmg:a.dmg*1.1, kind:'arrow', spd:480, splash:0, slow:0 }); if (Math.random()<0.4 && sfx.shoot) sfx.shoot(); } }
+      for (const e of enemies){ if (e.hp>0 && Math.hypot(e.x-a.x, e.y-a.y) < 20){ a.hp -= e.dps*dt; break; } }   // can be cut down if the enemy reaches them
+      a.x = Math.max(FIELD_L+10, Math.min(FIELD_R-10, a.x));
+      a.y = Math.max(FIELD_TOP+10, Math.min(GY+ROWS*CELL, a.y));
+      return;
+    }
     // lancers sortie on the order; monks are SUPPORT — they only wade into melee if the wall is breached (last stand)
     const charge = a.kind === 'monk' ? breached : (hero && (hero.sortie || breached));
     if (charge){
@@ -1155,7 +1176,10 @@ function updateAllies(dt){
 function drawAllies(){
   for (const a of allies){
     ctx.fillStyle='rgba(20,50,30,0.25)'; ctx.beginPath(); ctx.ellipse(a.x, a.y+10, 9, 3, 0, 0, 7); ctx.fill();
-    if (a.kind==='lancer'){
+    if (a.kind==='archer'){
+      if (a.shootAnim > 0) spr('ally_archer_shoot', 192, 192, Math.min(7, Math.floor((0.5-a.shootAnim)/0.5*8)), 0, a.x, a.y+4, 0.52, a.face<0, 0.68);
+      else spr('ally_archer', 192, 192, Math.floor(time*8 + a.t*4)%4, 0, a.x, a.y+4, 0.52, a.face<0, 0.68);
+    } else if (a.kind==='lancer'){
       if (a.atkT > 0) spr('ally_lancer_atk', 320, 320, Math.min(2, Math.floor((0.4-a.atkT)/0.4*3)), 0, a.x, a.y+4, 0.50, a.face<0, 0.72);
       else spr('ally_lancer', 320, 320, Math.floor(time*10 + a.t*4)%6, 0, a.x, a.y+4, 0.50, a.face<0, 0.72);
     } else {
@@ -2891,7 +2915,7 @@ function I(name){
  'ic_skull','ic_skullfire','ic_heart','ic_swords9',
  'pre_pagoda','pre_temple','pre_keep','pre_cathedral','pre_palace',
  'e_skull','e_thief','e_gnoll','e_minotaur','e_troll',
- 'ally_lancer','ally_monk','ally_lancer_atk','ally_monk_heal'].forEach(I);
+ 'ally_lancer','ally_monk','ally_lancer_atk','ally_monk_heal','ally_archer','ally_archer_shoot','mine'].forEach(I);
 // prestige wonders: real grand-building art (SevenKingdoms CC0)
 const PRE_SPR = { p_statue:'pre_pagoda', p_fountain:'pre_temple', p_garden:'pre_keep', p_cathedral:'pre_cathedral', p_throne:'pre_palace' };
 // real fantasy item icons (Shikashi CC0) for store upgrades + gear
@@ -3118,20 +3142,26 @@ function typeGlyph(cx, cy, type){
   const T = TYPES[type];
   ocirc(cx, cy, 8.5, T.roof, '#1c2030', 2.2);
   ctx.save(); ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff'; ctx.lineWidth = 1.8; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  if (type === 'archer'){
+  if (type === 'archer'){          // bow & arrow
     ctx.beginPath(); ctx.moveTo(cx-4, cy+4); ctx.lineTo(cx+4, cy-4); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(cx+4.5, cy-4.5); ctx.lineTo(cx+0.5, cy-4); ctx.lineTo(cx+4, cy-0.5); ctx.closePath(); ctx.fill();
-  } else if (type === 'cannon'){
-    ctx.beginPath(); ctx.arc(cx, cy+1, 3.4, 0, 7); ctx.fill();
-    ctx.strokeStyle = '#ffd95e'; ctx.beginPath(); ctx.moveTo(cx+2.4, cy-2); ctx.lineTo(cx+4.6, cy-5); ctx.stroke();
-  } else {
+  } else if (type === 'cannon'){   // sword (barracks → lancers)
+    ctx.beginPath(); ctx.moveTo(cx-3, cy+4); ctx.lineTo(cx+3.5, cy-4); ctx.stroke();
+    ctx.strokeStyle='#ffd95e'; ctx.beginPath(); ctx.moveTo(cx-4.5, cy+2.5); ctx.lineTo(cx-1.5, cy+5.5); ctx.stroke();
+  } else if (type === 'tower'){    // shooting bolt
+    ctx.beginPath(); ctx.moveTo(cx, cy-4.5); ctx.lineTo(cx, cy+4.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx-3, cy+0.5); ctx.lineTo(cx, cy+4.5); ctx.lineTo(cx+3, cy+0.5); ctx.stroke();
+  } else if (type === 'mine'){     // coin
+    ctx.fillStyle='#ffd95e'; ctx.beginPath(); ctx.arc(cx, cy, 3.8, 0, 7); ctx.fill();
+    ctx.strokeStyle='#8a6a12'; ctx.lineWidth=1.4; ctx.beginPath(); ctx.moveTo(cx, cy-2); ctx.lineTo(cx, cy+2); ctx.stroke();
+  } else {                          // frost snowflake
     for (let k=0;k<3;k++){ const a = k*Math.PI/3; ctx.beginPath(); ctx.moveTo(cx-Math.cos(a)*4.5, cy-Math.sin(a)*4.5); ctx.lineTo(cx+Math.cos(a)*4.5, cy+Math.sin(a)*4.5); ctx.stroke(); }
   }
   ctx.restore();
 }
-const TYPE_ROLE = { archer:'fast • single target', cannon:'slow • splash', frost:'slows enemies' };
-const LINE_SPRITE = { archer:'archery_b', cannon:'barracks_r', frost:'monastery_p' };
-const LINE_BASESCALE = { archery_b:0.30, barracks_r:0.30, monastery_p:0.27 };
+const TYPE_ROLE = { tower:'shoots foes', archer:'musters archers', cannon:'musters lancers', frost:'magic + monks', mine:'makes gold' };
+const LINE_SPRITE = { tower:'tower_b', archer:'archery_b', cannon:'barracks_r', frost:'monastery_p', mine:'mine' };
+const LINE_BASESCALE = { archery_b:0.30, barracks_r:0.30, monastery_p:0.27, tower_b:0.34, mine:0.40 };
 function drawBuilding(x, y, type, tier, recoil, noBadge){
   const cx = x+CELL/2, baseY = y+CELL-2;
   const skin = metaEquip('tower');
