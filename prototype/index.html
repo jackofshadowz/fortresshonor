@@ -969,6 +969,29 @@ function updateFight(dt){
       e.face = side > 0 ? -1 : 1;
       continue;
     }
+    if (e.kind === 'thief'){
+      // ASSASSIN: scales the wall (ignores the gate), beelines for the champion/party, strikes to kill
+      let tgt = (hero && !hero.down) ? hero : null;
+      if (!tgt){ let bd=1e9; for (const k of knights){ const d=Math.hypot(k.x-e.x,k.y-e.y); if(d<bd){bd=d;tgt=k;} } }
+      if (!tgt){ let bd=1e9; for (const a of allies){ if(a.hp<=0)continue; const d=Math.hypot(a.x-e.x,a.y-e.y); if(d<bd){bd=d;tgt=a;} } }
+      if (tgt){
+        const dx=tgt.x-e.x, dy=tgt.y-e.y, d=Math.hypot(dx,dy)||1;
+        if (Math.abs(dx) > 1) e.face = dx < 0 ? -1 : 1;
+        if (d < 22){
+          e.atk = true; e.cd = (e.cd||0) - dt;
+          if (e.cd <= 0){
+            e.cd = 1.3;
+            if (tgt === hero){ hero.hp -= hero.maxhp*0.34; floaters.push({ x:hero.x, y:hero.y-32, text:'ASSASSINATED!', t:0, dur:1.1, size:14, color:'#ff5e4d' }); }
+            else { tgt.hp = 0; floaters.push({ x:tgt.x, y:tgt.y-24, text:'CUT DOWN!', t:0, dur:1.0, size:13, color:'#ff5e4d' }); }
+            puff(tgt.x, tgt.y, '#ff5e4d'); sfx.hurt && sfx.hurt(); shake = Math.max(shake, 7);
+          }
+        } else {
+          e.x += dx/d * e.spd * 1.15 * dt; e.y += dy/d * e.spd * 1.15 * dt;   // climb straight over the wall
+        }
+        continue;
+      }
+      // nobody to hunt → behave like a normal raider (fall through)
+    }
     if (!breached){
       if (e.y < WALL_Y - e.r - 4){
         e.y += sp;
@@ -1325,6 +1348,7 @@ function drawAllies(){
 const SLOW_RESIST = { golem:0.25, boss:0.3, minotaur:0.3, troll:0.2 };   // big units shrug off most of a slow
 function hitEnemy(e, dmg, slow, fx){
   if (e.kind === 'golem' && fx && fx.kind === 'arrow') dmg *= 0.35;   // stone hide shrugs off arrows
+  if (e.kind === 'thief' && fx && fx.kind === 'arrow') dmg *= 0.4;    // the assassin is nimble — arrows mostly whiff
   e.hp -= dmg; e.hitT = 0.1;
   if (slow){
     const rr = SLOW_RESIST[e.kind];
@@ -2870,12 +2894,6 @@ cv.addEventListener('pointerdown', ev => {
     else toast('No gems — earn them by clearing levels');
     return;
   }
-  // tap the wall prompt to train the guards into archers
-  if (guardUpBtn && inRect(p, guardUpBtn)){
-    if (spendGems(200)){ META.s.mods.wallarchers = true; META.save(); banner('Archers trained!', '#7ed05f'); sfx.fanfare(); }
-    else toast('Need 200 gems — earn idle or via the Store');
-    return;
-  }
   // pay to repair the wall / rebuild razed cottages
   if (repairWallBtn && inRect(p, repairWallBtn)){
     if (gold >= repairWallBtn.cost){ gold -= repairWallBtn.cost; wallHP = wallMax; breached = false; banner('Wall repaired!', '#7fc4ff'); sfx.merge && sfx.merge(); }
@@ -3073,15 +3091,7 @@ function frame(now){
   drawFloaters(dt);                // world-anchored combat text rides the camera
   ctx.restore();                   // --- end world camera ---
   if (mode === 'build' || mode === 'clear') drawTray(); else if (mode === 'fight') drawFightHUD();
-  // in-build prompt to upgrade the wall guards to archers (discoverable, in-context)
-  guardUpBtn = null;
-  if (mode === 'build' && !META.s.mods.wallarchers){
-    const gs = toScreen((FIELD_L+FIELD_R)/2, WALL_Y - 6);
-    const bw = 168, bh = 30, bx = Math.round(gs.x - bw/2), by = Math.round(gs.y - bh - 10);
-    chunkyText('▲ upgrade the wall', gs.x, by - 8, 10, '#fff', '#10131f', '700');
-    chunkyBtn(bx, by, bw, bh, '#7ed05f', '#56a83c', '#2e6326', 'TRAIN ARCHERS  200◆', 12);
-    guardUpBtn = { x:bx, y:by, w:bw, h:bh };
-  }
+  guardUpBtn = null;   // (removed: archers now come from Archery buildings, not a wall upgrade)
   // pay-to-repair: the wall and razed cottages stay ruined until you fund them
   repairWallBtn = null; rebuildBtn = null;
   if (mode === 'build' && wallHP < wallMax){
@@ -3781,7 +3791,6 @@ const MOD_CAT = [
   { id:'treasury', name:'Treasury',         desc:'+20% gold from kills',       cost:200 },
   { id:'bulwark',  name:'Bulwark',          desc:'+40 max wall HP',            cost:180 },
   { id:'warhorn',  name:'War Horn',         desc:'+12% tower fire rate',       cost:240 },
-  { id:'wallarchers', name:'Train Archers', desc:'Wall guards wield bows & shoot', cost:200 },
 ];
 // Prestige: pure flex. Spend Gems, gain permanent Honor rank. One-time trophies.
 const PRESTIGE_CAT = [
