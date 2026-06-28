@@ -2928,10 +2928,20 @@ function drawMap(){
   const moving = !!mapWalk, f = moving ? Math.floor(time*9)%6 : Math.floor(time*4)%6, row = moving ? 1 : 0;
   spr(heroSprite(), 192, 192, f, row, 0, 30, 0.62, mapWalk && mapNodeXY(mapWalk.to).x < mapNodeXY(mapWalk.from).x, 0.78);
   ctx.restore();
-  chunkyBtn(14, 724, 150, 44, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BACK', 17);
-  hit(14, 724, 150, 44, ()=>{ mode='title'; });
-  chunkyBtn(W-164, 724, 150, 44, '#7fc4ff', '#3b80d2', '#234a7e', 'CODEX', 17);
-  hit(W-164, 724, 150, 44, ()=>{ mode='codex'; });
+  // big PLAY button — enter the land the hero is standing on (no guessing which node to tap)
+  if (!mapWalk){
+    const cur = META.s.mapPos||0, py = H-132, pw = 280, px = W/2-pw/2;
+    chunkyText('▶  ' + LEVELS[cur].name + '  ·  ' + LEVELS[cur].waves + ' waves', W/2, py-10, 12, '#fff', '#23344a', '700');
+    const pulse = 1 + Math.sin(time*4)*0.02;
+    ctx.save(); ctx.translate(W/2, py+30); ctx.scale(pulse,pulse);
+    chunkyBtn(-pw/2, -30, pw, 60, '#ff9c3f', '#d9742a', '#9c4f12', 'PLAY', 26);
+    ctx.restore();
+    hit(px, py, pw, 60, ()=>startLevel(cur));
+  }
+  chunkyBtn(14, H-60, 150, 46, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BACK', 17);
+  hit(14, H-60, 150, 46, ()=>{ mode='title'; });
+  chunkyBtn(W-164, H-60, 150, 46, '#7fc4ff', '#3b80d2', '#234a7e', 'CODEX', 17);
+  hit(W-164, H-60, 150, 46, ()=>{ mode='codex'; });
 }
 function drawWon(){
   uiHits = [];
