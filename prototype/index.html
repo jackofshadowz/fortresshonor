@@ -151,6 +151,38 @@ function bgmTick(){
 }
 function startBGM(){ if (bgmOn) return; bgmOn = true; bgmTick(); }
 
+/* ---------- real music: xDeviruchi "16-bit Fantasy & Adventure" (used with credit) ---------- */
+const MUSIC = { menu:'assets/music/m_menu.mp3', build:'assets/music/m_build.mp3', fight:'assets/music/m_battle.mp3', victory:'assets/music/m_victory.mp3' };
+let musicEl = null, musicKey = '', musicVol = 0, musicStarted = false;
+function musicForMode(){
+  if (mode === 'fight') return 'fight';
+  if (mode === 'won')   return 'victory';
+  if (mode === 'build' || mode === 'clear' || mode === 'perk') return 'build';
+  return 'menu';   // title / map / store / heroes / kingdom / gear / badges / codex / over
+}
+function startMusic(){
+  if (musicStarted) return; musicStarted = true;
+  musicEl = new Audio(); musicEl.loop = true; musicEl.volume = 0; musicEl.preload = 'auto';
+  musicKey = ''; updateMusic(0.001);
+}
+function updateMusic(dt){
+  if (!musicStarted || !musicEl) return;
+  const want = musicForMode();
+  if (want !== musicKey){                                  // cross-fade: fade out, swap, fade in
+    musicVol += (0 - musicVol) * Math.min(1, dt*5);
+    if (musicVol < 0.04 || !musicKey){
+      musicKey = want; musicEl.src = MUSIC[want]; musicEl.loop = (want !== 'victory'); musicVol = 0;
+      try { musicEl.currentTime = 0; } catch(e){}
+      if (!muted) musicEl.play().catch(()=>{});
+    }
+  } else {
+    musicVol += ((muted ? 0 : 0.5) - musicVol) * Math.min(1, dt*2.5);
+  }
+  musicEl.volume = Math.max(0, Math.min(1, musicVol));
+  if (muted){ if (!musicEl.paused) musicEl.pause(); }
+  else if (musicEl.paused && musicEl.src){ musicEl.play().catch(()=>{}); }
+}
+
 /* ---------- palette ---------- */
 const INK = '#3a3548';                 // shared deep ink for characters & UI
 const WALL_FILL = '#f6eed8', WALL_SHADE = '#e2d4b2', WALL_INK = '#75664c';
@@ -2853,6 +2885,7 @@ function drawTitle(){
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 738, W, 62);
   chunkyText('Merge buildings  •  raise your war party', W/2, 714, 15, '#5b6ba8', null, '600');
   chunkyText('Defend the wall across the lands!', W/2, 738, 15, '#5b6ba8', null, '600');
+  chunkyText('♪ Music by Marllon Silva (xDeviruchi)', W/2, 760, 9, '#8a93b8', null, '500');
   if (bestWave > 0) chunkyText('Best: wave ' + bestWave, W/2, 762, 14, '#c9982a', null, '600');
   ctx.globalAlpha = 0.75 + Math.sin(time*3)*0.25;
   chunkyText('— tap to begin —', W/2, 784, 20, '#ff9c3f', '#fff', '600');
@@ -3089,7 +3122,7 @@ let downSlot = null, downPos = null;
 
 cv.addEventListener('pointerdown', ev => {
   audio(); if (AC && AC.state === 'suspended') AC.resume();
-  startBGM();   // kick off the background score on the first interaction
+  startMusic();   // kick off the real soundtrack on the first interaction
   const p = toLogical(ev);
   ptr.x = p.x; ptr.y = p.y; ptr.down = true;
   downPos = p; downSlot = null;
@@ -3251,6 +3284,7 @@ let last = performance.now();
 function frame(now){
   const dt = Math.min(0.05, (now - last)/1000);
   last = now; time += dt;
+  updateMusic(dt);   // soundtrack runs in every mode (menus + battle)
 
   if (!assetsReady()){
     ctx.fillStyle = '#45b0e5'; ctx.fillRect(VX0,VY0,VXW,VYH);
