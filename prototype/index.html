@@ -4446,20 +4446,20 @@ function drawBadges(){
   if (changed) META.save();
   const got = BADGES.filter(b=>META.s.badges[b.id]).length;
   chunkyText(got+' / '+BADGES.length+' earned', W/2, 116, 14, '#fff', null, '600');
-  const cols=3, cw=148, ch=104, gx=14, gy=140, gap=8;
+  const cols=2, gap=10, cw=(W-28-gap)/2, ch=92, gx=14, gy=140;
   BADGES.forEach((b,i)=>{
     const x=gx+(i%cols)*(cw+gap), y=gy+Math.floor(i/cols)*(ch+gap), have=!!META.s.badges[b.id];
     const fr = have?'#ffd95e':'#5a6488';
-    ctx.save(); ctx.shadowColor=fr; ctx.shadowBlur=have?10:0;
-    gradPanel(x, y, cw, ch, 12, have?'rgba(78,64,28,0.62)':'rgba(46,56,90,0.95)', 'rgba(26,32,54,0.95)', fr, have?3:2);
-    ctx.restore();
-    ctx.save(); ctx.shadowColor=fr; ctx.shadowBlur=have?8:0; ocirc(x+cw/2, y+34, 22, 'rgba(14,20,36,0.9)', fr, 2.6); ctx.restore();
-    ctx.save(); if(!have){ ctx.globalAlpha=0.5; ctx.filter='grayscale(0.8) brightness(0.6)'; } if(!realIcon(BADGE_ICON[b.id], x+cw/2, y+34, 32)) badgeIcon(b.id, x+cw/2, y+34); ctx.filter='none'; ctx.globalAlpha=1; ctx.restore();
-    if (have) star(x+cw-16, y+16, 6.5, '#ffd95e', '#a8761c');
-    chunkyText(b.name, x+cw/2, y+64, 11, have?'#fff':'#aab4d0', '#10131f', '700');
-    chunkyText(b.desc, x+cw/2, y+78, 8.5, have?'#dfe6ff':'#8a93b8', null, '500');
-    honorIcon(x+cw/2-20, y+93, 5);
-    chunkyText('+'+b.honor, x+cw/2-10, y+94, 9.5, '#ffd95e', null, '700', 'left');
+    metaPanel(x, y, cw, ch, fr, have?11:0, have);
+    const mx=x+42, my=y+ch/2;
+    ctx.save(); ctx.shadowColor=fr; ctx.shadowBlur=have?8:0; ocirc(mx, my, 30, 'rgba(14,20,36,0.9)', fr, 2.8); ctx.restore();
+    ctx.save(); if(!have){ ctx.globalAlpha=0.5; ctx.filter='grayscale(0.8) brightness(0.6)'; }
+    if(!realIcon(BADGE_ICON[b.id], mx, my, 42)){ ctx.save(); ctx.translate(mx,my); ctx.scale(1.25,1.25); badgeIcon(b.id, 0, 0); ctx.restore(); }
+    ctx.filter='none'; ctx.globalAlpha=1; ctx.restore();
+    if (have) star(x+cw-16, y+16, 7, '#ffd95e', '#a8761c');
+    chunkyText(b.name, x+80, y+30, 13, have?'#fff':'#aab4d0', '#10131f', '800', 'left');
+    chunkyText(b.desc, x+80, y+50, 9, have?'#dfe6ff':'#8a93b8', null, '500', 'left');
+    honorIcon(x+82, y+70, 5.5); chunkyText('+'+b.honor, x+92, y+71, 11, '#ffd95e', null, '800', 'left');
   });
   drawMenuToast();
 }
@@ -4497,25 +4497,28 @@ function gearIcon(id, cx, cy){
 }
 function drawGear(){
   uiHits = []; menuBg(); menuHeader('GEAR');
+  chunkyBtn(W-104, 50, 92, 34, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'HEROES', 14);
+  hit(W-104, 50, 92, 34, ()=>{ mode='heroes'; });
   chunkyText('Equip one item per slot — applies every run', W/2, 104, 11, '#dfe6ff', null, '500');
-  let y = 124;
+  let y = 122;
   for (const slot of GEAR_SLOTS){
-    chunkyText(slot.toUpperCase(), 18, y, 13, '#ffd95e', '#5a3a0a', '700', 'left');
-    GEAR.filter(g=>g.slot===slot).forEach((g,i)=>{
-      const x = 12 + i*228, cw = 222, ch = 76;
+    chunkyText(slot.toUpperCase(), 20, y+6, 13, '#ffd95e', '#5a3a0a', '800', 'left'); y += 16;
+    GEAR.filter(g=>g.slot===slot).forEach(g=>{
       const owned = META.s.gear.owned.includes(g.id), eq = META.s.gear.equip[slot]===g.id;
-      const fr = eq?'#ffd95e':owned?'#7ed05f':'#7fc4ff';
-      ctx.save(); ctx.shadowColor=fr; ctx.shadowBlur=eq?10:5; gradPanel(x, y+8, cw, ch, 13, 'rgba(50,62,100,0.97)', 'rgba(26,32,54,0.97)', fr, eq?3.5:2.8); ctx.restore();
-      const mx = x+34, my = y+8+34;
-      ctx.save(); ctx.shadowColor=fr; ctx.shadowBlur=7; ocirc(mx, my, 23, 'rgba(14,20,36,0.92)', fr, 2.6); ctx.restore();
-      if (!realIcon(GEAR_ICON[g.id], mx, my, 36)) gearIcon(g.id, mx, my);
-      chunkyText(g.name, x+62, y+27, 13, '#fff', '#10131f', '700', 'left');
-      chunkyText(g.desc, x+62, y+44, 10, '#cfe0f5', null, '600', 'left');
-      if (eq){ chunkyText('✓ EQUIPPED', x+cw/2+18, y+8+ch-13, 11, '#ffd95e', null, '700'); }
-      else if (owned){ chunkyBtn(x+60, y+8+ch-26, 96, 20, '#5cc04c', '#41973a', '#2e6326', 'EQUIP', 11); hit(x+60, y+8+ch-26, 96, 20, ()=>{ META.s.gear.equip[slot]=g.id; META.save(); sfx.place(); }); }
-      else { chunkyBtn(x+60, y+8+ch-26, 96, 20, '#ffce5a', '#dba32c', '#9c6f12', g.cost+'◆', 11); hit(x+60, y+8+ch-26, 96, 20, ()=>{ if (spendGems(g.cost)){ META.s.gear.owned.push(g.id); META.s.gear.equip[slot]=g.id; META.save(); toast(g.name+' equipped!'); sfx.fanfare(); } else toast('Need '+g.cost+' gems'); }); }
+      const fr = eq?'#ffd95e':owned?'#7ed05f':'#7fc4ff', h = 66;
+      metaPanel(14, y, W-28, h, fr, eq?12:7, eq);
+      const mx = 50, my = y+h/2;
+      ctx.save(); ctx.shadowColor=fr; ctx.shadowBlur=8; ocirc(mx, my, 28, 'rgba(14,20,36,0.92)', fr, 2.8); ctx.restore();
+      if (!realIcon(GEAR_ICON[g.id], mx, my, 42)){ ctx.save(); ctx.translate(mx,my); ctx.scale(1.25,1.25); gearIcon(g.id, 0, 0); ctx.restore(); }
+      chunkyText(g.name, 92, y+26, 16, '#fff', '#10131f', '800', 'left');
+      chunkyText(g.desc, 92, y+47, 11, '#cfe0f5', null, '600', 'left');
+      const bx = W-124;
+      if (eq){ chunkyText('✓ EQUIPPED', bx+54, my, 12, '#ffd95e', null, '800'); }
+      else if (owned){ chunkyBtn(bx, my-18, 108, 36, '#5cc04c', '#41973a', '#2e6326', 'EQUIP', 14); hit(bx, my-18, 108, 36, ()=>{ META.s.gear.equip[slot]=g.id; META.save(); sfx.place(); }); }
+      else { chunkyBtn(bx, my-18, 108, 36, '#ffce5a', '#dba32c', '#9c6f12', g.cost+'◆', 14); hit(bx, my-18, 108, 36, ()=>{ if (spendGems(g.cost)){ META.s.gear.owned.push(g.id); META.s.gear.equip[slot]=g.id; META.save(); toast(g.name+' equipped!'); sfx.fanfare(); } else toast('Need '+g.cost+' gems'); }); }
+      y += h + 8;
     });
-    y += 98;
+    y += 6;
   }
   drawMenuToast();
 }
