@@ -4346,21 +4346,21 @@ function modGlyph(id, cx, cy){
 function drawStoreRow(it, yy, owned, ownLabel){
   const afford = META.s.gems >= it.cost;
   const accent = owned ? '#7ed05f' : it.slot==='prestige' ? '#c9a2e8' : '#5cb0f0';
-  const h = 64;
-  ctx.save(); ctx.shadowColor = accent; ctx.shadowBlur = owned?5:11;
-  gradPanel(12, yy, W-24, h, 14, 'rgba(54,66,108,0.98)', 'rgba(28,34,58,0.98)', accent, 3.5);
+  const h = 72;
+  ctx.save(); ctx.shadowColor = accent; ctx.shadowBlur = owned?6:12;
+  gradPanel(12, yy, W-24, h, 16, 'rgba(46,56,98,0.98)', 'rgba(19,24,44,0.99)', accent, 3);
   ctx.restore();
-  if (!owned && afford) cardShine(16, yy+4, W-32, h-8, 12, it.id.length*0.4);
+  if (!owned && afford) cardShine(16, yy+4, W-32, h-8, 13, it.id.length*0.4);
   // big glowing medallion with real art
-  const mx = 48, my = yy+h/2;
-  ctx.save(); ctx.shadowColor = accent; ctx.shadowBlur = 8; ocirc(mx, my, 27, 'rgba(14,20,36,0.92)', accent, 3); ctx.restore();
+  const mx = 52, my = yy+h/2;
+  ctx.save(); ctx.shadowColor = accent; ctx.shadowBlur = 9; ocirc(mx, my, 31, 'rgba(14,20,36,0.92)', accent, 3); ctx.restore();
   if (it.slot === 'prestige'){
-    ctx.save(); ctx.beginPath(); ctx.arc(mx, my, 25, 0, 7); ctx.clip(); drawDeco(it.id, mx, my+15, 0.95); ctx.restore();
-  } else if (!realIcon(MOD_ICON[it.id], mx, my, 38)){   // real fantasy icon, fallback to glyph
-    ctx.save(); ctx.translate(mx, my); ctx.scale(1.5, 1.5); modGlyph(it.id, 0, 0); ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.arc(mx, my, 28, 0, 7); ctx.clip(); drawDeco(it.id, mx, my+17, 1.05); ctx.restore();
+  } else if (!realIcon(MOD_ICON[it.id], mx, my, 42)){   // real fantasy icon, fallback to glyph
+    ctx.save(); ctx.translate(mx, my); ctx.scale(1.7, 1.7); modGlyph(it.id, 0, 0); ctx.restore();
   }
-  chunkyText(it.name, 88, yy+22, 16, '#fff', '#10131f', '700', 'left');
-  chunkyText(it.desc, 88, yy+43, 12, '#cfe0f5', null, '600', 'left');
+  chunkyText(it.name, 94, yy+26, 17, '#fff', '#10131f', '800', 'left');
+  chunkyText(it.desc, 94, yy+48, 12, '#cfe0f5', null, '600', 'left');
   if (owned){ chunkyText('✓ '+ownLabel, W-66, my, 13, '#7ee860', '#14361a', '700'); }
   else {
     if (it.honor){ honorIcon(W-176, my, 6); chunkyText('+'+it.honor, W-166, my+1, 11, '#ffd95e', null, '700', 'left'); }
@@ -4369,7 +4369,7 @@ function drawStoreRow(it, yy, owned, ownLabel){
   }
 }
 function drawGemTab(){
-  let yy = 144;
+  let yy = 152;
   for (const pack of GEM_PACKS){
     const isFree = pack.id==='free', ready = isFree ? freeGemReady() : true;
     const h = 80, hot = (pack.id==='large' || pack.id==='starter');
@@ -4396,31 +4396,28 @@ function drawGemTab(){
 }
 function drawStore(){
   uiHits = []; menuBg(); menuHeader('ROYAL STORE');
-  // tabs
-  const tabW = 110;
-  [['cos','COSMETICS',12],['mod','UPGRADES',126],['pre','PRESTIGE',240],['gem','GEMS',354]].forEach(([id,label,tx])=>{
-    const on = storeTab===id;
-    orr(tx, 100, tabW, 34, 10, on?'#ffd95e':'rgba(43,40,70,0.7)', on?'#a8761c':'rgba(255,255,255,0.3)', 2.5);
-    chunkyText(label, tx+tabW/2, 118, 12, on?'#5a3a0a':'#fff', null, '600');
-    hit(tx, 100, tabW, 34, ()=>{ storeTab=id; });
-  });
+  // big segmented tabs
+  { const tabs=[['cos','COSMETICS'],['mod','UPGRADES'],['pre','PRESTIGE'],['gem','GEMS']], tw=(W-26)/4-5;
+    tabs.forEach(([id,label],i)=>{ const tx=13+i*((W-26)/4), on=storeTab===id;
+      chunkyBtn(tx, 96, tw, 40, on?'#ffce5a':'#3b466a', on?'#dba32c':'#2a3450', on?'#9c6f12':'#1a2138', label, 11);
+      hit(tx, 96, tw, 40, ()=>{ storeTab=id; }); }); }
   if (storeTab === 'cos'){
-    let yy = 150;
+    let yy = 158;
     [['hero','Hero'],['tower','Towers'],['banner','Banners'],['terrain','Terrain']].forEach(([slot,label])=>{
       chunkyText(label, 18, yy, 15, '#fff', null, '600', 'left');
       SKIN_CAT[slot].forEach((it,i)=>{ drawChip(it, 12+i*92, yy+8, 88, 96); });
       yy += 128;
     });
   } else if (storeTab === 'mod'){
-    chunkyText('Permanent upgrades — bought once, always active', W/2, 148, 11, '#dfe6ff', null, '500');
-    let yy = 156;
-    MOD_CAT.forEach(m=>{ drawStoreRow(m, yy, !!META.s.mods[m.id], 'ACTIVE'); yy += 72; });
+    chunkyText('Permanent upgrades — bought once, always active', W/2, 156, 11, '#dfe6ff', null, '500');
+    let yy = 168;
+    MOD_CAT.forEach(m=>{ drawStoreRow(m, yy, !!META.s.mods[m.id], 'ACTIVE'); yy += 80; });
   } else if (storeTab === 'gem'){
     drawGemTab();
   } else {
-    chunkyText('Spend Gems to raise your Honor rank: '+honorRank(), W/2, 148, 11, '#ffd95e', null, '600');
-    let yy = 168;
-    PRESTIGE_CAT.forEach(p=>{ drawStoreRow(p, yy, META.s.owned.includes(p.id), 'OWNED'); yy += 80; });
+    chunkyText('Spend Gems to raise your Honor rank: '+honorRank(), W/2, 156, 11, '#ffd95e', null, '600');
+    let yy = 174;
+    PRESTIGE_CAT.forEach(p=>{ drawStoreRow(p, yy, META.s.owned.includes(p.id), 'OWNED'); yy += 84; });
   }
   drawMenuToast();
 }
