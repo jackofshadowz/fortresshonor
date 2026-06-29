@@ -4631,23 +4631,30 @@ function drawKingdom(){
     ['Best wave', String(META.s.bestWave)],
     ['Runs · Kills', META.s.stats.runs + ' · ' + META.s.stats.kills],
   ];
-  let y = 288;
-  for (const row of rows){
-    orr(14, y, W-28, 30, 8, 'rgba(255,255,255,0.08)', null);
-    chunkyText(row[0], 26, y+16, 12, '#aab4d0', null, '600', 'left');
-    chunkyText(row[1], W-26, y+16, 12, '#fff', null, '600', 'right');
-    y += 35;
-  }
+  // --- stat ledger: one premium panel with tidy rows ---
+  const rh = 30, ledH = rows.length*rh + 14;
+  let y = 296;
+  metaPanel(14, y, W-28, ledH, '#5a6fb0', 7, false);
+  y += 9;
+  rows.forEach((row,i)=>{
+    if (i%2){ rr(20, y, W-40, rh-2, 6); ctx.fillStyle='rgba(255,255,255,0.045)'; ctx.fill(); }
+    chunkyText(row[0], 30, y+rh/2+4, 12, '#aeb9d6', null, '600', 'left');
+    chunkyText(row[1], W-30, y+rh/2+4, 12.5, '#fff', null, '700', 'right');
+    y += rh;
+  });
+  y += 16;
   // --- village idle upgrades ---
-  chunkyBtn(14, y+2, 222, 40, '#7ed05f', '#56a83c', '#2e6326', 'GRANARY  '+granaryCost()+'◆', 14);
-  hit(14, y+2, 222, 40, ()=>buyVillage('granary'));
-  chunkyBtn(244, y+2, 222, 40, '#5cb0f0', '#3b80d2', '#2a5a9e', 'WAREHOUSE  '+warehouseCost()+'◆', 13);
-  hit(244, y+2, 222, 40, ()=>buyVillage('warehouse'));
-  // --- links to detail screens ---
-  const by = y + 52;
-  chunkyBtn(W/2-168, by, 104, 44, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 17);  hit(W/2-168, by, 104, 44, ()=>{ mode='store'; storeTab='cos'; });
-  chunkyBtn(W/2-50,  by, 100, 44, '#7fc4ff', '#3b80d2', '#2a5a9e', 'HEROES', 16); hit(W/2-50, by, 100, 44, ()=>{ mode='heroes'; });
-  chunkyBtn(W/2+64,  by, 104, 44, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BADGES', 16); hit(W/2+64, by, 104, 44, ()=>{ mode='badges'; });
+  const halfW = (W-36)/2;
+  chunkyBtn(14, y, halfW, 48, '#7ed05f', '#56a83c', '#2e6326', 'GRANARY  '+granaryCost()+'◆', 14);
+  hit(14, y, halfW, 48, ()=>buyVillage('granary'));
+  chunkyBtn(22+halfW, y, halfW, 48, '#5cb0f0', '#3b80d2', '#2a5a9e', 'WAREHOUSE  '+warehouseCost()+'◆', 13);
+  hit(22+halfW, y, halfW, 48, ()=>buyVillage('warehouse'));
+  y += 60;
+  // --- links to detail screens (big, even thirds) ---
+  const bw = (W-44)/3;
+  chunkyBtn(14, y, bw, 50, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 16);  hit(14, y, bw, 50, ()=>{ mode='store'; storeTab='cos'; });
+  chunkyBtn(22+bw, y, bw, 50, '#7fc4ff', '#3b80d2', '#2a5a9e', 'HEROES', 15); hit(22+bw, y, bw, 50, ()=>{ mode='heroes'; });
+  chunkyBtn(30+2*bw, y, bw, 50, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'BADGES', 15); hit(30+2*bw, y, bw, 50, ()=>{ mode='badges'; });
   drawMenuToast();
 }
 function drawTitleMenu(){
