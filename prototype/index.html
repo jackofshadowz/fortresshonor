@@ -432,6 +432,7 @@ let guardUpBtn = null;         // in-build "Train Archers" prompt on the wall
 let repairWallBtn = null, rebuildBtn = null;   // pay-to-repair prompts (no free rebuild)
 // per-wave chaos: each round may roll a modifier so leveling is less predictable
 let waveMod = { key:'none' };
+let waveIntent = null;   // which pillar this wave targets (off|army|def), or null in the early lands
 // newcomers unlock over levels (common from minWave); before that a small chance of a tough "special"
 // each foe is INTRODUCED at a level on the map (so new units appear as you travel — kept special)
 const ENEMY_INTRO = { grunt:0, runner:0, archer:1, brute:1, raider:2, sapper:2, skull:2, gnoll:3, thief:3, bombardier:4, minotaur:4, golem:5, troll:6 };
@@ -905,6 +906,30 @@ function basePower(){
 }
 function enemyPowerHp(){ return 1 + Math.min(basePower()*0.02, 1.6); }    // tougher foes as your base grows (cap +160%)
 function enemyPowerDps(){ return 1 + Math.min(basePower()*0.012, 0.9); }  // and far more dangerous (cap +90%)
+function threatPct(){ return Math.min(1, (basePower()*0.02) / 1.6); }     // 0..1 of the rubber-band
+
+// progressive complexity: the first lands stay ultra-minimal; systems unlock as you travel
+const FEATURE_LEVEL = { threat:2, intent:3, landmod:3 };
+function featureOn(f){ return (curLevel||0) >= (FEATURE_LEVEL[f]||0); }
+
+// the three pillars of a stronghold — the assault probes your WEAKEST (Knizia "lowest counts")
+function pillars(){
+  let off=0, army=0, def=0;
+  for (let i=0;i<ROWS*COLS;i++){ const g = grid[i]; if (!g || !g.tier) continue;
+    if (g.type==='tower') off += g.tier;
+    else if (g.type==='frost'){ off += g.tier*0.6; army += g.tier*0.5; }
+    else if (g.type==='archer' || g.type==='cannon') army += g.tier;
+    else if (g.type==='mine') def += g.tier; }
+  army += partyLvl('soldier') + partyLvl('lancer') + partyLvl('monk');
+  def  += (wallMax ? wallHP/wallMax : 1)*5 + townLevel();
+  return { off, army, def };
+}
+function weakPillar(){ const p = pillars(), m = Math.min(p.off, p.army, p.def); return p.off===m ? 'off' : p.army===m ? 'army' : 'def'; }
+const INTENT = {
+  off: { label:'they SWARM — too many to shoot down', bias:['runner','grunt','skull'] },
+  army:{ label:'RAIDERS slip the wall — bring melee',  bias:['raider','thief','gnoll'] },
+  def: { label:'a SIEGE — they batter the wall',       bias:['sapper','brute','minotaur'] },
+};
 function buildWave(w){
   const q = [];
   const wc = CONFIG.wave;
@@ -927,6 +952,11 @@ function buildWave(w){
     if (m.bias && m.bias.length && Math.random() < 0.6){
       const bz = m.bias.filter(k => L >= (ENEMY_INTRO[k] || 0));
       if (bz.length) kind = bz[(Math.random()*bz.length)|0];
+    }
+    // the assault probes your WEAKEST pillar (unlocks deeper in the campaign)
+    if (waveIntent && Math.random() < 0.5){
+      const wz = INTENT[waveIntent].bias.filter(k => L >= (ENEMY_INTRO[k] || 0));
+      if (wz.length) kind = wz[(Math.random()*wz.length)|0];
     }
     // a rare, tougher SCOUT from the NEXT land — a taste of what's ahead
     if (Math.random() < 0.04){ const nxt = ENEMY_POOL.filter(p => ENEMY_INTRO[p.k] === L+1); if (nxt.length){ kind = nxt[(Math.random()*nxt.length)|0].k; special = true; } }
@@ -963,6 +993,7 @@ function makeEnemy(kind, hpS, at){
 }
 function startFight(){
   waveMod = rollWaveMod(wave);                 // roll the round's chaos before building the wave
+  waveIntent = featureOn('intent') ? weakPillar() : null;   // the host probes your weakest pillar (later lands)
   spawnQueue = buildWave(wave);
   waveTotal = spawnQueue.length;
   fightT = 0; mode = 'fight';
@@ -976,7 +1007,7 @@ function waveCleared(){
   const flawless = !breached && wallHP >= wallMax;
   metaOnWaveCleared(flawless);
   ANALYTICS.log('wave_clear', { wave, flawless });
-  const bonus = Math.round((CONFIG.economy.waveBonusBase + CONFIG.economy.waveBonusPerWave*wave) * RUN.waveBonusMult * diff().reward);
+  const bonus = Math.round((CONFIG.economy.waveBonusBase + CONFIG.economy.waveBonusPerWave*wave) * RUN.waveBonusMult * diff().reward * (featureOn('threat') ? 1 + threatPct()*0.4 : 1));
   gold += bonus;
   floaters.push({ x:W/2, y:300, text:'+'+bonus+' gold', t:0, dur:1.4, size:24, color:'#ffd95e' });
   // the village treasury COMPOUNDS while uncollected (12%/wave) + the wave's tax — hoarding outgrows collecting, but raiders can plunder it
@@ -2490,6 +2521,15 @@ function drawHUD(){
   }
   if (breached) chunkyText('BREACHED!', W-124, 30, 12, '#ff5e4d', 'rgba(0,0,0,0.6)');
   else chunkyText(Math.ceil(wallHP)+'/'+wallMax, W-124, 30, 11, '#fff', 'rgba(0,0,0,0.5)', '600');
+  // THREAT meter — the rubber-band made visible (your might draws a fiercer host); build-phase, later lands
+  if (featureOn('threat') && (mode==='build' || mode==='clear')){
+    const t = threatPct(), tx = 116, ty = 52, tw = W-26-tx;
+    pillBg(tx, ty, tw, 26);
+    chunkyText('THREAT', tx+38, ty+14, 9.5, '#ffb37e', null, '800');
+    orr(tx+74, ty+8, tw-86, 10, 5, 'rgba(0,0,0,0.45)', null);
+    ctx.fillStyle = t>0.66 ? '#ff5e4d' : t>0.33 ? '#ff9c3f' : '#ffd95e';
+    rr(tx+76, ty+10, Math.max(3, (tw-90)*t), 6, 3); ctx.fill();
+  }
   // mute
   ocirc(W-26, 29, 15, 'rgba(43,40,70,0.85)', 'rgba(255,255,255,0.25)', 2);
   ctx.font = '13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -2580,6 +2620,8 @@ function drawStepBar(){
 function drawTray(){
   rotBtnRect = null;
   drawStepBar();
+  // the assault's intent — telegraph which pillar it targets (unlocks in later lands)
+  if (featureOn('intent')) chunkyText('⚠ ' + INTENT[weakPillar()].label, W-12, TRAY_Y-32, 10, '#ffb37e', '#3a2410', '800', 'right');
   // sandy dock
   orr(6, TRAY_Y-6, W-12, 104, 18, '#f2dca2', '#c9a25f', 4);
   const build = turnStep === 'build';
@@ -3064,10 +3106,10 @@ const FOE_FLAV = {
 function drawCodexArt(c, ax, ay, k){
   k = k || 1;
   if (c.img){ img(c.img, ax, ay, c.s*k); return; }
-  if (c.spr){ const nm = c.spr==='__hero' ? heroSprite() : c.spr; spr(nm, c.fw, c.fw, Math.floor(time*6)%c.fn, 0, ax, ay+8, c.s*k, false, c.ay||0.76); return; }
+  if (c.spr){ const nm = c.spr==='__hero' ? heroSprite() : c.spr; spr(nm, c.fw, c.fw, Math.floor(time*6)%c.fn, 0, ax, ay+4, c.s*k, false, c.ay||0.76); return; }
   if (c.foe){
     const cfg = CONFIG.enemies[c.foe]; if (!cfg) return;
-    ctx.save(); ctx.translate(ax, ay); ctx.scale(k*0.85, k*0.85);
+    ctx.save(); ctx.translate(ax, ay); ctx.scale(k*0.62, k*0.62);
     try { (ENEMY_DRAW[c.foe]||function(){})(cfg.r, 0, { x:0, y:0, r:cfg.r, wob:2, face:1, atk:false, hp:1, maxhp:1, kind:c.foe, buffs:{}, special:false }); } catch(e){}
     ctx.restore();
   }
@@ -3092,12 +3134,17 @@ function drawBigCard(x, y, w, h, c, locked){
   // title plate
   orr(x+16, y+16, w-32, 40, 11, 'rgba(58,42,110,0.95)', locked?'#4a5170':'#c9a2ff', 2);
   chunkyText(locked ? '? ? ?' : c.name, x+w/2, y+44, 24, '#fff', '#10131f', '800');
-  // big art window
-  const ax=x+18, ay=y+66, aw=w-36, ah=h*0.46;
-  orr(ax, ay, aw, ah, 12, 'rgba(14,10,28,0.96)', locked?'#4a5170':'#a06fff', 2.5);
+  // art window — a lit diorama (not a black void)
+  const ax=x+18, ay=y+64, aw=w-36, ah=h*0.42, acx=ax+aw/2, gy=ay+ah*0.82;
+  orr(ax, ay, aw, ah, 12, '#0e0b1c', locked?'#4a5170':'#a06fff', 2.5);
   ctx.save(); rr(ax+3, ay+3, aw-6, ah-6, 10); ctx.clip();
-  if (locked) chunkyText('?', x+w/2, ay+ah/2+22, 66, '#3f475f', null, '800');
-  else drawCodexArt(c, x+w/2, ay+ah/2 + ah*0.18, 2.5);
+  // spotlight backdrop in the rarity colour
+  const rg = ctx.createRadialGradient(acx, ay+ah*0.5, 8, acx, ay+ah*0.5, aw*0.62);
+  rg.addColorStop(0, hexA(locked?'#5a6488':(c.rar||'#a06fff'), 0.32)); rg.addColorStop(1, 'rgba(8,6,20,0.95)');
+  ctx.fillStyle = rg; ctx.fillRect(ax, ay, aw, ah);
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(acx, gy+3, aw*0.26, ah*0.06, 0, 0, 7); ctx.fill();   // ground shadow
+  if (locked) chunkyText('?', acx, ay+ah*0.5+26, 78, '#3f475f', null, '800');
+  else drawCodexArt(c, acx, gy, 3.0);
   ctx.restore();
   // type line
   chunkyText(locked ? 'UNDISCOVERED' : (c.role||''), x+w/2, ay+ah+24, 12, locked?'#7a8398':'#e6d6ff', null, '700');
