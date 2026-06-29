@@ -502,6 +502,7 @@ const ANALYTICS = {
 };
 /* ---------- Fortress-Merge-style core: a generator recruits units into a TRAY; drag them to the board and fuse identicals ---------- */
 let dragUnit = null;            // {from:'tray',i} | {from:'board',c,r}
+let turnStep = 'build';         // board-game turn flow: 'build' (place) -> 'upgrade' (merge) -> FIGHT
 const TRAY_N = 4;               // exactly 4 buildings are offered per round
 function popCap(){ return 12 + (META.s.mods.squire ? 2 : 0); }   // building population cap (the core balance knob)
 function armyCap(){ return 2 + Math.floor(townLevel()/4); }      // mustered soldiers the city can SUPPLY (grows with the town)
@@ -578,7 +579,7 @@ function reset(){
   breached = false; cityDamage = 0; cityGold = 0; cityPile = null; sackT = 0;
   selected = null; sellTarget = null; heroSel = false;
   mode = 'build';
-  idleEarned = 0; shopOpen = false;
+  idleEarned = 0; shopOpen = false; turnStep = 'build';
   ANALYTICS.log('run_start', { mode: runMode });
   banner('WAVE ' + wave, '#ffd95e');
 }
@@ -1007,6 +1008,7 @@ function waveCleared(){
     mode = 'won'; sfx.cheer();
     return;
   }
+  turnStep = 'build';   // next turn starts back at BUILD
   mode = 'clear'; clearT = 0;
 }
 
@@ -2564,30 +2566,52 @@ function drawShop(){
   chunkyBtn(cb.x, cb.y, cb.w, cb.h, '#52b3f0', '#2f7fb5', '#1d5a8a', 'CLOSE', 18);
   shopBtns.push({ x:cb.x, y:cb.y, w:cb.w, h:cb.h, close:true });
 }
+function drawStepBar(){
+  // ① BUILD → ② UPGRADE → ③ FIGHT, current step lit (always-visible turn guide)
+  const steps = [['1','BUILD'],['2','UPGRADE'],['3','FIGHT']];
+  const cur = mode==='fight' ? 2 : (turnStep==='upgrade' ? 1 : 0);
+  const bw = 96, gap = 10, x0 = W/2 - (steps.length*bw + (steps.length-1)*gap)/2, y = TRAY_Y-34;
+  steps.forEach((s,i)=>{ const x=x0+i*(bw+gap), on=i===cur, done=i<cur;
+    orr(x, y, bw, 22, 8, on?'#ffd95e':done?'#7ed05f':'rgba(30,36,58,0.8)', on?'#a8761c':'rgba(255,255,255,0.25)', 2);
+    chunkyText(s[0]+'. '+s[1], x+bw/2, y+15, 10, on||done?'#2a2030':'#cfd6e2', null, '800');
+    if (i<steps.length-1) chunkyText('›', x+bw+gap/2, y+15, 12, '#dbe6f2', null, '700');
+  });
+}
 function drawTray(){
   rotBtnRect = null;
+  drawStepBar();
   // sandy dock
   orr(6, TRAY_Y-6, W-12, 104, 18, '#f2dca2', '#c9a25f', 4);
-  // army population vs cap; the tray offers up to 4 buildings this round
-  const pop = unitCount(), cap = popCap(), atCap = pop >= cap;
-  chunkyText('ARMY ' + pop + '/' + cap + (atCap ? '  — MERGE!' : '') + '     4 buildings / round', 14, TRAY_Y-14, 12,
-             atCap ? '#ff8d7e' : '#fff', '#3a2a12', '700', 'left');
-  for (let i=0;i<TRAY_N;i++){
-    const s = traySlotRect(i);
-    orr(s.x, s.y, s.w, s.h, 11, 'rgba(255,255,255,0.5)', '#cfa86a', 2.5);
-    if (hand[i] && !(dragUnit && dragUnit.from==='tray' && dragUnit.i===i)){
-      drawBuilding(s.x + s.w/2 - CELL/2, s.y + s.h/2 - CELL/2 + 4, hand[i].type, hand[i].tier, 0, true);
+  const build = turnStep === 'build';
+  const fb = BTN.fight, pulse = 1 + Math.sin(time*4)*0.02;
+  if (build){
+    const pop = unitCount(), cap = popCap(), atCap = pop >= cap;
+    chunkyText('BUILD — drag buildings onto empty plots', 14, TRAY_Y-14, 11, atCap?'#9c5a12':'#2e6326', '#fff', '800', 'left');
+    for (let i=0;i<TRAY_N;i++){
+      const s = traySlotRect(i);
+      orr(s.x, s.y, s.w, s.h, 11, 'rgba(255,255,255,0.5)', '#cfa86a', 2.5);
+      if (hand[i] && !(dragUnit && dragUnit.from==='tray' && dragUnit.i===i))
+        drawBuilding(s.x + s.w/2 - CELL/2, s.y + s.h/2 - CELL/2 + 4, hand[i].type, hand[i].tier, 0, true);
     }
+    chunkyText('then →', fb.x+fb.w/2, fb.y-8, 11, '#7a6a4a', null, '700');
+    ctx.save(); ctx.translate(fb.x+fb.w/2, fb.y+fb.h/2); ctx.scale(pulse, pulse);
+    chunkyBtn(-fb.w/2, -fb.h/2, fb.w, fb.h, '#7ed05f', '#56a83c', '#2e6326', 'UPGRADE ▶', 18);
+    ctx.restore();
+  } else {
+    chunkyText('UPGRADE — drag two matching buildings together', 14, TRAY_Y-14, 11, '#9c5a12', '#fff', '800', 'left');
+    // a worked example, drawn small in the dock
+    const cy = TRAY_Y + 50;
+    drawBuilding(70-CELL/2, cy-CELL/2, 'cannon', 1, 0, true);
+    chunkyText('+', 124, cy+5, 22, '#9c5a12', '#fff', '800');
+    drawBuilding(168-CELL/2, cy-CELL/2, 'cannon', 1, 0, true);
+    chunkyText('=', 222, cy+5, 22, '#9c5a12', '#fff', '800');
+    drawBuilding(268-CELL/2, cy-CELL/2, 'cannon', 2, 0, true);
+    const rh = waveRhythm(wave); chunkyText('Wave ' + wave + ' — ' + rh.label, fb.x+fb.w/2, fb.y-8, 11, rh.color, '#2a2030', '700');
+    ctx.save(); ctx.translate(fb.x+fb.w/2, fb.y+fb.h/2); ctx.scale(pulse, pulse);
+    chunkyBtn(-fb.w/2, -fb.h/2, fb.w, fb.h, '#ff9c3f', '#d9742a', '#9c4f12', 'FIGHT! ▶', 19);
+    ctx.restore();
   }
-  // fight
-  const fb = BTN.fight;
-  // telegraph the next wave's rhythm beat so the player can prepare
-  { const rh = waveRhythm(wave); chunkyText('Wave ' + wave + ' — ' + rh.label, fb.x+fb.w/2, fb.y-8, 12, rh.color, '#2a2030', '700'); }
-  const pulse = 1 + Math.sin(time*4)*0.02;
-  ctx.save(); ctx.translate(fb.x+fb.w/2, fb.y+fb.h/2); ctx.scale(pulse, pulse);
-  chunkyBtn(-fb.w/2, -fb.h/2, fb.w, fb.h, '#ff9c3f', '#d9742a', '#9c4f12', 'FIGHT!', 22);
-  ctx.restore();
-  // in-run shop button (top-left during build)
+  // in-run shop button (top-left)
   shopBtnRect = { x:12, y:52, w:96, h:32 };
   chunkyBtn(12, 52, 96, 32, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'SHOP', 16);
 }
@@ -3265,10 +3289,14 @@ cv.addEventListener('pointerdown', ev => {
   // tap the hero to manage him
   if (hero && Math.hypot(wp.x-hero.x, wp.y-hero.y) < 26){ heroSel = true; return; }
 
-  // FIGHT
-  if (inRect(p, BTN.fight)){ startFight(); return; }
-  // pick up a unit FROM THE TRAY to drag onto the board
-  for (let i=0;i<TRAY_N;i++){ if (hand[i] && inRect(p, traySlotRect(i))){ dragUnit = { from:'tray', i }; downPos = p; return; } }
+  // turn flow: BUILD -> (tap) -> UPGRADE -> (tap) -> FIGHT
+  if (inRect(p, BTN.fight)){
+    if (turnStep === 'build'){ turnStep = 'upgrade'; banner('STEP 2 · UPGRADE — merge matching buildings', '#ffd95e'); sfx.place && sfx.place(); }
+    else startFight();
+    return;
+  }
+  // pick up a unit FROM THE TRAY (BUILD step only)
+  if (turnStep === 'build') for (let i=0;i<TRAY_N;i++){ if (hand[i] && inRect(p, traySlotRect(i))){ dragUnit = { from:'tray', i }; downPos = p; return; } }
   // pick up a unit ON THE BOARD to move/merge it
   const cell = cellAt(wp);
   if (cell){
