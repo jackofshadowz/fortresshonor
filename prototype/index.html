@@ -2851,8 +2851,8 @@ function drawTitle(){
     ctx.beginPath(); ctx.arc(x, y, 58, 0, 7); ctx.fill();
   }
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 738, W, 62);
-  chunkyText('Place pieces  •  match 3 to LEVEL UP', W/2, 714, 15, '#5b6ba8', null, '600');
-  chunkyText('Hold the wall against the horde!', W/2, 738, 15, '#5b6ba8', null, '600');
+  chunkyText('Merge buildings  •  raise your war party', W/2, 714, 15, '#5b6ba8', null, '600');
+  chunkyText('Defend the wall across the lands!', W/2, 738, 15, '#5b6ba8', null, '600');
   if (bestWave > 0) chunkyText('Best: wave ' + bestWave, W/2, 762, 14, '#c9982a', null, '600');
   ctx.globalAlpha = 0.75 + Math.sin(time*3)*0.25;
   chunkyText('— tap to begin —', W/2, 784, 20, '#ff9c3f', '#fff', '600');
@@ -4656,13 +4656,12 @@ function drawTitleMenu(){
   chunkyText('Rank: ' + honorRank(), W/2, 52, 13, '#ffd95e', '#5a3a0a', '600');
   if (idleEarned > 0)
     chunkyText('Your city earned +' + idleEarned + ' gems while away', W/2, 76, 12, '#9fe8ff', 'rgba(20,40,70,0.55)', '600');
-  // mode toggle — tap anywhere else to play (village + champion live in KINGDOM)
-  const boss = runMode === 'boss';
-  chunkyBtn(W/2-168, 600, 336, 46,
-    boss ? '#ff7b5e' : '#5cc04c', boss ? '#d9542a' : '#41973a', boss ? '#9c2f12' : '#2e6326',
-    boss ? 'MODE: BOSS RUSH' : 'MODE: SIEGE', 20);
-  hit(W/2-168, 600, 336, 46, ()=>{ runMode = boss ? 'normal' : 'boss'; sfx.reroll(); });
-  chunkyText('tap anywhere to play', W/2, 638, 12, '#eaf2ff', 'rgba(20,40,70,0.5)', '600');
+  // primary CTA → the world map
+  { const pulse = 1 + Math.sin(time*4)*0.02;
+    ctx.save(); ctx.translate(W/2, 623); ctx.scale(pulse, pulse);
+    chunkyBtn(-170, -26, 340, 52, '#5cc04c', '#41973a', '#2e6326', '▶  PLAY', 24);
+    ctx.restore(); }
+  hit(W/2-170, 597, 340, 52, ()=>{ mode='map'; sfx.fanfare && sfx.fanfare(); });
   chunkyBtn(W/2-168, 662, 104, 46, '#ffce5a', '#dba32c', '#9c6f12', 'STORE', 17);
   hit(W/2-168, 662, 104, 46, ()=>{ mode='store'; storeTab='cos'; });
   chunkyBtn(W/2-50, 662, 100, 46, '#7fc4ff', '#3b80d2', '#2a5a9e', 'HEROES', 16);
