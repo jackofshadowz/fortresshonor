@@ -165,6 +165,27 @@ function startMusic(){
   musicEl = new Audio(); musicEl.loop = true; musicEl.volume = 0; musicEl.preload = 'auto';
   musicKey = ''; updateMusic(0.001);
 }
+/* ---------- real sound effects (Helton Yan's Pixel Combat, used with credit) ---------- */
+const SFX = { place:'assets/sfx/s_place.mp3', merge:'assets/sfx/s_merge.mp3', coin:'assets/sfx/s_coin.mp3',
+              hit:'assets/sfx/s_hit.mp3', slash:'assets/sfx/s_slash.mp3', boom:'assets/sfx/s_boom.mp3' };
+const sfxPool = {};
+function playClip(name, vol){
+  if (muted || !musicStarted) return;
+  const src = SFX[name]; if (!src) return;
+  const pool = sfxPool[name] || (sfxPool[name] = []);
+  let a = pool.find(x => x.paused || x.ended);
+  if (!a){ if (pool.length < 4){ a = new Audio(src); pool.push(a); } else a = pool[0]; }
+  try { a.currentTime = 0; a.volume = vol == null ? 0.5 : vol; a.play().catch(()=>{}); } catch(e){}
+}
+// route the punchy cues to real samples (fast/looping ones like shoot stay synth to avoid spam)
+sfx.place = () => playClip('place', 0.5);
+sfx.merge = () => playClip('merge', 0.6);
+sfx.coin  = () => playClip('coin', 0.5);
+sfx.sell  = () => playClip('coin', 0.45);
+sfx.boom  = () => playClip('boom', 0.6);
+sfx.thud  = () => playClip('hit', 0.45);
+sfx.hurt  = () => playClip('hit', 0.6);
+sfx.slash = () => playClip('slash', 0.5);
 function updateMusic(dt){
   if (!musicStarted || !musicEl) return;
   const want = musicForMode();
@@ -1404,7 +1425,7 @@ function updateAllies(dt){
       for (const e of enemies){ if (e.hp<=0) continue; const d=Math.hypot(e.x-a.x, e.y-a.y); if (d<bd){ bd=d; best=e; } }
       if (best){
         if (bd > 24){ moveViaGate(a, best.x, best.y, 52, dt); }
-        else { a.moving=false; a.face = best.x < a.x ? -1 : 1; if (a.cd<=0){ a.cd=0.7; a.atkT=0.4; hitEnemy(best, a.dmg, 0); puff(best.x, best.y-6, '#fff'); } a.hp -= best.dps*dt; }
+        else { a.moving=false; a.face = best.x < a.x ? -1 : 1; if (a.cd<=0){ a.cd=0.7; a.atkT=0.4; hitEnemy(best, a.dmg, 0); puff(best.x, best.y-6, '#fff'); if (a.kind==='lancer') sfx.slash(); else sfx.thud(); } a.hp -= best.dps*dt; }
       } else a.moving=false;
     } else {
       // muster: queue in loose ranks just inside the gate, waiting for the order
@@ -2885,7 +2906,7 @@ function drawTitle(){
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 738, W, 62);
   chunkyText('Merge buildings  •  raise your war party', W/2, 714, 15, '#5b6ba8', null, '600');
   chunkyText('Defend the wall across the lands!', W/2, 738, 15, '#5b6ba8', null, '600');
-  chunkyText('♪ Music by Marllon Silva (xDeviruchi)', W/2, 760, 9, '#8a93b8', null, '500');
+  chunkyText('♪ Music by xDeviruchi  ·  SFX by Helton Yan', W/2, 760, 9, '#8a93b8', null, '500');
   if (bestWave > 0) chunkyText('Best: wave ' + bestWave, W/2, 762, 14, '#c9982a', null, '600');
   ctx.globalAlpha = 0.75 + Math.sin(time*3)*0.25;
   chunkyText('— tap to begin —', W/2, 784, 20, '#ff9c3f', '#fff', '600');
