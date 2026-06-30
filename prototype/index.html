@@ -405,10 +405,10 @@ const LEVELS = [
   { id:0, name:'Greenfield',  waves:5,  theme:'verdant' },
   { id:1, name:'Oakvale',     waves:6,  theme:'verdant' },
   { id:2, name:'Stonebrook',  waves:7,  theme:'stone'   },
-  { id:3, name:'Mirefen',     waves:8,  theme:'swamp'   },
-  { id:4, name:'Frostmere',   waves:9,  theme:'snow'    },
-  { id:5, name:'Emberfall',   waves:10, theme:'ember'   },
-  { id:6, name:'Dragonspire', waves:12, theme:'ember'   },
+  { id:3, name:'Mirefen',     waves:8,  theme:'swamp',  mod:{ label:'Boggy ground — extra obstacles', obstacles:3 } },
+  { id:4, name:'Frostmere',   waves:9,  theme:'snow',   mod:{ label:'Exposed — wall starts at 70%',    wallPct:0.7 } },
+  { id:5, name:'Emberfall',   waves:10, theme:'ember',  mod:{ label:'Rich veins — Mines yield +60%',    mineMult:1.6 } },
+  { id:6, name:'Dragonspire', waves:12, theme:'ember',  mod:{ label:'Dragon’s host — +25% attackers', countMult:1.25 } },
 ];
 // map node positions (fractions of the play area), drawn as a winding trail
 const LEVEL_POS = [[0.22,0.82],[0.40,0.70],[0.30,0.54],[0.55,0.48],[0.70,0.62],[0.74,0.36],[0.84,0.20]];
@@ -425,7 +425,9 @@ let curLevel = 0;              // which level is being played
 let levelWon = false;         // has this run already cleared the level's wave goal?
 let wonStars = 0;             // stars earned on the level just cleared
 let reviveCount = 0;          // times you've spent gems to continue this run (cost escalates)
-let levelMapBtn = null, wonBtns = null, mapNodeRects = null, buyGoldBtn = null;
+let levelMod = null;          // this land's modifier (a Teuber-style variable twist), or null in early lands
+let riskPot = 0;             // press-your-luck pot built by defending PAST a cleared land
+let levelMapBtn = null, wonBtns = null, mapNodeRects = null, buyGoldBtn = null, bankBtn = null;
 let gateOpen = 0;             // 0 = shut, 1 = open; the door swings open only while units pass through
 let mapWalk = null;          // {from, to, t} — the hero walking between map nodes before entering a land
 let guardUpBtn = null;         // in-build "Train Archers" prompt on the wall
@@ -611,15 +613,21 @@ function continueRun(){
   mode = 'build'; banner('REINFORCEMENTS!', '#7ed05f'); sfx.fanfare && sfx.fanfare();
 }
 function startLevel(id){
-  curLevel = id; levelWon = false; runMode = 'normal'; reviveCount = 0;
+  curLevel = id; levelWon = false; runMode = 'normal'; reviveCount = 0; riskPot = 0;
+  levelMod = featureOn('landmod') ? (LEVELS[id].mod || null) : null;   // this land's twist (later lands only)
   META.s.mapPos = id; META.save();   // the hero now stands on this land
   reset();   // fresh board, run boons, etc.
+  if (levelMod){
+    if (levelMod.obstacles){ const open=[]; for(let k=0;k<ROWS*COLS;k++) if(!grid[k]) open.push(k); for(let n=0;n<levelMod.obstacles && open.length;n++){ const k=open.splice(Math.floor(Math.random()*open.length),1)[0]; grid[k]={obstacle:Math.random()<0.6?'tree':'rock'}; } }
+    if (levelMod.wallPct){ wallHP = Math.round(wallMax * levelMod.wallPct); }
+  }
   const L = META.s.levels[id];
   if (L && L.city && L.city.length){          // returning to a level → restore the city you built here
     grid = Array(ROWS*COLS).fill(null);
     for (const u of L.city) grid[u.i] = { type:u.type, tier:u.tier, rarity:u.rarity||0, element:u.element, pop:0.001 };
   }
   banner(LEVELS[id].name + ' — ' + LEVELS[id].waves + ' waves', '#ffd95e');
+  if (levelMod) floaters.push({ x:W/2, y:300, text:'✦ ' + levelMod.label, t:0, dur:3.6, size:14, color:'#9fe8ff' });
   // herald the foes this land introduces, so new units feel like an event
   const newFoes = Object.keys(ENEMY_INTRO).filter(k => ENEMY_INTRO[k] === id && k!=='grunt' && k!=='runner');
   if (newFoes.length) floaters.push({ x:W/2, y:332, text:'New foe — ' + newFoes.map(k=>ENEMY_NAME[k]).join(', '), t:0, dur:3.4, size:16, color:'#ff9c6a' });
@@ -936,7 +944,7 @@ function buildWave(w){
   const hpS = (1 + wc.hpLin*(w-1) + wc.hpQuad*(w-1)*(w-1)) * enemyPowerHp() * diff().hp;
   if (runMode === 'boss') return bossRushWave(w, hpS);
   const m = waveMod || { key:'none' };
-  const count = Math.max(1, Math.round((wc.baseCount + Math.floor(w*wc.perWave)) * (m.count||1)));
+  const count = Math.max(1, Math.round((wc.baseCount + Math.floor(w*wc.perWave)) * (m.count||1) * ((levelMod&&levelMod.countMult)||1)));
   const gap = Math.max(wc.gapMin, wc.gapBase - w*wc.gapPerWave) * (m.gap||1);   // chaos can compress the assault
   let t = 0.8;
   for (let i=0;i<count;i++){
@@ -1027,6 +1035,12 @@ function waveCleared(){
   projectiles = [];
   sfx.fanfare();
   saveLevelCity();   // persist your city after every wave, so returning to this level keeps your build
+  // PRESS-YOUR-LUCK: once the land is already won, each extra wave builds a risk pot you bank by leaving
+  if (levelWon){
+    const extra = wave - 1 - LEVELS[curLevel].waves;
+    const add = 3 + extra*2; riskPot += add;
+    floaters.push({ x:W/2, y:300, text:'RISK POT +' + add + '  (' + riskPot + '◆ — bank it or risk it)', t:0, dur:1.6, size:15, color:'#9fe8ff' });
+  }
   // LEVEL CLEARED? (campaign waves goal met, first time this run)
   if (!levelWon && runMode === 'normal' && wave > LEVELS[curLevel].waves){
     levelWon = true;
@@ -1342,6 +1356,7 @@ function updateFight(dt){
     // or the whole town has been razed
     const defensesGone = towers().length === 0 && (!hero || hero.down);
     if (defensesGone || cityDamage >= townLevel()){
+      if (riskPot > 0){ banner('The risk pot is lost!', '#ff5e4d'); riskPot = 0; }   // pressed your luck and fell
       mode = 'over'; sfx.defeat(); shake = 16;
       metaOnGameOver();
       return;
@@ -1406,7 +1421,7 @@ function tickMines(dt){
     g.goldT = (g.goldT||0) - dt;
     if (g.goldT <= 0){
       g.goldT = Math.max(1.6, 3.6 - g.tier*0.35);
-      const amt = 1 + g.tier; gold += amt;
+      const amt = Math.round((1 + g.tier) * ((levelMod && levelMod.mineMult) || 1)); gold += amt;
       const c = i % COLS, r = (i/COLS)|0;
       floaters.push({ x:cellX(c)+CELL/2, y:cellY(r)+6, text:'+'+amt, t:0, dur:0.9, size:13, color:'#ffd95e' });
     }
@@ -2656,6 +2671,9 @@ function drawTray(){
   // in-run shop button (top-left)
   shopBtnRect = { x:12, y:52, w:96, h:32 };
   chunkyBtn(12, 52, 96, 32, '#c9a2e8', '#9a6fc4', '#5d3a8a', 'SHOP', 16);
+  // press-your-luck: bank the risk pot and leave (only while defending a cleared land)
+  if (riskPot > 0){ bankBtn = { x:12, y:88, w:184, h:32 }; chunkyBtn(12, 88, 184, 32, '#7ed05f', '#56a83c', '#2e6326', 'BANK ' + riskPot + '◆ & LEAVE', 12); }
+  else bankBtn = null;
 }
 const SORTIE_BTN = { x:10, y:TRAY_Y+24, w:112, h:46 };
 function drawFightHUD(){
@@ -3048,6 +3066,7 @@ function drawMap(){
   if (!mapWalk){
     const cur = META.s.mapPos||0, py = H-132, pw = 280, px = W/2-pw/2;
     chunkyText('▶  ' + LEVELS[cur].name + '  ·  ' + LEVELS[cur].waves + ' waves', W/2, py-10, 12, '#fff', '#23344a', '700');
+    if (cur >= (FEATURE_LEVEL.landmod||99) && LEVELS[cur].mod) chunkyText('✦ ' + LEVELS[cur].mod.label, W/2, py-26, 10, '#9fe8ff', '#23344a', '600');
     const pulse = 1 + Math.sin(time*4)*0.02;
     ctx.save(); ctx.translate(W/2, py+30); ctx.scale(pulse,pulse);
     chunkyBtn(-pw/2, -30, pw, 60, '#ff9c3f', '#d9742a', '#9c4f12', 'PLAY', 26);
@@ -3242,6 +3261,12 @@ cv.addEventListener('pointerdown', ev => {
   if (buyGoldBtn && inRect(p, buyGoldBtn)){
     if (spendGems(1)){ gold += 80; floaters.push({ x:180, y:70, text:'+80g', t:0, dur:0.9, size:14, color:'#ffd95e' }); sfx.merge && sfx.merge(); }
     else toast('No gems — earn them by clearing levels');
+    return;
+  }
+  // bank the press-your-luck pot and leave to the map
+  if (bankBtn && inRect(p, bankBtn)){
+    META.s.gems += riskPot; META.save(); banner('Banked ' + riskPot + ' gems!', '#7ed05f'); sfx.cheer && sfx.cheer();
+    riskPot = 0; saveLevelCity(); mode = 'map';
     return;
   }
   // pay to repair the wall / rebuild razed cottages
