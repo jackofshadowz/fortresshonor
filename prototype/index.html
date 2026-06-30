@@ -917,7 +917,7 @@ function enemyPowerDps(){ return 1 + Math.min(basePower()*0.012, 0.9); }  // and
 function threatPct(){ return Math.min(1, (basePower()*0.02) / 1.6); }     // 0..1 of the rubber-band
 
 // progressive complexity: the first lands stay ultra-minimal; systems unlock as you travel
-const FEATURE_LEVEL = { threat:2, intent:3, landmod:3 };
+const FEATURE_LEVEL = { rhythm:1, threat:2, intent:3, landmod:3 };
 function featureOn(f){ return (curLevel||0) >= (FEATURE_LEVEL[f]||0); }
 
 // the three pillars of a stronghold — the assault probes your WEAKEST (Knizia "lowest counts")
@@ -2536,15 +2536,7 @@ function drawHUD(){
   }
   if (breached) chunkyText('BREACHED!', W-124, 30, 12, '#ff5e4d', 'rgba(0,0,0,0.6)');
   else chunkyText(Math.ceil(wallHP)+'/'+wallMax, W-124, 30, 11, '#fff', 'rgba(0,0,0,0.5)', '600');
-  // THREAT meter — the rubber-band made visible (your might draws a fiercer host); build-phase, later lands
-  if (featureOn('threat') && (mode==='build' || mode==='clear')){
-    const t = threatPct(), tx = 116, ty = 52, tw = W-26-tx;
-    pillBg(tx, ty, tw, 26);
-    chunkyText('THREAT', tx+38, ty+14, 9.5, '#ffb37e', null, '800');
-    orr(tx+74, ty+8, tw-86, 10, 5, 'rgba(0,0,0,0.45)', null);
-    ctx.fillStyle = t>0.66 ? '#ff5e4d' : t>0.33 ? '#ff9c3f' : '#ffd95e';
-    rr(tx+76, ty+10, Math.max(3, (tw-90)*t), 6, 3); ctx.fill();
-  }
+  // (threat is now folded into the single wave-telegraph line above the dock — see drawWaveTelegraph)
   // mute
   ocirc(W-26, 29, 15, 'rgba(43,40,70,0.85)', 'rgba(255,255,255,0.25)', 2);
   ctx.font = '13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -2621,6 +2613,14 @@ function drawShop(){
   chunkyBtn(cb.x, cb.y, cb.w, cb.h, '#52b3f0', '#2f7fb5', '#1d5a8a', 'CLOSE', 18);
   shopBtns.push({ x:cb.x, y:cb.y, w:cb.w, h:cb.h, close:true });
 }
+function drawWaveTelegraph(){
+  // ONE legible line for the whole assault: name · (rhythm) · (weak pillar) · (threat) — parts unlock by land
+  let s = 'Wave ' + wave, col = '#ffd95e';
+  if (featureOn('rhythm')){ const rh = waveRhythm(wave); s += '   ·   ' + rh.label; col = rh.color; }
+  if (featureOn('intent')) s += '   ·   ⚠ shore up your ' + ({ off:'towers', army:'army', def:'wall' }[weakPillar()]);
+  if (featureOn('threat')){ const t = threatPct(); s += '    ' + (t>0.66 ? '▲▲▲' : t>0.33 ? '▲▲' : '▲'); }
+  chunkyText(s, W/2, TRAY_Y-50, 12, col, '#1c1426', '800');
+}
 function drawStepBar(){
   // ① BUILD → ② UPGRADE → ③ FIGHT, current step lit (always-visible turn guide)
   const steps = [['1','BUILD'],['2','UPGRADE'],['3','FIGHT']];
@@ -2634,23 +2634,20 @@ function drawStepBar(){
 }
 function drawTray(){
   rotBtnRect = null;
+  drawWaveTelegraph();   // ONE line tells you everything about the coming assault
   drawStepBar();
-  // the assault's intent — telegraph which pillar it targets (unlocks in later lands)
-  if (featureOn('intent')) chunkyText('⚠ ' + INTENT[weakPillar()].label, W-12, TRAY_Y-32, 10, '#ffb37e', '#3a2410', '800', 'right');
   // sandy dock
   orr(6, TRAY_Y-6, W-12, 104, 18, '#f2dca2', '#c9a25f', 4);
   const build = turnStep === 'build';
   const fb = BTN.fight, pulse = 1 + Math.sin(time*4)*0.02;
   if (build){
-    const pop = unitCount(), cap = popCap(), atCap = pop >= cap;
-    chunkyText('BUILD — drag buildings onto empty plots', 14, TRAY_Y-14, 11, atCap?'#9c5a12':'#2e6326', '#fff', '800', 'left');
+    chunkyText('BUILD — drag buildings onto empty plots', 14, TRAY_Y-14, 11, '#2e6326', '#fff', '800', 'left');
     for (let i=0;i<TRAY_N;i++){
       const s = traySlotRect(i);
       orr(s.x, s.y, s.w, s.h, 11, 'rgba(255,255,255,0.5)', '#cfa86a', 2.5);
       if (hand[i] && !(dragUnit && dragUnit.from==='tray' && dragUnit.i===i))
         drawBuilding(s.x + s.w/2 - CELL/2, s.y + s.h/2 - CELL/2 + 4, hand[i].type, hand[i].tier, 0, true);
     }
-    chunkyText('then →', fb.x+fb.w/2, fb.y-8, 11, '#7a6a4a', null, '700');
     ctx.save(); ctx.translate(fb.x+fb.w/2, fb.y+fb.h/2); ctx.scale(pulse, pulse);
     chunkyBtn(-fb.w/2, -fb.h/2, fb.w, fb.h, '#7ed05f', '#56a83c', '#2e6326', 'UPGRADE ▶', 18);
     ctx.restore();
@@ -2663,7 +2660,6 @@ function drawTray(){
     drawBuilding(168-CELL/2, cy-CELL/2, 'cannon', 1, 0, true);
     chunkyText('=', 222, cy+5, 22, '#9c5a12', '#fff', '800');
     drawBuilding(268-CELL/2, cy-CELL/2, 'cannon', 2, 0, true);
-    const rh = waveRhythm(wave); chunkyText('Wave ' + wave + ' — ' + rh.label, fb.x+fb.w/2, fb.y-8, 11, rh.color, '#2a2030', '700');
     ctx.save(); ctx.translate(fb.x+fb.w/2, fb.y+fb.h/2); ctx.scale(pulse, pulse);
     chunkyBtn(-fb.w/2, -fb.h/2, fb.w, fb.h, '#ff9c3f', '#d9742a', '#9c4f12', 'FIGHT! ▶', 19);
     ctx.restore();
